@@ -137,7 +137,7 @@ export function EmailTemplatesSection() {
           ) : templates.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <p>No email templates found.</p>
-              <p className="text-sm mt-2">Click "+ New Template" to create one.</p>
+              <p className="text-sm mt-2">Click &quot;+ New Template&quot; to create one.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

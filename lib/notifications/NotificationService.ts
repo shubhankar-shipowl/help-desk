@@ -595,9 +595,9 @@ export class NotificationService {
       }
     }
     
-    // For ticket replies, return null to indicate plain text should be used
+    // For ticket replies, return empty string to indicate plain text should be used
     if (params.type === 'TICKET_REPLY' && params.metadata?.replyContent) {
-      return null // Signal to use plain text instead
+      return '' // Signal to use plain text instead
     }
     
     return `

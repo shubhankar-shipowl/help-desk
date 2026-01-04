@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
         subject,
         description: descriptionWithOrder,
         categoryId: categoryId || null,
-        priority: priority || 'NORMAL',
+        priority: (priority || 'NORMAL') as 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT',
         customerId: customer.id,
         status: 'NEW',
       },

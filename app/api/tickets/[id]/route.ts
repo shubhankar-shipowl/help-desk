@@ -315,6 +315,15 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Get tenantId from session (multi-tenant support)
+    const tenantId = (session.user as any).tenantId
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: 'Tenant ID is required' },
+        { status: 400 }
+      )
+    }
+
     const resolvedParams = await Promise.resolve(params)
     
     // Safety check: ensure ID is provided

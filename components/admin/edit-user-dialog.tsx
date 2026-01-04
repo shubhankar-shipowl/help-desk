@@ -27,7 +27,7 @@ interface EditUserDialogProps {
     name: string | null
     email: string
     role: string
-    phone: string | null
+    phone?: string | null
     isActive: boolean
   }
   open: boolean

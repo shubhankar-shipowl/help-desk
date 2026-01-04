@@ -178,7 +178,8 @@ export async function POST(req: NextRequest) {
         include: { customer: true },
       })
     } else if (ticketNumber) {
-      ticket = await prisma.ticket.findUnique({
+      // Use findFirst since ticketNumber is part of compound unique with tenantId
+      ticket = await prisma.ticket.findFirst({
         where: { ticketNumber },
         include: { customer: true },
       })
@@ -241,14 +242,39 @@ export async function POST(req: NextRequest) {
     }
 
     // Find or create customer user
-    let customer = await prisma.user.findUnique({
-      where: { email: fromEmail },
+    // Use findFirst since email is part of compound unique with tenantId
+    // For email webhooks, we'll search across all tenants and use the first match
+    let customer = await prisma.user.findFirst({
+      where: { 
+        email: fromEmail,
+        role: 'CUSTOMER',
+      },
     })
 
     if (!customer) {
+      // Get tenantId from ticket if available, otherwise use default tenant
+      let tenantId: string | undefined
+      if (ticket) {
+        tenantId = ticket.tenantId
+      } else {
+        // Try to find default tenant
+        const defaultTenant = await prisma.tenant.findFirst({
+          where: { slug: 'default' },
+        })
+        tenantId = defaultTenant?.id
+      }
+      
+      if (!tenantId) {
+        return NextResponse.json(
+          { error: 'Unable to determine tenant for customer creation' },
+          { status: 400 }
+        )
+      }
+      
       // Create customer if doesn't exist
       customer = await prisma.user.create({
         data: {
+          tenantId,
           email: fromEmail,
           name: fromEmail.split('@')[0], // Use email prefix as name
           role: 'CUSTOMER',

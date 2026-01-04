@@ -19,7 +19,8 @@ export async function DELETE(req: NextRequest) {
     }
 
     // Find the integration
-    const integration = await prisma.facebookIntegration.findUnique({
+    // Use findFirst since pageId is part of compound unique with tenantId
+    const integration = await prisma.facebookIntegration.findFirst({
       where: { pageId },
     })
 
@@ -48,9 +49,9 @@ export async function DELETE(req: NextRequest) {
       // Continue with deletion even if Facebook unsubscribe fails
     }
 
-    // Delete the integration
+    // Delete the integration using its ID
     await prisma.facebookIntegration.delete({
-      where: { pageId },
+      where: { id: integration.id },
     })
 
     console.log(`[Facebook Disconnect] Deleted integration for page ${pageId}`)

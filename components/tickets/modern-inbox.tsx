@@ -56,9 +56,17 @@ interface Ticket {
 
 interface ModernInboxProps {
   initialTickets: Ticket[]
+  stats?: {
+    total: number
+    open: number
+    overdue: number
+    facebook: number
+  }
+  teams?: Array<{ id: string; name: string; color: string | null }>
+  categories?: Array<{ id: string; name: string; icon: string | null; color: string | null }>
 }
 
-export function ModernInbox({ initialTickets }: ModernInboxProps) {
+export function ModernInbox({ initialTickets, stats, teams, categories }: ModernInboxProps) {
   const { data: session } = useSession()
   const router = useRouter()
   const socket = useNotificationSocket()

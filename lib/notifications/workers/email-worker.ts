@@ -22,17 +22,17 @@ emailQueue.process(
     })
 
     try {
-      // Get tenantId from notification if not provided in job data
+      // Get tenantId from user if not provided in job data
       let finalTenantId = tenantId
-      if (!finalTenantId && notificationId) {
+      if (!finalTenantId && userId) {
         try {
-          const notification = await prisma.notification.findUnique({
-            where: { id: notificationId },
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
             select: { tenantId: true },
           })
-          finalTenantId = notification?.tenantId || undefined
+          finalTenantId = user?.tenantId || undefined
         } catch (error) {
-          console.warn(`[Email Worker] Could not fetch tenantId from notification ${notificationId}:`, error)
+          console.warn(`[Email Worker] Could not fetch tenantId from user ${userId}:`, error)
         }
       }
 

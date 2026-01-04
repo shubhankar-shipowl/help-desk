@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && NODE_OPTIONS='--max-old-space-size=4096' next build",
+    "build:skip-typecheck": "prisma generate && NODE_OPTIONS='--max-old-space-size=4096' SKIP_ENV_VALIDATION=true next build",
     "start": "NODE_ENV=production tsx server.ts",
     "start:next": "next start",
     "start:pm2": "pm2 start ecosystem.config.js",

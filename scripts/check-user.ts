@@ -4,7 +4,8 @@ import bcrypt from 'bcryptjs'
 const prisma = new PrismaClient()
 
 async function checkUser() {
-  const user = await prisma.user.findUnique({
+  // Use findFirst since email is part of compound unique with tenantId
+  const user = await prisma.user.findFirst({
     where: { email: 'admin@example.com' },
   })
 

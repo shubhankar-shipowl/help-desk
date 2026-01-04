@@ -318,7 +318,7 @@ export function CallLogsClient() {
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchCallLogs}
+            onClick={() => fetchCallLogs()}
             disabled={loading}
           >
             <RefreshCw className={cn('w-4 h-4 mr-2', loading && 'animate-spin')} />

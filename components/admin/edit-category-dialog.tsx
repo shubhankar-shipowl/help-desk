@@ -21,7 +21,7 @@ interface EditCategoryDialogProps {
     id: string
     name: string
     icon: string | null
-    subjects: string[] | null
+    subjects: any // JSON field from Prisma can be various types
   }
   open: boolean
   onOpenChange: (open: boolean) => void

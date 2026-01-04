@@ -38,11 +38,11 @@ export async function PATCH(
     const categoryData: {
       name: string
       icon?: string | null
-      subjects?: string[] | null
+      subjects?: any
     } = {
       name,
       icon: icon || null,
-      subjects: subjects && Array.isArray(subjects) && subjects.length > 0 ? subjects : null,
+      subjects: subjects && Array.isArray(subjects) && subjects.length > 0 ? subjects : undefined,
     }
 
     const category = await prisma.category.update({

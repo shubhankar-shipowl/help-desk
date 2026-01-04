@@ -112,7 +112,7 @@ export default async function CustomerDetailPage({
               <div className="flex items-center gap-2 mb-2">
                 <h1 className="text-h1">{customer.name || 'No Name'}</h1>
                 {(customer.email.includes('@facebook.local') || customer.email.startsWith('facebook_')) && (
-                  <Facebook className="h-5 w-5 text-blue-600" title="Facebook Customer" />
+                  <Facebook className="h-5 w-5 text-blue-600" />
                 )}
               </div>
               {!customer.email.includes('@facebook.local') && !customer.email.startsWith('facebook_') && (

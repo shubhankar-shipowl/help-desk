@@ -335,7 +335,7 @@ async function handleFacebookChange(change: any, pageId: string) {
   console.log('[Facebook Webhook] ========================================')
 
   // Check if pageId is invalid ('0' or empty)
-  const isValidPageId = pageId && pageId !== '0' && pageId !== 0
+  const isValidPageId = pageId && pageId !== '0' && String(pageId) !== '0'
   
   // If pageId is missing or invalid, try to find active integration
   let integration

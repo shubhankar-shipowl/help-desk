@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     // Fetch resolved tickets that are NOT penalized, resolved within the last N days
     const where = {
       tenantId, // Always filter by tenant
-      status: 'RESOLVED',
+      status: 'RESOLVED' as const,
       isPenalized: false,
       resolvedAt: {
         gte: dateThreshold,

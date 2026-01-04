@@ -171,9 +171,9 @@ export default function NewTicketPage() {
                     <SelectValue placeholder="Select issue type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {getAvailableSubjects().map((subject) => (
-                      <SelectItem key={subject} value={subject}>
-                        {subject}
+                    {getAvailableSubjects().map((subject, index) => (
+                      <SelectItem key={`${subject}-${index}`} value={String(subject)}>
+                        {String(subject)}
                       </SelectItem>
                     ))}
                   </SelectContent>

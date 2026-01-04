@@ -814,9 +814,9 @@ export default function PublicNewTicketPage() {
                     )}
                   >
                     <option value="">Select issue type</option>
-                    {getAvailableSubjects().map((subject) => (
-                      <option key={subject} value={subject}>
-                        {subject}
+                    {getAvailableSubjects().map((subject, index) => (
+                      <option key={`${subject}-${index}`} value={String(subject)}>
+                        {String(subject)}
                       </option>
                     ))}
                   </select>

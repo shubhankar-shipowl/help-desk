@@ -110,7 +110,6 @@ export default function AgentNewTicketPage() {
       phone: () => !value.trim() ? 'Please enter customer phone number' : null,
       order: () => !value.trim() ? 'Please enter order ID' : null,
       trackingId: () => !value.trim() ? 'Please enter tracking ID' : null,
-      subject: () => !value.trim() ? 'Please enter a subject' : value.length < 5 ? 'Subject must be at least 5 characters' : null,
       description: () => !value.trim() ? 'Please describe the issue' : value.length < 20 ? 'Please provide more details (at least 20 characters)' : null,
     }
     return validations[name]?.() || null
@@ -550,9 +549,9 @@ export default function AgentNewTicketPage() {
                     )}
                   >
                     <option value="">Select issue type</option>
-                    {getAvailableSubjects().map((subject) => (
-                      <option key={subject} value={subject}>
-                        {subject}
+                    {getAvailableSubjects().map((subject, index) => (
+                      <option key={`${subject}-${index}`} value={String(subject)}>
+                        {String(subject)}
                       </option>
                     ))}
                   </select>

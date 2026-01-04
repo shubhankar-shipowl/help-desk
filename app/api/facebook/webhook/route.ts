@@ -55,8 +55,9 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleFacebookMessage(event: any, pageId: string) {
-  const integration = await prisma.facebookIntegration.findUnique({
-    where: { pageId },
+  // Use findFirst since pageId is part of compound unique with tenantId
+  const integration = await prisma.facebookIntegration.findFirst({
+    where: { pageId, isActive: true },
   })
 
   if (!integration || !integration.isActive) {
@@ -98,8 +99,9 @@ async function handleFacebookMessage(event: any, pageId: string) {
 }
 
 async function handleFacebookChange(change: any, pageId: string) {
-  const integration = await prisma.facebookIntegration.findUnique({
-    where: { pageId },
+  // Use findFirst since pageId is part of compound unique with tenantId
+  const integration = await prisma.facebookIntegration.findFirst({
+    where: { pageId, isActive: true },
   })
 
   if (!integration || !integration.isActive) {

@@ -73,7 +73,7 @@ export function CustomCalendar({ value, onChange, placeholder = 'Choose a date',
         date,
         isCurrentMonth: true,
         isToday: dateStr === today.toISOString().split('T')[0],
-        isSelected: selectedDate && dateStr === selectedDate.toISOString().split('T')[0],
+        isSelected: !!(selectedDate && dateStr === selectedDate.toISOString().split('T')[0]),
       })
     }
 

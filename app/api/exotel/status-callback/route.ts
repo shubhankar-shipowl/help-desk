@@ -86,6 +86,9 @@ export async function POST(req: NextRequest) {
       // Try to find by ticket ID if call log not found
       const ticket = await prisma.ticket.findUnique({
         where: { id: ticketId },
+        include: {
+          customer: true,
+        },
       });
       
       if (ticket) {

@@ -41,6 +41,15 @@ interface TicketDetailProps {
   isPanel?: boolean
   currentUserRole?: 'ADMIN' | 'AGENT' | 'CUSTOMER'
   availableAgents?: Array<{ id: string; name: string | null; email: string }>
+  availableTeams?: Array<{ id: string; name: string }>
+  templates?: Array<{ 
+    id: string
+    name: string
+    type: string
+    content: any
+    variables?: any
+    category?: string | null
+  }>
   currentUserPhone?: string | null
   onTicketUpdate?: (updatedTicket: any) => void
   onClose?: () => void
@@ -54,6 +63,8 @@ export function TicketDetail({
   isPanel = false,
   currentUserRole,
   availableAgents = [],
+  availableTeams = [],
+  templates = [],
   currentUserPhone,
   onTicketUpdate,
   onClose,
@@ -1156,7 +1167,7 @@ export function TicketDetail({
                   <div>
                     <p className="font-medium text-blue-900 mb-1">Reply on Facebook</p>
                     <p className="text-sm text-blue-700">
-                      To reply to this customer, please use the "View on Facebook" button above to open the original post/comment on Facebook and reply there.
+                      To reply to this customer, please use the &quot;View on Facebook&quot; button above to open the original post/comment on Facebook and reply there.
                     </p>
                   </div>
                 </div>
@@ -1538,7 +1549,7 @@ export function TicketDetail({
                   <div>
                     <p className="font-medium mb-1">Reply on Facebook</p>
                     <p className="text-blue-700">
-                      To reply to this customer, please use the "View on Facebook" button above to open the original post/comment on Facebook and reply there.
+                      To reply to this customer, please use the &quot;View on Facebook&quot; button above to open the original post/comment on Facebook and reply there.
                     </p>
                   </div>
                 </div>

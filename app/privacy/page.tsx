@@ -31,7 +31,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">1. Introduction</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
-              Welcome to Customer Support System ("we," "our," or "us"). We are committed to protecting your privacy and ensuring you have a positive experience on our platform. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our customer support ticketing system.
+              Welcome to Customer Support System (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). We are committed to protecting your privacy and ensuring you have a positive experience on our platform. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our customer support ticketing system.
             </p>
             <p className="text-gray-700 leading-relaxed">
               By using our service, you agree to the collection and use of information in accordance with this policy. If you do not agree with our policies and practices, please do not use our service.
@@ -173,7 +173,7 @@ export default function PrivacyPage() {
               <li><strong>Withdrawal of Consent:</strong> Withdraw consent where processing is based on consent</li>
             </ul>
             <p className="text-gray-700 leading-relaxed mt-4">
-              To exercise these rights, please contact us using the information provided in the "Contact Us" section below.
+              To exercise these rights, please contact us using the information provided in the &quot;Contact Us&quot; section below.
             </p>
           </section>
 
@@ -207,7 +207,7 @@ export default function PrivacyPage() {
 
           {/* Children's Privacy */}
           <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">10. Children's Privacy</h2>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-4">10. Children&apos;s Privacy</h2>
             <p className="text-gray-700 leading-relaxed">
               Our service is not intended for children under the age of 13 (or the applicable age of consent in your jurisdiction). We do not knowingly collect personal information from children. If you believe we have collected information from a child, please contact us immediately, and we will take steps to delete such information.
             </p>
@@ -229,7 +229,7 @@ export default function PrivacyPage() {
             </p>
             <ul className="list-disc list-inside text-gray-700 space-y-2 ml-4">
               <li>Posting the new Privacy Policy on this page</li>
-              <li>Updating the "Last updated" date at the top of this page</li>
+              <li>Updating the &quot;Last updated&quot; date at the top of this page</li>
               <li>Sending you an email notification (if you have an account)</li>
             </ul>
             <p className="text-gray-700 leading-relaxed mt-4">
