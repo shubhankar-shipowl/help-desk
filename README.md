@@ -37,17 +37,20 @@ A modern, full-featured customer support ticketing portal with automation, notif
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd Customer-Support-System
 ```
 
 2. Copy the environment file:
+
 ```bash
 cp .env.example .env
 ```
 
 3. Update `.env` with your configuration:
+
 ```env
 DATABASE_URL="mysql://customer:Kalbazaar@177@89.116.21.112:3306/customer_db"
 REDIS_URL="redis://localhost:6379"
@@ -60,36 +63,42 @@ SMTP_PASSWORD="your-app-password"
 ```
 
 4. Start Docker containers:
+
 ```bash
 docker-compose up -d
 ```
 
 5. Install dependencies:
+
 ```bash
 npm install
 ```
 
 6. Generate Prisma Client:
+
 ```bash
 npx prisma generate
 ```
 
 7. Run database migrations:
+
 ```bash
 npx prisma db push
 ```
 
 8. (Optional) Seed the database:
+
 ```bash
 npm run db:seed
 ```
 
 9. Start the development server:
+
 ```bash
 npm run dev
 ```
 
-10. Open [http://localhost:3000](http://localhost:3000) in your browser.
+10. Open [http://localhost:3002](http://localhost:3002) in your browser.
 
 ## Default Users
 
@@ -128,22 +137,26 @@ After seeding, you can use these default accounts:
 ## Key Features Implementation
 
 ### Ticket Management
+
 - Create, view, and update tickets
 - Conversation threads with internal notes
 - File attachments support
 - Status workflow: New → Open → Pending → Resolved → Closed
 
 ### Automation
+
 - **Auto-assign**: Round-robin assignment to available agents
 - **Auto-resolve**: Automatically resolve inactive tickets
 - **Auto-email**: Send acknowledgment and status update emails
 
 ### Notifications
+
 - In-app notifications for ticket updates
 - Email notifications (configurable)
 - Real-time updates via polling
 
 ### Facebook Integration
+
 - Webhook support for Facebook page events
 - Create notifications from Facebook posts/comments
 - Convert Facebook interactions to tickets
@@ -197,4 +210,3 @@ MIT
 ## Support
 
 For issues and questions, please open an issue on GitHub.
-

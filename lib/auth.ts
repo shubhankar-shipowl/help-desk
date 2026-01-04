@@ -1,8 +1,8 @@
-import { NextAuthOptions } from 'next-auth'
-import CredentialsProvider from 'next-auth/providers/credentials'
-import { PrismaAdapter } from '@auth/prisma-adapter'
-import { prisma } from './prisma'
-import bcrypt from 'bcryptjs'
+import { NextAuthOptions } from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import { PrismaAdapter } from '@auth/prisma-adapter';
+import { prisma } from './prisma';
+import bcrypt from 'bcryptjs';
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
@@ -15,7 +15,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          return null
+          return null;
         }
 
         // Since email is no longer unique (tenantId_email is the unique constraint),
@@ -25,36 +25,36 @@ export const authOptions: NextAuthOptions = {
         const user = await prisma.user.findFirst({
           where: { email: credentials.email },
           include: { tenant: true }, // Include tenant for multi-tenant support
-        })
+        });
 
         // Only users with passwords can login (admins and agents)
         // Customers don't have passwords and cannot login
         if (!user || !user.password) {
-          return null
+          return null;
         }
 
         // Only ADMIN and AGENT roles can login
         // CUSTOMER role cannot login (they can only create tickets)
         if (user.role === 'CUSTOMER') {
-          return null
+          return null;
         }
 
         const isPasswordValid = await bcrypt.compare(
           credentials.password,
-          user.password
-        )
+          user.password,
+        );
 
         if (!isPasswordValid) {
-          return null
+          return null;
         }
 
         if (!user.isActive) {
-          return null
+          return null;
         }
 
         // Check if tenant is active
         if (!user.tenant?.isActive) {
-          return null
+          return null;
         }
 
         return {
@@ -64,7 +64,7 @@ export const authOptions: NextAuthOptions = {
           role: user.role,
           avatar: user.avatar,
           tenantId: user.tenantId, // Include tenantId for multi-tenant support
-        }
+        };
       },
     }),
   ],
@@ -74,30 +74,60 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id
-        token.email = user.email
-        token.name = user.name
-        token.role = (user as any).role
-        token.avatar = (user as any).avatar
-        token.tenantId = (user as any).tenantId // Include tenantId for multi-tenant support
+        token.id = user.id;
+        token.email = user.email;
+        token.name = user.name;
+        token.role = (user as any).role;
+        token.avatar = (user as any).avatar;
+        token.tenantId = (user as any).tenantId; // Include tenantId for multi-tenant support
       }
-      return token
+      return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id as string
-        session.user.email = token.email as string
-        session.user.name = token.name as string
-        session.user.role = token.role as string
-        session.user.avatar = token.avatar as string
-        ;(session.user as any).tenantId = token.tenantId as string // Include tenantId for multi-tenant support
+        session.user.id = token.id as string;
+        session.user.email = token.email as string;
+        session.user.name = token.name as string;
+        session.user.role = token.role as string;
+        session.user.avatar = token.avatar as string;
+        (session.user as any).tenantId = token.tenantId as string; // Include tenantId for multi-tenant support
       }
-      return session
+      return session;
+    },
+    async redirect({ url, baseUrl }) {
+      // Use NEXTAUTH_URL or APP_URL from environment, or fallback to baseUrl
+      // This ensures redirects work correctly on any domain/port
+      let actualBaseUrl =
+        process.env.NEXTAUTH_URL || process.env.APP_URL || baseUrl;
+
+      // Remove trailing slash
+      actualBaseUrl = actualBaseUrl.replace(/\/$/, '');
+
+      // If url is relative, make it absolute using the actual base URL
+      if (url.startsWith('/')) {
+        return `${actualBaseUrl}${url}`;
+      }
+
+      // If url is absolute, check if it's on the same origin
+      try {
+        const urlObj = new URL(url);
+        const baseUrlObj = new URL(actualBaseUrl);
+
+        // If same origin, allow it
+        if (urlObj.origin === baseUrlObj.origin) {
+          return url;
+        }
+      } catch (e) {
+        // If URL parsing fails, treat as relative
+        return `${actualBaseUrl}${url.startsWith('/') ? url : '/' + url}`;
+      }
+
+      // Default to home page on same origin
+      return `${actualBaseUrl}/`;
     },
   },
   pages: {
     signIn: '/auth/signin',
   },
   secret: process.env.NEXTAUTH_SECRET,
-}
-
+};

@@ -9,10 +9,12 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3002,
+        NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'http://srv512766.hstgr.cloud:3002',
       },
       env_production: {
         NODE_ENV: 'production',
         PORT: 3002,
+        NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'http://srv512766.hstgr.cloud:3002',
       },
       // Logging
       error_file: './logs/pm2-error.log',
