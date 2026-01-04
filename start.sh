@@ -49,6 +49,11 @@ echo -e "${GREEN}✅ Prisma client generated${NC}"
 # Build the application
 echo ""
 echo "🔨 Building application..."
+# Set NEXT_PUBLIC_WS_URL for build if not already set
+if [ -z "$NEXT_PUBLIC_WS_URL" ]; then
+    export NEXT_PUBLIC_WS_URL="${APP_URL:-http://srv512766.hstgr.cloud:3002}"
+    echo -e "${YELLOW}ℹ️  Setting NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}${NC}"
+fi
 npm run build || {
     echo -e "${RED}❌ Build failed${NC}"
     exit 1

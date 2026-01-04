@@ -17,14 +17,23 @@ export function useNotificationSocket() {
     const token = session.user.id
 
     // Connect to WebSocket server
+    // Use NEXT_PUBLIC_WS_URL if set (build-time), otherwise use current origin
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || window.location.origin
+    console.log('[WebSocket Client] 🔌 Connecting to:', wsUrl)
     socketRef.current = io(wsUrl, {
       auth: { token },
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
       path: '/socket.io/',
+      forceNew: false,
+    })
+    
+    socketRef.current.on('connect', () => {
+      console.log('[WebSocket Client] ✅ Connected to WebSocket server')
     })
 
     socket = socketRef.current
@@ -51,10 +60,25 @@ export function connectNotificationSocket(token: string): Socket {
   }
 
   const wsUrl = process.env.NEXT_PUBLIC_WS_URL || window.location.origin
+  console.log('[WebSocket Client] 🔌 Connecting to:', wsUrl)
   socket = io(wsUrl, {
     auth: { token },
     transports: ['websocket', 'polling'],
     reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionAttempts: 10,
+    reconnectionDelayMax: 5000,
+    timeout: 20000,
+    path: '/socket.io/',
+    forceNew: false,
+  })
+  
+  socket.on('connect', () => {
+    console.log('[WebSocket Client] ✅ Connected to WebSocket server')
+  })
+  
+  socket.on('connect_error', (error) => {
+    console.error('[WebSocket Client] ❌ Connection error:', error)
   })
 
   return socket

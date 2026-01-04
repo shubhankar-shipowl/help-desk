@@ -31,10 +31,11 @@ export function initializeWebSocket(httpServer: HTTPServer) {
   const appUrl = getAppUrl()
   const nodeEnv = process.env.NODE_ENV || 'development'
   
-  // In development, allow all origins. In production, use specific origin
+  // In development, allow all origins. In production, allow the app URL and any origin
+  // (more permissive for WebSocket connections through proxies)
   const corsOrigin = nodeEnv === 'development' 
     ? '*' // Allow all origins in development
-    : appUrl
+    : '*' // Allow all origins in production too (needed for WebSocket through nginx proxy)
   
   io = new SocketIOServer(httpServer, {
     cors: {
