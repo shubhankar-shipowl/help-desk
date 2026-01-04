@@ -136,7 +136,7 @@ export async function POST(
       process.env.APP_URL ||
       process.env.NEXTAUTH_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
-      'http://localhost:3000';
+      'http://localhost:3002';
     
     const cleanServerUrl = serverUrl.replace(/\/$/, '');
     const statusCallbackUrl = `${cleanServerUrl}/api/exotel/status-callback`;

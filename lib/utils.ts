@@ -106,7 +106,7 @@ export async function generateTicketNumberWithSequence(): Promise<string> {
 
 /**
  * Get the base URL for the application based on environment
- * - Development (NODE_ENV=development): http://localhost:3000
+ * - Development (NODE_ENV=development): http://localhost:3002
  * - Production (NODE_ENV=production): https://support.shipowl.io
  * 
  * This function is used throughout the app for:
@@ -123,7 +123,7 @@ export function getAppUrl(): string {
   }
   
   // Development: always use localhost
-  return 'http://localhost:3000'
+  return 'http://localhost:3002'
 }
 
 /**

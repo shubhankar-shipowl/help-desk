@@ -1,7 +1,7 @@
 #!/bin/bash
-# Script to kill process on port 3000
+# Script to kill process on port 3002
 
-PORT=${1:-3000}
+PORT=${1:-3002}
 PID=$(lsof -ti:$PORT)
 
 if [ -z "$PID" ]; then
