@@ -5,7 +5,6 @@
  */
 
 import { prisma } from '../lib/prisma'
-import axios from 'axios'
 
 async function subscribeFacebookFeed() {
   console.log('🔧 Subscribing Facebook Page to Feed Field...\n')
@@ -33,35 +32,43 @@ async function subscribeFacebookFeed() {
         console.log('📤 Subscribing to feed and messages fields...')
         console.log('   Using page access token...')
         
-        const response = await axios.post(
-          `https://graph.facebook.com/v18.0/${integration.pageId}/subscribed_apps`,
-          null,
-          {
-            params: {
-              subscribed_fields: 'feed,messages',
-              access_token: integration.accessToken,
-            },
-          }
-        )
+        const subscribeUrl = new URL(`https://graph.facebook.com/v18.0/${integration.pageId}/subscribed_apps`)
+        subscribeUrl.searchParams.set('subscribed_fields', 'feed,messages')
+        subscribeUrl.searchParams.set('access_token', integration.accessToken)
+        
+        const response = await fetch(subscribeUrl.toString(), {
+          method: 'POST',
+        })
+        
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw { response, error: errorData.error || errorData, message: errorData.error?.message || 'Request failed' }
+        }
+        
+        const responseData = await response.json()
 
-        if (response.data.success) {
+        if (responseData.success) {
           console.log('   ✅ API call successful!')
           console.log('   Attempted to subscribe: feed, messages')
           console.log('')
           
           // CRITICAL: Verify what was actually subscribed
           console.log('🔍 Verifying actual subscription status...')
-          const verifyResponse = await axios.get(
-            `https://graph.facebook.com/v18.0/${integration.pageId}/subscribed_apps`,
-            {
-              params: {
-                access_token: integration.accessToken,
-              },
-            }
-          )
+          const verifyUrl = new URL(`https://graph.facebook.com/v18.0/${integration.pageId}/subscribed_apps`)
+          verifyUrl.searchParams.set('access_token', integration.accessToken)
+          
+          const verifyResponse = await fetch(verifyUrl.toString())
+          
+          if (!verifyResponse.ok) {
+            console.log('   ⚠️  Could not verify subscription status (API error)')
+            console.log('')
+            continue
+          }
+          
+          const verifyData = await verifyResponse.json()
 
-          if (verifyResponse.data.data && verifyResponse.data.data.length > 0) {
-            const subscribedFields = verifyResponse.data.data.map((sub: any) => 
+          if (verifyData.data && verifyData.data.length > 0) {
+            const subscribedFields = verifyData.data.map((sub: any) => 
               sub.name || sub.category || 'Unknown'
             )
             
@@ -101,23 +108,30 @@ async function subscribeFacebookFeed() {
             console.log('')
           }
         } else {
-          console.log('   ⚠️  Subscription API returned error:', response.data)
+          console.log('   ⚠️  Subscription API returned error:', responseData)
           console.log('')
         }
         console.log('')
 
       } catch (apiError: any) {
         console.log('   ❌ Error subscribing:')
-        const errorMsg = apiError.response?.data?.error || apiError.message
+        let errorMsg = apiError.message || apiError.error?.message || String(apiError)
+        let errorCode: number | undefined = apiError.error?.code || apiError.code
+        
+        // If error has an error object, extract details
+        if (apiError.error) {
+          errorMsg = apiError.error.message || apiError.error
+          errorCode = apiError.error.code
+        }
+        
         console.log(`   ${JSON.stringify(errorMsg, null, 2)}`)
         console.log('')
         
-        if (apiError.response?.data?.error?.code === 190) {
+        if (errorCode === 190) {
           console.log('   💡 Access token is expired or invalid.')
           console.log('   Fix: Reconnect the Facebook page via /admin/integrations')
           console.log('')
-        } else if (apiError.response?.data?.error?.code === 200 || 
-                   apiError.response?.data?.error?.code === 100) {
+        } else if (errorCode === 200 || errorCode === 100) {
           console.log('   💡 Missing permissions or App Review required.')
           console.log('   The "feed" field requires "pages_read_engagement" permission')
           console.log('   which needs App Review or must be done via Facebook UI.')
