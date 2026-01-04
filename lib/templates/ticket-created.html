@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Ticket Created - Shipowl Support</title>
+    <style>
+        /* Reset styles */
+        body, table, td, a {
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+        table, td {
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+        }
+        img {
+            -ms-interpolation-mode: bicubic;
+            border: 0;
+            height: auto;
+            line-height: 100%;
+            outline: none;
+            text-decoration: none;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100% !important;
+            height: 100% !important;
+            background-color: #f9fafb;
+        }
+        
+        /* Main styles */
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%);
+            padding: 40px 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            color: #ffffff;
+            font-size: 28px;
+            font-weight: 700;
+            margin: 0;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+        }
+        
+        .content {
+            padding: 40px 30px;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            color: #111827;
+            line-height: 1.6;
+        }
+        
+        .greeting {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #111827;
+        }
+        
+        .message {
+            font-size: 15px;
+            color: #4B5563;
+            margin-bottom: 30px;
+        }
+        
+        .ticket-box {
+            background-color: #F3F4F6;
+            border-left: 4px solid #3B82F6;
+            padding: 20px;
+            margin: 30px 0;
+            border-radius: 8px;
+        }
+        
+        .ticket-box .label {
+            font-size: 12px;
+            color: #6B7280;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .ticket-box .value {
+            font-size: 16px;
+            color: #111827;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .ticket-box .value.ticket-id {
+            font-size: 24px;
+            color: #3B82F6;
+            margin-bottom: 20px;
+        }
+        
+        .ticket-details {
+            margin: 20px 0;
+        }
+        
+        .detail-row {
+            padding: 12px 0;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+        
+        .detail-label {
+            font-size: 13px;
+            color: #6B7280;
+            font-weight: 600;
+            display: inline-block;
+            width: 100px;
+        }
+        
+        .detail-value {
+            font-size: 14px;
+            color: #111827;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background-color: #3B82F6;
+            color: #ffffff !important;
+            padding: 14px 32px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 15px;
+            margin: 20px 0;
+            transition: background-color 0.3s ease;
+        }
+        
+        .cta-button:hover {
+            background-color: #1E40AF;
+        }
+        
+        .info-box {
+            background-color: #DBEAFE;
+            border: 1px solid #93C5FD;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 25px 0;
+        }
+        
+        .info-box p {
+            margin: 0;
+            font-size: 14px;
+            color: #1E40AF;
+            line-height: 1.5;
+        }
+        
+        .info-icon {
+            display: inline-block;
+            background-color: #3B82F6;
+            color: #ffffff;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        
+        .footer {
+            background-color: #F9FAFB;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #E5E7EB;
+        }
+        
+        .footer p {
+            margin: 8px 0;
+            font-size: 13px;
+            color: #6B7280;
+            line-height: 1.5;
+        }
+        
+        .footer a {
+            color: #3B82F6;
+            text-decoration: none;
+        }
+        
+        .social-links {
+            margin: 20px 0;
+        }
+        
+        .social-links a {
+            display: inline-block;
+            margin: 0 8px;
+            color: #6B7280;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        
+        .divider {
+            height: 1px;
+            background-color: #E5E7EB;
+            margin: 30px 0;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .badge-high {
+            background-color: #FEF3C7;
+            color: #92400E;
+        }
+        
+        .badge-normal {
+            background-color: #DBEAFE;
+            color: #1E40AF;
+        }
+        
+        .badge-urgent {
+            background-color: #FEE2E2;
+            color: #991B1B;
+        }
+        
+        .badge-low {
+            background-color: #F3F4F6;
+            color: #4B5563;
+        }
+        
+        /* Responsive */
+        @media only screen and (max-width: 600px) {
+            .content {
+                padding: 30px 20px !important;
+            }
+            .header {
+                padding: 30px 20px !important;
+            }
+            .header h1 {
+                font-size: 24px !important;
+            }
+            .ticket-box {
+                padding: 15px !important;
+            }
+            .cta-button {
+                display: block;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f9fafb; padding: 20px 0;">
+        <tr>
+            <td align="center">
+                <!-- Main Container -->
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" class="email-container">
+                    
+                    <!-- Header -->
+                    <tr>
+                        <td class="header">
+                            <h1>✓ Ticket Created Successfully</h1>
+                        </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                        <td class="content">
+                            <!-- Greeting -->
+                            <p class="greeting">Hi {{CUSTOMER_NAME}},</p>
+                            
+                            <!-- Message -->
+                            <p class="message">
+                                Thank you for reaching out to us! We've received your support request and our team is already on it. We'll get back to you as soon as possible.
+                            </p>
+                            
+                            <!-- Ticket Information Box -->
+                            <div class="ticket-box">
+                                <div class="label">Your Ticket ID</div>
+                                <div class="value ticket-id">#{{TICKET_ID}}</div>
+                                
+                                <div class="ticket-details">
+                                    <div class="detail-row">
+                                        <span class="detail-label">Subject:</span>
+                                        <span class="detail-value">{{TICKET_SUBJECT}}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Category:</span>
+                                        <span class="detail-value">{{TICKET_CATEGORY}}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Priority:</span>
+                                        <span class="detail-value">
+                                            <span class="badge badge-{{PRIORITY_CLASS}}">{{TICKET_PRIORITY}}</span>
+                                        </span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Created:</span>
+                                        <span class="detail-value">{{CREATED_DATE}}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Status:</span>
+                                        <span class="detail-value">🆕 New</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- CTA Button -->
+                            <center>
+                                <a href="{{TICKET_URL}}" class="cta-button">View Ticket Details →</a>
+                            </center>
+                            
+                            <!-- Info Box -->
+                            <div class="info-box">
+                                <p>
+                                    <span class="info-icon">i</span>
+                                    <strong>What's Next?</strong> Our support team will review your ticket and respond within {{EXPECTED_RESPONSE_TIME}}. You'll receive an email notification when we reply.
+                                </p>
+                            </div>
+                            
+                            <div class="divider"></div>
+                            
+                            <!-- Additional Information -->
+                            <p class="message">
+                                <strong>Need to add more information?</strong><br>
+                                You can reply directly to this email or visit your ticket page to add comments, attachments, or updates.
+                            </p>
+                            
+                            <div class="divider"></div>
+                            
+                            <!-- Signature -->
+                            <p class="message">
+                                Best regards,<br>
+                                <strong>{{COMPANY_NAME}} Support Team</strong>
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td class="footer">
+                            <p><strong>{{COMPANY_NAME}}</strong></p>
+                            <p>{{COMPANY_ADDRESS}}</p>
+                            <p>Email: <a href="mailto:{{SUPPORT_EMAIL}}">{{SUPPORT_EMAIL}}</a> | Phone: {{SUPPORT_PHONE}}</p>
+                            
+                            <div class="social-links">
+                                <a href="{{FACEBOOK_URL}}">Facebook</a> |
+                                <a href="{{TWITTER_URL}}">Twitter</a> |
+                                <a href="{{LINKEDIN_URL}}">LinkedIn</a>
+                            </div>
+                            
+                            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
+                                <p style="font-size: 12px; color: #9CA3AF;">
+                                    This email was sent to {{CUSTOMER_EMAIL}} because you created a support ticket.<br>
+                                    <a href="{{UNSUBSCRIBE_URL}}" style="color: #6B7280;">Manage email preferences</a>
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+
