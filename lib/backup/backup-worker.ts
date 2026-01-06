@@ -45,7 +45,6 @@ const backupJob = cron.schedule(
     }
   },
   {
-    scheduled: true,
     timezone: timezone,
   }
 )

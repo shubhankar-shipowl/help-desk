@@ -113,7 +113,7 @@ export async function GET(
     const contentType = metadata.mimeType || contentTypeMap[extension || ''] || 'application/octet-stream'
 
     // Return file with appropriate headers
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(fileBuffer as any, {
       headers: {
         'Content-Type': contentType,
         'Content-Disposition': `inline; filename="${metadata.name}"`,

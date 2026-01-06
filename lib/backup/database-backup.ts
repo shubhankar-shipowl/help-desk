@@ -51,17 +51,27 @@ function parseDatabaseUrl(url: string): {
  */
 async function initializeMega(email: string, password: string): Promise<any> {
   return new Promise((resolve, reject) => {
-    const storage = new Storage({ email, password })
-    
-    storage.once('ready', () => {
-      console.log('[Backup] ✅ Connected to MEGA storage')
-      resolve(storage)
-    })
-    
-    storage.once('error', (error: Error) => {
-      console.error('[Backup] ❌ MEGA connection error:', error)
+    try {
+      const storage = new Storage({ email, password })
+      
+      storage.once('ready', () => {
+        console.log('[Backup] ✅ Connected to MEGA storage')
+        resolve(storage)
+      })
+      
+      // Handle errors - use type assertion to bypass TypeScript type checking
+      ;(storage as any).once('error', (error: Error) => {
+        console.error('[Backup] ❌ MEGA connection error:', error)
+        reject(error)
+      })
+      
+      // Set a timeout for connection
+      setTimeout(() => {
+        reject(new Error('MEGA connection timeout'))
+      }, 30000) // 30 second timeout
+    } catch (error: any) {
       reject(error)
-    })
+    }
   })
 }
 
