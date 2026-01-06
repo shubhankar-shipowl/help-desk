@@ -96,12 +96,18 @@ export async function POST(req: NextRequest) {
         })
 
         if (ticketForEvent) {
+          // Convert Decimal to number for serialization
+          const serializedTicket = {
+            ...ticketForEvent,
+            refundAmount: ticketForEvent.refundAmount ? parseFloat(ticketForEvent.refundAmount.toString()) : null,
+          }
+          
           // Emit to all agents and admins
           io.to('agents').emit('ticket:created', {
-            ticket: ticketForEvent,
+            ticket: serializedTicket,
           })
           io.to('admins').emit('ticket:created', {
-            ticket: ticketForEvent,
+            ticket: serializedTicket,
           })
         }
       }

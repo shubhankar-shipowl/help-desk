@@ -31,6 +31,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { SatisfactionRating } from './satisfaction-rating'
 
 interface TicketDetailProps {
@@ -95,6 +102,7 @@ export function TicketDetail({
   const [showCallDialog, setShowCallDialog] = useState(false)
   const [imageLoadErrors, setImageLoadErrors] = useState<Set<string>>(new Set())
   const [deliveredDate, setDeliveredDate] = useState<string | null>(null)
+  const [selectedImage, setSelectedImage] = useState<{ url: string; filename: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch delivered date from order tracking data
@@ -837,8 +845,14 @@ export function TicketDetail({
                               <img
                                 src={attachment.fileUrl}
                                 alt={attachment.filename}
-                                className="w-full h-full object-cover cursor-pointer"
-                                onClick={() => window.open(attachment.fileUrl, '_blank', 'noopener,noreferrer')}
+                                className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  if (attachment.fileUrl) {
+                                    window.open(attachment.fileUrl, '_blank', 'noopener,noreferrer')
+                                  }
+                                }}
                                 onError={() => {
                                   setImageLoadErrors(prev => new Set(prev).add(attachment.id))
                                 }}
@@ -890,8 +904,12 @@ export function TicketDetail({
                               variant="ghost"
                               size="sm"
                               className="h-6 px-2 text-xs"
-                              onClick={() => {
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
                                 if (attachment.fileUrl) {
+                                  // Open all files (including images) in a new tab
                                   window.open(attachment.fileUrl, '_blank', 'noopener,noreferrer')
                                 }
                               }}
@@ -1730,6 +1748,62 @@ export function TicketDetail({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Image View Modal */}
+      {selectedImage && (
+        <Dialog 
+          open={true} 
+          onOpenChange={(open) => {
+            console.log('Dialog onOpenChange called with:', open, 'selectedImage:', selectedImage)
+            if (!open) {
+              setSelectedImage(null)
+            }
+          }}
+        >
+          <DialogContent 
+            className="!max-w-[95vw] !w-[95vw] !h-[95vh] !p-0 !bg-black/95 !border-none !overflow-hidden !flex !flex-col !gap-0 [&>button]:hidden !z-[100]"
+            onPointerDownOutside={(e) => {
+              e.preventDefault()
+              setSelectedImage(null)
+            }}
+            onEscapeKeyDown={() => {
+              setSelectedImage(null)
+            }}
+          >
+            <DialogHeader className="sr-only">
+              <DialogTitle>Image Viewer</DialogTitle>
+              <DialogDescription>{selectedImage.filename}</DialogDescription>
+            </DialogHeader>
+            <div className="relative w-full h-full flex items-center justify-center p-4" style={{ flex: 1, minHeight: 0 }}>
+              <img
+                src={selectedImage.url}
+                alt={selectedImage.filename}
+                className="max-w-full max-h-full object-contain"
+                onClick={(e) => e.stopPropagation()}
+                onError={() => {
+                  console.error('Failed to load image in modal:', selectedImage.url)
+                }}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white z-[101] rounded-full"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  console.log('Close button clicked')
+                  setSelectedImage(null)
+                }}
+              >
+                <X className="w-5 h-5" />
+              </Button>
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded text-sm max-w-[80%] truncate z-[101]">
+                {selectedImage.filename}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }

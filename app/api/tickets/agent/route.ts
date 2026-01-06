@@ -4,9 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { generateTicketNumber } from '@/lib/utils'
 import { autoAssignTicket, sendTicketAcknowledgment } from '@/lib/automation'
-import { writeFile, mkdir } from 'fs/promises'
-import { existsSync } from 'fs'
-import { join } from 'path'
+import { uploadFileToMega } from '@/lib/storage/mega'
 import crypto from 'crypto'
 
 export async function POST(req: NextRequest) {
@@ -166,47 +164,38 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Upload files to local storage and create attachments if any
+    // Upload files to MEGA storage and create attachments if any
     if (fileBuffers.length > 0) {
       try {
-        // Create ticket-specific folder
-        const ticketFolderPath = join(process.cwd(), 'uploads', 'tickets', ticket.id)
-        if (!existsSync(ticketFolderPath)) {
-          await mkdir(ticketFolderPath, { recursive: true })
-        }
+        console.log(`📤 Uploading ${fileBuffers.length} file(s) to MEGA storage for ticket ${ticket.id}`)
         
-        // Upload files to local storage and create attachment records in parallel
+        // Upload files to MEGA storage and create attachment records in parallel
         await Promise.all(
           fileBuffers.map(async (fileData) => {
-            // Generate unique filename to avoid conflicts
-            const timestamp = Date.now()
-            const randomId = crypto.randomUUID()
-            const sanitizedName = fileData.filename.replace(/[^a-zA-Z0-9.-]/g, '_')
-            const filename = `${timestamp}_${randomId}_${sanitizedName}`
+            // Upload to MEGA storage
+            const uploadResult = await uploadFileToMega(
+              fileData.buffer,
+              fileData.filename,
+              fileData.mimeType,
+              ticket.id
+            )
             
-            // Save file to local storage
-            const filePath = join(ticketFolderPath, filename)
-            await writeFile(filePath, fileData.buffer)
-            
-            // Generate public URL
-            const publicUrl = `/api/uploads/tickets/${ticket.id}/${filename}`
-            
-            // Create attachment record with local file URL
+            // Create attachment record with MEGA file URL
             await prisma.attachment.create({
               data: {
                 filename: fileData.filename,
-                fileUrl: publicUrl,
-                fileSize: fileData.size,
-                mimeType: fileData.mimeType,
+                fileUrl: uploadResult.fileUrl, // Stores /api/storage/mega/{fileHandle}
+                fileSize: uploadResult.fileSize,
+                mimeType: uploadResult.mimeType,
                 ticketId: ticket.id,
               },
             })
           })
         )
         
-        console.log(`✅ Successfully uploaded ${fileBuffers.length} file(s) to local storage for ticket ${ticket.id}`)
+        console.log(`✅ Successfully uploaded ${fileBuffers.length} file(s) to MEGA storage for ticket ${ticket.id}`)
       } catch (error) {
-        console.error('[Agent Ticket] Error uploading files to local storage:', error)
+        console.error('[Agent Ticket] Error uploading files to MEGA storage:', error)
       }
     }
 
@@ -258,12 +247,18 @@ export async function POST(req: NextRequest) {
         })
 
         if (ticketForEvent) {
+          // Convert Decimal to number for serialization
+          const serializedTicket = {
+            ...ticketForEvent,
+            refundAmount: ticketForEvent.refundAmount ? parseFloat(ticketForEvent.refundAmount.toString()) : null,
+          }
+          
           // Emit to all agents and admins
           io.to('agents').emit('ticket:created', {
-            ticket: ticketForEvent,
+            ticket: serializedTicket,
           })
           io.to('admins').emit('ticket:created', {
-            ticket: ticketForEvent,
+            ticket: serializedTicket,
           })
         }
       }

@@ -63,7 +63,13 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    return NextResponse.json({ ticket })
+    // Convert Decimal to number for serialization
+    const serializedTicket = {
+      ...ticket,
+      refundAmount: ticket.refundAmount ? parseFloat(ticket.refundAmount.toString()) : null,
+    }
+
+    return NextResponse.json({ ticket: serializedTicket })
   } catch (error: any) {
     console.error('Error fetching ticket:', error)
     return NextResponse.json(
@@ -245,47 +251,53 @@ export async function PATCH(
       })
 
       if (ticketForEvent) {
-      const updatePayload = {
-          ticketId: ticketForEvent.id,
-          ticket: ticketForEvent,
-        updatedBy: {
-          id: session.user.id,
-          name: session.user.name,
-          email: session.user.email,
-        },
-        changes: {
-          status: status ? { from: ticket.status, to: status } : undefined,
-          assignedAgentId: assignedAgentId !== undefined ? { from: ticket.assignedAgentId, to: assignedAgentId } : undefined,
-          priority: priority ? { from: ticket.priority, to: priority } : undefined,
-        },
-      }
+        // Convert Decimal to number for serialization
+        const serializedTicket = {
+          ...ticketForEvent,
+          refundAmount: ticketForEvent.refundAmount ? parseFloat(ticketForEvent.refundAmount.toString()) : null,
+        }
 
-      // Emit ticket update to all agents (includes admins)
-      emitToAgents('ticket:updated', updatePayload)
-
-      // Also emit to admins room explicitly
-      emitToAdmins('ticket:updated', updatePayload)
-
-      // Emit to customer if status changed
-      if (status && ticket.customerId) {
-        emitToUser(ticket.customerId, 'ticket:updated', {
-            ticketId: ticketForEvent.id,
-            ticket: ticketForEvent,
-          changes: {
-            status: { from: ticket.status, to: status },
+        const updatePayload = {
+          ticketId: serializedTicket.id,
+          ticket: serializedTicket,
+          updatedBy: {
+            id: session.user.id,
+            name: session.user.name,
+            email: session.user.email,
           },
-        })
-      }
-
-      // Emit to assigned agent if assignment changed
-      if (assignedAgentId !== undefined && assignedAgentId !== ticket.assignedAgentId && assignedAgentId) {
-        emitToUser(assignedAgentId, 'ticket:updated', {
-            ticketId: ticketForEvent.id,
-            ticket: ticketForEvent,
           changes: {
-            assignedAgentId: { from: ticket.assignedAgentId, to: assignedAgentId },
+            status: status ? { from: ticket.status, to: status } : undefined,
+            assignedAgentId: assignedAgentId !== undefined ? { from: ticket.assignedAgentId, to: assignedAgentId } : undefined,
+            priority: priority ? { from: ticket.priority, to: priority } : undefined,
           },
-        })
+        }
+
+        // Emit ticket update to all agents (includes admins)
+        emitToAgents('ticket:updated', updatePayload)
+
+        // Also emit to admins room explicitly
+        emitToAdmins('ticket:updated', updatePayload)
+
+        // Emit to customer if status changed
+        if (status && ticket.customerId) {
+          emitToUser(ticket.customerId, 'ticket:updated', {
+            ticketId: serializedTicket.id,
+            ticket: serializedTicket,
+            changes: {
+              status: { from: ticket.status, to: status },
+            },
+          })
+        }
+
+        // Emit to assigned agent if assignment changed
+        if (assignedAgentId !== undefined && assignedAgentId !== ticket.assignedAgentId && assignedAgentId) {
+          emitToUser(assignedAgentId, 'ticket:updated', {
+            ticketId: serializedTicket.id,
+            ticket: serializedTicket,
+            changes: {
+              assignedAgentId: { from: ticket.assignedAgentId, to: assignedAgentId },
+            },
+          })
         }
       }
     } catch (error) {
@@ -293,7 +305,13 @@ export async function PATCH(
       console.error('Error emitting ticket update via WebSocket:', error)
     }
 
-    return NextResponse.json({ ticket: updatedTicket })
+    // Convert Decimal to number for serialization
+    const serializedTicket = {
+      ...updatedTicket,
+      refundAmount: updatedTicket.refundAmount ? parseFloat(updatedTicket.refundAmount.toString()) : null,
+    }
+
+    return NextResponse.json({ ticket: serializedTicket })
   } catch (error: any) {
     console.error('Error updating ticket:', error)
     return NextResponse.json(

@@ -4,9 +4,7 @@ import { generateTicketNumber } from '@/lib/utils'
 import { autoAssignTicket, sendTicketAcknowledgment } from '@/lib/automation'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
-import { writeFile, mkdir } from 'fs/promises'
-import { existsSync } from 'fs'
-import { join } from 'path'
+import { uploadFileToMega } from '@/lib/storage/mega'
 
 export const dynamic = 'force-dynamic'
 
@@ -219,17 +217,9 @@ export async function POST(req: NextRequest) {
     // Handle file attachments in parallel (non-blocking)
     const fileUploadPromise = attachments.length > 0 ? (async () => {
       try {
-        console.log(`\n📎 [Ticket ${ticket.ticketNumber}] Starting upload of ${attachments.length} file(s) to local storage...`)
+        console.log(`\n📎 [Ticket ${ticket.ticketNumber}] Starting upload of ${attachments.length} file(s) to MEGA storage...`)
         
-        // Create ticket-specific folder
-        const ticketFolderPath = join(process.cwd(), 'uploads', 'tickets', ticket.id)
-        if (!existsSync(ticketFolderPath)) {
-          await mkdir(ticketFolderPath, { recursive: true })
-        }
-        
-        console.log(`📁 [Ticket ${ticket.ticketNumber}] Using local folder: uploads/tickets/${ticket.id}`)
-        
-        // Upload files to local storage and create attachment records in parallel
+        // Upload files to MEGA storage and create attachment records in parallel
         const uploadResults = await Promise.allSettled(
           attachments
             .filter(file => file.size > 0)
@@ -238,43 +228,38 @@ export async function POST(req: NextRequest) {
                 const bytes = await file.arrayBuffer()
                 const buffer = Buffer.from(bytes)
                 
-                // Generate unique filename to avoid conflicts
-                const timestamp = Date.now()
-                const randomId = crypto.randomUUID()
-                const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-                const filename = `${timestamp}_${randomId}_${sanitizedName}`
+                console.log(`\n📤 [Ticket ${ticket.ticketNumber}] Uploading to MEGA: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`)
                 
-                console.log(`\n📤 [Ticket ${ticket.ticketNumber}] Uploading: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`)
+                // Upload to MEGA storage
+                const uploadResult = await uploadFileToMega(
+                  buffer,
+                  file.name,
+                  file.type || 'application/octet-stream',
+                  ticket.id
+                )
                 
-                // Save file to local storage
-                const filePath = join(ticketFolderPath, filename)
-                await writeFile(filePath, buffer)
-                
-                // Generate public URL
-                const publicUrl = `/api/uploads/tickets/${ticket.id}/${filename}`
-                
-                // Create attachment record with local file URL
+                // Create attachment record with MEGA file URL
                 await prisma.attachment.create({
                   data: {
                     filename: file.name,
-                    fileUrl: publicUrl,
-                    fileSize: file.size,
-                    mimeType: file.type || 'application/octet-stream',
+                    fileUrl: uploadResult.fileUrl, // Stores /api/storage/mega/{fileHandle}
+                    fileSize: uploadResult.fileSize,
+                    mimeType: uploadResult.mimeType,
                     ticketId: ticket.id,
                   },
                 })
                 
                 uploadedFiles.push({
                   filename: file.name,
-                  url: publicUrl,
-                  size: file.size,
-                  type: file.type || 'application/octet-stream',
+                  url: uploadResult.fileUrl,
+                  size: uploadResult.fileSize,
+                  type: uploadResult.mimeType,
                 })
                 
-                console.log(`✅ [Ticket ${ticket.ticketNumber}] Successfully saved: ${file.name}`)
-                console.log(`   🔗 URL: ${publicUrl}`)
+                console.log(`✅ [Ticket ${ticket.ticketNumber}] Successfully uploaded to MEGA: ${file.name}`)
+                console.log(`   🔗 URL: ${uploadResult.fileUrl}`)
                 
-                return { success: true, filename: file.name, url: publicUrl }
+                return { success: true, filename: file.name, url: uploadResult.fileUrl }
               } catch (fileError: any) {
                 console.error(`❌ [Ticket ${ticket.ticketNumber}] Failed to upload ${file.name}:`, fileError.message)
                 return { success: false, filename: file.name, error: fileError.message }
@@ -290,7 +275,7 @@ export async function POST(req: NextRequest) {
         if (failed > 0) {
           console.log(`   ❌ Failed: ${failed}/${attachments.length}`)
         }
-        console.log(`   📁 Local Folder: uploads/tickets/${ticket.id}`)
+        console.log(`   📁 Storage: MEGA Cloud Storage`)
         console.log(`\n`)
       } catch (error: any) {
         console.error(`\n❌ [Ticket ${ticket.ticketNumber}] Error in file upload process:`, error.message)
@@ -337,9 +322,15 @@ export async function POST(req: NextRequest) {
         })
 
         if (ticketForEvent) {
+          // Convert Decimal to number for serialization
+          const serializedTicket = {
+            ...ticketForEvent,
+            refundAmount: ticketForEvent.refundAmount ? parseFloat(ticketForEvent.refundAmount.toString()) : null,
+          }
+          
           // Emit to all agents and admins
           const eventData = {
-            ticket: ticketForEvent,
+            ticket: serializedTicket,
           }
           
           io.to('agents').emit('ticket:created', eventData)

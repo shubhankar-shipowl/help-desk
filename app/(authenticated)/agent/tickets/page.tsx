@@ -165,9 +165,15 @@ export default async function AgentTicketsPage({
     prisma.category.findMany({ orderBy: { name: 'asc' } }),
   ])
 
+  // Convert Decimal to number for serialization (Client Components can't receive Decimal objects)
+  const serializedTickets = tickets.map(ticket => ({
+    ...ticket,
+    refundAmount: ticket.refundAmount ? parseFloat(ticket.refundAmount.toString()) : null,
+  }))
+
   return (
     <ModernInbox 
-      initialTickets={tickets}
+      initialTickets={serializedTickets}
       stats={{
         total: totalTickets,
         open: openTickets,

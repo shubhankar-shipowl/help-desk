@@ -3,9 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/email'
-import { writeFile, mkdir } from 'fs/promises'
-import { existsSync } from 'fs'
-import { join } from 'path'
+import { uploadFileToMega } from '@/lib/storage/mega'
 import crypto from 'crypto'
 
 export async function POST(
@@ -99,21 +97,15 @@ export async function POST(
     // Handle file attachments
     if (attachments.length > 0) {
       try {
-        console.log(`Received ${attachments.length} attachment(s) for comment ${comment.id}`)
+        console.log(`📤 Uploading ${attachments.length} attachment(s) to MEGA storage for comment ${comment.id}`)
         
-        // Get ticket to find ticket folder
+        // Get ticket ID for organization
         const ticket = await prisma.ticket.findUnique({
           where: { id: resolvedParams.id },
           select: { id: true },
         })
         
-        // Create comment attachments folder within ticket folder
-        const commentFolderPath = join(process.cwd(), 'uploads', 'tickets', resolvedParams.id, 'comments')
-        if (!existsSync(commentFolderPath)) {
-          await mkdir(commentFolderPath, { recursive: true })
-        }
-        
-        // Upload files to local storage and create attachment records in parallel
+        // Upload files to MEGA storage and create attachment records in parallel
         await Promise.all(
           attachments
             .filter(file => file.size > 0)
@@ -121,35 +113,30 @@ export async function POST(
               const bytes = await file.arrayBuffer()
               const buffer = Buffer.from(bytes)
               
-              // Generate unique filename to avoid conflicts
-              const timestamp = Date.now()
-              const randomId = crypto.randomUUID()
-              const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-              const filename = `${timestamp}_${randomId}_${sanitizedName}`
+              // Upload to MEGA storage
+              const uploadResult = await uploadFileToMega(
+                buffer,
+                file.name,
+                file.type || 'application/octet-stream',
+                ticket?.id
+              )
               
-              // Save file to local storage
-              const filePath = join(commentFolderPath, filename)
-              await writeFile(filePath, buffer)
-              
-              // Generate public URL
-              const publicUrl = `/api/uploads/tickets/${resolvedParams.id}/comments/${filename}`
-              
-              // Create attachment record with local file URL
+              // Create attachment record with MEGA file URL
               await prisma.attachment.create({
                 data: {
                   filename: file.name,
-                  fileUrl: publicUrl,
-                  fileSize: file.size,
-                  mimeType: file.type || 'application/octet-stream',
+                  fileUrl: uploadResult.fileUrl, // Stores /api/storage/mega/{fileHandle}
+                  fileSize: uploadResult.fileSize,
+                  mimeType: uploadResult.mimeType,
                   commentId: comment.id,
                 },
               })
             })
         )
         
-        console.log(`✅ Successfully uploaded ${attachments.length} file(s) to local storage for comment ${comment.id}`)
+        console.log(`✅ Successfully uploaded ${attachments.length} file(s) to MEGA storage for comment ${comment.id}`)
       } catch (error) {
-        console.error('[Comment] Error uploading files to local storage:', error)
+        console.error('[Comment] Error uploading files to MEGA storage:', error)
       }
     }
 

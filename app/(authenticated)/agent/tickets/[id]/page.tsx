@@ -127,9 +127,15 @@ export default async function AgentTicketDetailPage({
     select: { phone: true },
   })
 
+  // Convert Decimal to number for serialization (Client Components can't receive Decimal objects)
+  const serializedTicket = {
+    ...ticket,
+    refundAmount: ticket.refundAmount ? parseFloat(ticket.refundAmount.toString()) : null,
+  }
+
   return (
     <TicketDetail
-      ticket={ticket}
+      ticket={serializedTicket}
       currentUserId={session.user.id}
       viewMode="agent"
       customerTickets={customerTickets}
