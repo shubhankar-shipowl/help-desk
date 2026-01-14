@@ -7,6 +7,7 @@ import { NotificationItem } from './NotificationItem'
 import { EmptyNotifications } from './EmptyNotifications'
 import { useNotificationSocket } from '@/lib/notifications/client'
 import { useRouter } from 'next/navigation'
+import { useStore } from '@/lib/store-context'
 
 interface Notification {
   id: string
@@ -57,6 +58,7 @@ type FilterType = 'all' | 'tickets' | 'mentions' | 'system'
 export function NotificationDropdown() {
   const router = useRouter()
   const socket = useNotificationSocket()
+  const { selectedStoreId } = useStore()
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(false)
@@ -83,9 +85,9 @@ export function NotificationDropdown() {
     if (isOpen) {
       fetchNotifications()
     }
-  }, [isOpen, filter])
+  }, [isOpen, filter, selectedStoreId])
 
-  // Fetch unread count on mount
+  // Fetch unread count on mount and when store changes
   useEffect(() => {
     fetchUnreadCount()
     
@@ -93,7 +95,7 @@ export function NotificationDropdown() {
     const interval = setInterval(fetchUnreadCount, 30000) // Every 30 seconds
     
     return () => clearInterval(interval)
-  }, [])
+  }, [selectedStoreId])
 
   // WebSocket event listeners
   useEffect(() => {
@@ -143,6 +145,11 @@ export function NotificationDropdown() {
       const params = new URLSearchParams()
       params.append('limit', '50') // Fetch more to allow filtering
       
+      // Add storeId if available (for admins/agents)
+      if (selectedStoreId) {
+        params.append('storeId', selectedStoreId)
+      }
+      
       const response = await fetch(`/api/notifications?${params.toString()}`)
       const data = await response.json()
       setNotifications(data.notifications || [])
@@ -156,7 +163,13 @@ export function NotificationDropdown() {
 
   async function fetchUnreadCount() {
     try {
-      const response = await fetch('/api/notifications/unread-count')
+      const params = new URLSearchParams()
+      // Add storeId if available (for admins/agents)
+      if (selectedStoreId) {
+        params.append('storeId', selectedStoreId)
+      }
+      
+      const response = await fetch(`/api/notifications/unread-count?${params.toString()}`)
       const data = await response.json()
       setUnreadCount(data.count || 0)
     } catch (error) {
@@ -166,7 +179,13 @@ export function NotificationDropdown() {
 
   async function markAllAsRead() {
     try {
-      await fetch('/api/notifications/mark-all-read', { method: 'PATCH' })
+      const params = new URLSearchParams()
+      // Add storeId if available (for admins/agents)
+      if (selectedStoreId) {
+        params.append('storeId', selectedStoreId)
+      }
+      
+      await fetch(`/api/notifications/mark-all-read?${params.toString()}`, { method: 'PATCH' })
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
       setUnreadCount(0)
       

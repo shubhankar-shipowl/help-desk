@@ -4,45 +4,72 @@ import { prisma } from './prisma'
 /**
  * Function to get SMTP config from SystemSettings or environment variables
  * 
- * IMPORTANT: This function uses tenantId to fetch tenant-specific SMTP configuration.
- * Since agents are created with the same tenantId as the admin who created them,
- * they automatically share the same SMTP configuration. When an admin configures
- * SMTP settings in the Integration page, those settings are stored in SystemSettings
- * with the tenantId, and all users (admin and agents) in that tenant will use
- * the same SMTP configuration for sending emails.
+ * IMPORTANT: This function uses tenantId and optionally storeId to fetch SMTP configuration.
+ * Store-specific settings take precedence over tenant-level settings.
  * 
- * @param tenantId - The tenant ID (shared by admin and all agents in that tenant)
+ * @param tenantId - The tenant ID
+ * @param storeId - Optional store ID for store-specific SMTP configuration
  * @returns SMTP configuration object
  */
-async function getSmtpConfig(tenantId?: string) {
+async function getSmtpConfig(tenantId?: string, storeId?: string | null) {
   let smtpHost = process.env.SMTP_HOST
   let smtpPort = process.env.SMTP_PORT || '587'
   let smtpUser = process.env.SMTP_USER
   let smtpPassword = process.env.SMTP_PASSWORD
 
   // If tenantId is provided, try to get from SystemSettings first
-  // This ensures that all users (admin and agents) in the same tenant
-  // use the SMTP configuration set by the admin in the Integration page
+  // Try store-specific settings first, then fall back to tenant-level settings
   if (tenantId) {
     try {
-      const settings = await prisma.systemSettings.findMany({
-        where: {
-          tenantId,
-          key: {
-            in: ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD'],
-          },
+      // Build where clause - try store-specific first, then tenant-level
+      const where: any = {
+        tenantId,
+        key: {
+          in: ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD'],
         },
-      })
+      }
 
-      const settingsMap: Record<string, string> = {}
-      settings.forEach((setting) => {
-        settingsMap[setting.key] = setting.value
-      })
+      // If storeId is provided, try store-specific settings first
+      if (storeId) {
+        const storeSettings = await prisma.systemSettings.findMany({
+          where: {
+            ...where,
+            storeId,
+          },
+        })
 
-      smtpHost = settingsMap.SMTP_HOST || smtpHost
-      smtpPort = settingsMap.SMTP_PORT || smtpPort
-      smtpUser = settingsMap.SMTP_USER || smtpUser
-      smtpPassword = settingsMap.SMTP_PASSWORD || smtpPassword
+        if (storeSettings.length > 0) {
+          const settingsMap: Record<string, string> = {}
+          storeSettings.forEach((setting) => {
+            settingsMap[setting.key] = setting.value
+          })
+
+          smtpHost = settingsMap.SMTP_HOST || smtpHost
+          smtpPort = settingsMap.SMTP_PORT || smtpPort
+          smtpUser = settingsMap.SMTP_USER || smtpUser
+          smtpPassword = settingsMap.SMTP_PASSWORD || smtpPassword
+        }
+      }
+
+      // If no store-specific settings found, try tenant-level settings
+      if (!storeId || !smtpHost || !smtpUser || !smtpPassword) {
+        const tenantSettings = await prisma.systemSettings.findMany({
+          where: {
+            ...where,
+            storeId: null,
+          },
+        })
+
+        const settingsMap: Record<string, string> = {}
+        tenantSettings.forEach((setting) => {
+          settingsMap[setting.key] = setting.value
+        })
+
+        smtpHost = settingsMap.SMTP_HOST || smtpHost
+        smtpPort = settingsMap.SMTP_PORT || smtpPort
+        smtpUser = settingsMap.SMTP_USER || smtpUser
+        smtpPassword = settingsMap.SMTP_PASSWORD || smtpPassword
+      }
     } catch (error) {
       console.error('Error fetching SMTP config from SystemSettings:', error)
       // Fallback to environment variables
@@ -61,15 +88,32 @@ async function getSmtpConfig(tenantId?: string) {
 }
 
 // Create transporter function that can be called with tenantId
-async function createTransporter(tenantId?: string) {
-  const config = await getSmtpConfig(tenantId)
+async function createTransporter(tenantId?: string, storeId?: string | null) {
+  const config = await getSmtpConfig(tenantId, storeId)
   
   if (!config.host || !config.auth?.user || !config.auth?.pass) {
-    console.warn(`[Email] SMTP configuration incomplete for tenant ${tenantId || 'default'}. Emails may not send.`)
+    console.warn(`[Email] SMTP configuration incomplete for tenant ${tenantId || 'default'}, store ${storeId || 'default'}. Emails may not send.`)
     return null // Return null if config is incomplete
   }
   
-  return nodemailer.createTransport(config)
+  // For Gmail, ensure we're using the correct settings
+  const isGmail = config.host?.includes('gmail.com')
+  const transporterConfig: any = {
+    ...config,
+  }
+  
+  // Gmail-specific settings
+  if (isGmail) {
+    transporterConfig.service = 'gmail'
+    // Remove host/port for Gmail service
+    delete transporterConfig.host
+    delete transporterConfig.port
+    // Ensure secure is false for Gmail (it uses STARTTLS)
+    transporterConfig.secure = false
+    transporterConfig.requireTLS = true
+  }
+  
+  return nodemailer.createTransport(transporterConfig)
 }
 
 // Default transporter (for backward compatibility)
@@ -92,6 +136,7 @@ export async function sendEmail({
   references,
   messageId,
   tenantId,
+  storeId,
 }: {
   to: string
   subject: string
@@ -101,15 +146,24 @@ export async function sendEmail({
   references?: string
   messageId?: string
   tenantId?: string
+  storeId?: string | null
 }) {
   try {
     // Get SMTP config (from SystemSettings if tenantId provided, else from env)
-    const smtpConfig = await getSmtpConfig(tenantId)
-    const emailTransporter = tenantId ? await createTransporter(tenantId) : await createTransporter()
+    const smtpConfig = await getSmtpConfig(tenantId, storeId)
+    const emailTransporter = await createTransporter(tenantId, storeId)
     
     if (!emailTransporter) {
-      console.error(`[Email] Failed to create email transporter for tenant ${tenantId || 'default'}.`)
-      return { success: false, error: new Error('Email transporter not configured.') }
+      const errorMsg = `Email transporter not configured for tenant ${tenantId || 'default'}, store ${storeId || 'default'}. Please configure SMTP settings.`
+      console.error(`[Email] ${errorMsg}`)
+      return { success: false, error: new Error(errorMsg) }
+    }
+
+    // Validate SMTP credentials
+    if (!smtpConfig.auth?.user || !smtpConfig.auth?.pass) {
+      const errorMsg = 'SMTP credentials are missing. Please configure SMTP username and password.'
+      console.error(`[Email] ${errorMsg}`)
+      return { success: false, error: new Error(errorMsg) }
     }
     
     // Generate Message-ID if not provided
@@ -140,14 +194,53 @@ export async function sendEmail({
       })
     }
 
+    // Verify connection before sending
+    try {
+      await emailTransporter.verify()
+    } catch (verifyError: any) {
+      console.error('[Email] SMTP connection verification failed:', verifyError)
+      
+      // Provide helpful error messages for common Gmail issues
+      if (verifyError.code === 'EAUTH') {
+        const isGmail = smtpConfig.host?.includes('gmail.com') || smtpConfig.auth?.user?.includes('@gmail.com')
+        if (isGmail) {
+          const errorMsg = 'Gmail authentication failed. Please ensure:\n' +
+            '1. You are using an App Password (not your regular Gmail password)\n' +
+            '2. 2-Step Verification is enabled on your Google account\n' +
+            '3. You have generated an App Password at: https://myaccount.google.com/apppasswords\n' +
+            '4. The App Password is correctly entered in SMTP settings'
+          console.error(`[Email] ${errorMsg}`)
+          return { success: false, error: new Error(errorMsg) }
+        }
+      }
+      
+      return { success: false, error: verifyError }
+    }
+
     const result = await emailTransporter.sendMail(mailOptions)
     
+    console.log(`[Email] ✅ Email sent successfully to ${to}`)
     return { 
       success: true, 
       messageId: result.messageId || emailMessageId 
     }
-  } catch (error) {
-    console.error('Error sending email:', error)
+  } catch (error: any) {
+    console.error('[Email] Error sending email:', error)
+    
+    // Provide helpful error messages
+    if (error.code === 'EAUTH') {
+      const isGmail = error.response?.includes('gmail.com') || error.response?.includes('gsmtp')
+      if (isGmail) {
+        const errorMsg = 'Gmail authentication failed. Please check:\n' +
+          '1. You are using an App Password (not your regular password)\n' +
+          '2. Generate an App Password at: https://myaccount.google.com/apppasswords\n' +
+          '3. Make sure 2-Step Verification is enabled\n' +
+          '4. Use the 16-character App Password in SMTP settings'
+        return { success: false, error: new Error(errorMsg) }
+      }
+      return { success: false, error: new Error('SMTP authentication failed. Please check your username and password.') }
+    }
+    
     return { success: false, error }
   }
 }

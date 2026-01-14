@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useStore } from '@/lib/store-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +18,7 @@ import { useToast } from '@/components/ui/use-toast'
 
 export default function ReportsPage() {
   const { toast } = useToast()
+  const { selectedStoreId } = useStore()
   const [reportData, setReportData] = useState<any[]>([])
   const [summary, setSummary] = useState<any>({})
   const [isLoading, setIsLoading] = useState(false)
@@ -35,11 +37,20 @@ export default function ReportsPage() {
       e.stopPropagation()
     }
     
+    if (!selectedStoreId) {
+      toast({
+        title: 'Error',
+        description: 'Please select a store to view reports',
+        variant: 'destructive',
+      })
+      return
+    }
+    
     setIsLoading(true)
-    console.log('[Reports] Fetching report with params:', { startDate, endDate, groupBy })
+    console.log('[Reports] Fetching report with params:', { startDate, endDate, groupBy, storeId: selectedStoreId })
     
     try {
-      const url = `/api/reports/tickets?startDate=${startDate}&endDate=${endDate}&groupBy=${groupBy}`
+      const url = `/api/reports/tickets?startDate=${startDate}&endDate=${endDate}&groupBy=${groupBy}&storeId=${selectedStoreId}`
       console.log('[Reports] Fetching from:', url)
       
       const response = await fetch(url)
@@ -92,15 +103,30 @@ export default function ReportsPage() {
   }
 
   useEffect(() => {
-    fetchReport()
+    if (selectedStoreId) {
+      fetchReport()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [selectedStoreId])
 
   const chartData = reportData.map((item: any) => ({
     date: item.displayDate || item.date,
     Total: item.total,
     Resolved: item.resolved,
   }))
+
+  if (!selectedStoreId) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold">Reports & Analytics</h1>
+          <p className="text-muted-foreground mt-1">
+            Please select a store to view reports
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="container mx-auto py-8">

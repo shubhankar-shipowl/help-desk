@@ -36,11 +36,36 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ categories: [] })
     }
 
-    // Get all categories for this tenant
+    // Get storeId from query parameter (optional)
+    const { searchParams } = new URL(req.url)
+    const storeId = searchParams.get('storeId')
+
+    // Build where clause
+    const where: any = {
+      tenantId, // Filter by tenant
+    }
+    
+    // For admins, storeId is required to filter data by store
+    if (session && session.user.role === 'ADMIN') {
+      if (!storeId) {
+        // Return empty array for admins without storeId selection
+        return NextResponse.json({ categories: [] })
+      }
+      where.OR = [
+        { storeId: storeId }, // Store-specific categories
+        { storeId: null }, // Tenant-level categories (available to all stores)
+      ]
+    } else if (storeId) {
+      // For agents and others, storeId is optional
+      where.OR = [
+        { storeId: storeId }, // Store-specific categories
+        { storeId: null }, // Tenant-level categories (available to all stores)
+      ]
+    }
+
+    // Get all categories for this tenant (and store if specified)
     const allCategories = await prisma.category.findMany({
-      where: {
-        tenantId, // Filter by tenant
-      },
+      where,
       orderBy: { name: 'asc' },
     })
 

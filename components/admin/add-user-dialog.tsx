@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
 import { Plus } from 'lucide-react'
+import StoreSelect from '@/components/stores/StoreSelect'
 
 export function AddUserDialog({ onSuccess }: { onSuccess?: () => void }) {
   const { toast } = useToast()
@@ -34,6 +35,7 @@ export function AddUserDialog({ onSuccess }: { onSuccess?: () => void }) {
     role: 'AGENT',
     phone: '',
     company: '',
+    storeId: null as string | null,
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -65,6 +67,7 @@ export function AddUserDialog({ onSuccess }: { onSuccess?: () => void }) {
         role: 'AGENT',
         phone: '',
         company: '',
+        storeId: null,
       })
       setOpen(false)
 
@@ -159,6 +162,12 @@ export function AddUserDialog({ onSuccess }: { onSuccess?: () => void }) {
                 placeholder="+1234567890"
               />
             </div>
+            <StoreSelect
+              value={formData.storeId}
+              onChange={(storeId) => setFormData({ ...formData, storeId })}
+              label="Assign to Store"
+              required={false}
+            />
             <div className="space-y-2">
               <Label htmlFor="company">Company (Optional)</Label>
               <Input

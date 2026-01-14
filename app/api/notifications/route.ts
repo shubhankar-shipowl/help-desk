@@ -18,12 +18,14 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20')
     const read = searchParams.get('read') === 'true' ? true : searchParams.get('read') === 'false' ? false : undefined
     const type = searchParams.get('type') as any
+    const storeId = searchParams.get('storeId')
 
     const result = await notificationService.getNotifications(session.user.id, {
       page,
       limit,
       read,
       type,
+      storeId: storeId || null,
     })
 
     return NextResponse.json(result)

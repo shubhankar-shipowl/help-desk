@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { subject, description, categoryId, priority } = body
+    const { subject, description, categoryId, priority, storeId } = body
 
     if (!subject || !description) {
       return NextResponse.json(
@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
     const ticket = await prisma.ticket.create({
       data: {
         tenantId, // Multi-tenant: Always include tenantId
+        storeId: storeId || null, // Assign to store if provided
         ticketNumber: generateTicketNumber(),
         subject,
         description,
@@ -147,18 +148,41 @@ export async function GET(req: NextRequest) {
     const priority = searchParams.get('priority')
     const categoryId = searchParams.get('categoryId')
     const customerId = searchParams.get('customerId')
+    const storeId = searchParams.get('storeId')
+    const assignedAgentId = searchParams.get('assignedAgentId')
 
     const where: any = {
       tenantId, // Always filter by tenant
     }
 
+    // For admins, storeId is required to filter data by store
+    // If not provided, return empty array instead of error to prevent UI breakage
+    if (session.user.role === 'ADMIN') {
+      if (!storeId) {
+        // Return empty array for admins without storeId selection
+        return NextResponse.json({ tickets: [] })
+      }
+      where.storeId = storeId
+    } else if (session.user.role === 'AGENT' && storeId) {
+      // For agents, storeId is optional
+      where.storeId = storeId
+    }
+    // Note: For CUSTOMER role, we don't filter by storeId - customers should see all their tickets
+
     // If customerId is provided in query params, use it (for admins/agents viewing customer tickets)
     if (customerId && (session.user.role === 'ADMIN' || session.user.role === 'AGENT')) {
       where.customerId = customerId
     } else if (session.user.role === 'CUSTOMER') {
+      // Customers should see ALL their tickets regardless of store
       where.customerId = session.user.id
+      console.log('[Tickets API] Customer query - filtering by customerId:', session.user.id, 'tenantId:', tenantId)
     } else if (session.user.role === 'AGENT') {
       where.assignedAgentId = session.user.id
+    }
+
+    // Support assignedAgentId filter for admin queries
+    if (assignedAgentId && session.user.role === 'ADMIN') {
+      where.assignedAgentId = assignedAgentId
     }
 
     // Handle status filter - can be comma-separated string or single value
@@ -199,6 +223,7 @@ export async function GET(req: NextRequest) {
         subject: true,
         status: true,
         priority: true,
+        storeId: true,
         createdAt: true,
         updatedAt: true,
         resolvedAt: true,
@@ -210,12 +235,25 @@ export async function GET(req: NextRequest) {
         assignedAgent: {
           select: { name: true, email: true },
         },
+        store: {
+          select: { id: true, name: true },
+        },
         _count: {
           select: { comments: true, attachments: true },
         },
       },
       orderBy: { createdAt: 'desc' },
     })
+
+    // Debug logging for customer queries
+    if (session.user.role === 'CUSTOMER') {
+      console.log('[Tickets API] Customer tickets query result:', {
+        customerId: session.user.id,
+        ticketsFound: tickets.length,
+        ticketNumbers: tickets.map(t => t.ticketNumber),
+        whereClause: where,
+      })
+    }
 
     return NextResponse.json({ tickets })
   } catch (error: any) {

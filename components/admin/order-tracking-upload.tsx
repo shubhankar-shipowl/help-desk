@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
+import { useStore } from '@/lib/store-context'
 import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, Trash2 } from 'lucide-react'
 import {
   AlertDialog,
@@ -18,6 +19,7 @@ import {
 
 export function OrderTrackingUpload() {
   const { toast } = useToast()
+  const { selectedStoreId } = useStore()
   const [isUploading, setIsUploading] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
@@ -54,6 +56,11 @@ export function OrderTrackingUpload() {
     try {
       const formData = new FormData()
       formData.append('file', file)
+      
+      // Add storeId if selected (required for admins)
+      if (selectedStoreId) {
+        formData.append('storeId', selectedStoreId)
+      }
 
       const response = await fetch('/api/order-tracking/upload', {
         method: 'POST',
@@ -92,7 +99,13 @@ export function OrderTrackingUpload() {
     setShowDeleteDialog(false)
 
     try {
-      const response = await fetch('/api/order-tracking/delete?confirm=true', {
+      // Build delete URL with storeId if selected
+      const params = new URLSearchParams({ confirm: 'true' })
+      if (selectedStoreId) {
+        params.append('storeId', selectedStoreId)
+      }
+
+      const response = await fetch(`/api/order-tracking/delete?${params.toString()}`, {
         method: 'DELETE',
       })
 

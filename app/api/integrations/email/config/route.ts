@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import nodemailer from 'nodemailer'
 
 /**
  * Get Email/SMTP configuration from SystemSettings
@@ -22,12 +23,17 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // Fetch all SMTP-related settings
+    // Get storeId from query parameter (optional)
+    const { searchParams } = new URL(req.url)
+    const storeId = searchParams.get('storeId') || null
+
+    // Fetch all SMTP and IMAP-related settings (store-specific first, then tenant-level)
     const settings = await prisma.systemSettings.findMany({
       where: {
         tenantId,
+        storeId: storeId || null,
         key: {
-          in: ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD'],
+          in: ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD', 'IMAP_EMAIL', 'IMAP_APP_PASSWORD'],
         },
       },
     })
@@ -44,6 +50,8 @@ export async function GET(req: NextRequest) {
         smtpPort: config.SMTP_PORT || '587',
         smtpUser: config.SMTP_USER || '',
         smtpPassword: config.SMTP_PASSWORD || '',
+        imapEmail: config.IMAP_EMAIL || '',
+        imapAppPassword: config.IMAP_APP_PASSWORD || '',
       },
     })
   } catch (error: any) {
@@ -75,12 +83,28 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { smtpHost, smtpPort, smtpUser, smtpPassword } = body
+    let { smtpHost, smtpPort, smtpUser, smtpPassword, imapEmail, imapAppPassword, storeId } = body
 
-    // Validate required fields
+    // Trim all fields to remove leading/trailing whitespace
+    smtpHost = smtpHost?.trim()
+    smtpPort = smtpPort?.trim()
+    smtpUser = smtpUser?.trim()
+    smtpPassword = smtpPassword?.trim() // Important: trim password to avoid whitespace issues
+    imapEmail = imapEmail?.trim()
+    imapAppPassword = imapAppPassword?.trim()
+
+    // Validate required SMTP fields
     if (!smtpHost || !smtpPort || !smtpUser || !smtpPassword) {
       return NextResponse.json(
         { error: 'All SMTP fields are required' },
+        { status: 400 }
+      )
+    }
+
+    // IMAP fields are optional but if one is provided, both should be provided
+    if ((imapEmail && !imapAppPassword) || (!imapEmail && imapAppPassword)) {
+      return NextResponse.json(
+        { error: 'Both IMAP Email and IMAP App Password are required if IMAP is configured' },
         { status: 400 }
       )
     }
@@ -94,31 +118,120 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Save or update each setting
+    // Test SMTP connection before saving
+    try {
+      const isGmail = smtpHost.toLowerCase().includes('gmail.com') || smtpUser.toLowerCase().includes('@gmail.com')
+      
+      // Build transporter config
+      const transporterConfig: any = {
+        auth: {
+          user: smtpUser,
+          pass: smtpPassword, // Use trimmed password
+        },
+      }
+
+      if (isGmail) {
+        // Gmail-specific configuration
+        transporterConfig.service = 'gmail'
+        transporterConfig.secure = false
+        transporterConfig.requireTLS = true
+      } else {
+        // Generic SMTP configuration
+        transporterConfig.host = smtpHost
+        transporterConfig.port = port
+        transporterConfig.secure = port === 465
+        if (port === 587) {
+          transporterConfig.requireTLS = true
+        }
+      }
+
+      const testTransporter = nodemailer.createTransport(transporterConfig)
+      
+      // Verify connection with timeout
+      await Promise.race([
+        testTransporter.verify(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('SMTP connection timeout')), 10000)
+        )
+      ])
+    } catch (testError: any) {
+      console.error('SMTP connection test failed:', testError)
+      
+      let errorMessage = 'SMTP connection test failed. Please check your credentials.'
+      
+      if (testError.code === 'EAUTH' || testError.responseCode === 535) {
+        const isGmail = smtpHost.toLowerCase().includes('gmail.com') || smtpUser.toLowerCase().includes('@gmail.com')
+        
+        if (isGmail) {
+          errorMessage = 'Gmail authentication failed. Please ensure:\n' +
+            '1. You are using an App Password (NOT your regular Gmail password)\n' +
+            '2. 2-Step Verification is enabled on your Google account\n' +
+            '3. You have generated an App Password at: https://myaccount.google.com/apppasswords\n' +
+            '4. Copy the 16-character App Password exactly (no spaces)\n' +
+            '5. The App Password is for "Mail" application'
+        } else {
+          errorMessage = 'SMTP authentication failed. Please check:\n' +
+            '1. Your username/email is correct\n' +
+            '2. Your password is correct\n' +
+            '3. There are no extra spaces in the password field'
+        }
+      } else if (testError.code === 'ECONNECTION' || testError.code === 'ETIMEDOUT' || testError.message?.includes('timeout')) {
+        errorMessage = `Cannot connect to SMTP server ${smtpHost}:${port}. Please check:\n` +
+          `1. The host and port are correct\n` +
+          `2. Your firewall allows connections to this server\n` +
+          `3. The server is accessible from your network`
+      } else if (testError.message) {
+        errorMessage = testError.message
+      }
+      
+      return NextResponse.json(
+        { error: errorMessage },
+        { status: 400 }
+      )
+    }
+
+    // Save or update each setting (store-specific if storeId provided)
+    // Use trimmed values to ensure no whitespace issues
     const settingsToSave = [
-      { key: 'SMTP_HOST', value: smtpHost },
-      { key: 'SMTP_PORT', value: smtpPort },
-      { key: 'SMTP_USER', value: smtpUser },
-      { key: 'SMTP_PASSWORD', value: smtpPassword },
+      { key: 'SMTP_HOST', value: smtpHost.trim() },
+      { key: 'SMTP_PORT', value: smtpPort.trim() },
+      { key: 'SMTP_USER', value: smtpUser.trim() },
+      { key: 'SMTP_PASSWORD', value: smtpPassword.trim() }, // Save trimmed password
     ]
 
+    // Add IMAP settings if provided
+    if (imapEmail && imapAppPassword) {
+      settingsToSave.push(
+        { key: 'IMAP_EMAIL', value: imapEmail.trim() },
+        { key: 'IMAP_APP_PASSWORD', value: imapAppPassword.trim() }
+      )
+    }
+
     for (const setting of settingsToSave) {
-      await prisma.systemSettings.upsert({
+      // Find existing setting
+      const existing = await prisma.systemSettings.findFirst({
         where: {
-          tenantId_key: {
-            tenantId,
-            key: setting.key,
-          },
-        },
-        update: {
-          value: setting.value,
-        },
-        create: {
           tenantId,
+          storeId: storeId || null,
           key: setting.key,
-          value: setting.value,
         },
       })
+
+      if (existing) {
+        await prisma.systemSettings.update({
+          where: { id: existing.id },
+          data: { value: setting.value },
+        })
+      } else {
+        await prisma.systemSettings.create({
+          data: {
+            tenantId,
+            storeId: storeId || null,
+            key: setting.key,
+            value: setting.value,
+          },
+        })
+      }
     }
 
     return NextResponse.json({

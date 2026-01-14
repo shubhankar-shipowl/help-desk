@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useStore } from '@/lib/store-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,6 +49,7 @@ interface CallLog {
 
 export function CallLogsClient() {
   const { toast } = useToast()
+  const { selectedStoreId } = useStore()
   const [callLogs, setCallLogs] = useState<CallLog[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('')
@@ -61,12 +63,22 @@ export function CallLogsClient() {
   const [total, setTotal] = useState(0)
 
   const fetchCallLogs = async (currentPage?: number) => {
+    if (!selectedStoreId) {
+      toast({
+        title: 'Error',
+        description: 'Please select a store to view call logs',
+        variant: 'destructive',
+      })
+      return
+    }
+
     try {
       setLoading(true)
       const pageToUse = currentPage !== undefined ? currentPage : page
       const params = new URLSearchParams({
         page: pageToUse.toString(),
         limit: '50',
+        storeId: selectedStoreId,
       })
 
       if (statusFilter && statusFilter !== 'ALL') {
@@ -127,9 +139,11 @@ export function CallLogsClient() {
   }
 
   useEffect(() => {
-    fetchCallLogs()
+    if (selectedStoreId) {
+      fetchCallLogs()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page])
+  }, [page, selectedStoreId])
 
   const handleSearch = () => {
     setPage(1)

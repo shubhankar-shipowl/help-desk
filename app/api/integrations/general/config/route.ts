@@ -22,15 +22,20 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // Fetch all general-related settings
-        const settings = await prisma.systemSettings.findMany({
-          where: {
-            tenantId,
-            key: {
-              in: ['COMPANY_ADDRESS', 'SUPPORT_PHONE'],
-            },
-          },
-        })
+    // Get storeId from query parameter (optional)
+    const { searchParams } = new URL(req.url)
+    const storeId = searchParams.get('storeId') || null
+
+    // Fetch all general-related settings (store-specific first, then tenant-level)
+    const settings = await prisma.systemSettings.findMany({
+      where: {
+        tenantId,
+        storeId: storeId || null,
+        key: {
+          in: ['COMPANY_ADDRESS', 'SUPPORT_PHONE'],
+        },
+      },
+    })
 
     // Convert array to object
     const config: Record<string, string> = {}
@@ -73,31 +78,39 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { companyAddress, supportPhone } = body
+    const { companyAddress, supportPhone, storeId } = body
 
-    // Save or update each setting
+    // Save or update each setting (store-specific if storeId provided)
     const settingsToSave = [
       { key: 'COMPANY_ADDRESS', value: companyAddress || '' },
       { key: 'SUPPORT_PHONE', value: supportPhone || '' },
     ]
 
     for (const setting of settingsToSave) {
-      await prisma.systemSettings.upsert({
+      // Find existing setting
+      const existing = await prisma.systemSettings.findFirst({
         where: {
-          tenantId_key: {
-            tenantId,
-            key: setting.key,
-          },
-        },
-        update: {
-          value: setting.value,
-        },
-        create: {
           tenantId,
+          storeId: storeId || null,
           key: setting.key,
-          value: setting.value,
         },
       })
+
+      if (existing) {
+        await prisma.systemSettings.update({
+          where: { id: existing.id },
+          data: { value: setting.value },
+        })
+      } else {
+        await prisma.systemSettings.create({
+          data: {
+            tenantId,
+            storeId: storeId || null,
+            key: setting.key,
+            value: setting.value,
+          },
+        })
+      }
     }
 
     return NextResponse.json({

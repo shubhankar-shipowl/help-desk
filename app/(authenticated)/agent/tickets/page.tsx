@@ -1,188 +1,167 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { redirect } from 'next/navigation'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useSession } from 'next-auth/react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useStore } from '@/lib/store-context'
 import { ModernInbox } from '@/components/tickets/modern-inbox'
 
-export default async function AgentTicketsPage({
-  searchParams,
-}: {
-  searchParams: { 
-    status?: string
-    priority?: string
-    category?: string
-    search?: string
-    source?: string
-    team?: string
-    assignedTo?: string
-  }
-}) {
-  const session = await getServerSession(authOptions)
-
-  if (!session || (session.user.role !== 'AGENT' && session.user.role !== 'ADMIN')) {
-    redirect('/auth/signin')
-  }
-
-  const where: any = {}
-
-  // Build agent filter
-  const agentFilter: any = {}
-  if (session.user.role === 'AGENT') {
-    // Agents see their assigned tickets or unassigned tickets
-    if (searchParams.assignedTo === 'me') {
-      agentFilter.assignedAgentId = session.user.id
-    } else if (searchParams.assignedTo === 'unassigned') {
-      agentFilter.assignedAgentId = null
-    } else {
-      // Show all tickets for agents (they can filter)
-      agentFilter.OR = [
-        { assignedAgentId: session.user.id },
-        { assignedAgentId: null },
-      ]
-    }
-  }
-
-  // Build other filters
-  if (searchParams.status && searchParams.status.trim() !== '') {
-    where.status = searchParams.status
-  }
-
-  if (searchParams.priority && searchParams.priority.trim() !== '') {
-    where.priority = searchParams.priority
-  }
-
-  if (searchParams.category && searchParams.category.trim() !== '') {
-    where.categoryId = searchParams.category
-  }
-
-  if (searchParams.source && searchParams.source.trim() !== '') {
-    where.source = searchParams.source
-  }
-
-  if (searchParams.team && searchParams.team.trim() !== '') {
-    where.assignedTeamId = searchParams.team
-  }
-
-  // Build search filter
-  const searchFilter: any = {}
-  if (searchParams.search && searchParams.search.trim() !== '') {
-    searchFilter.OR = [
-      { subject: { contains: searchParams.search, mode: 'insensitive' } },
-      { description: { contains: searchParams.search, mode: 'insensitive' } },
-      { ticketNumber: { contains: searchParams.search, mode: 'insensitive' } },
-      { customer: { name: { contains: searchParams.search, mode: 'insensitive' } } },
-      { customer: { email: { contains: searchParams.search, mode: 'insensitive' } } },
-    ]
-  }
-
-  // Combine all filters properly
-  const filtersToCombine: any[] = []
-  
-  // Add agent filter if it exists
-  if (Object.keys(agentFilter).length > 0) {
-    filtersToCombine.push(agentFilter)
-  }
-  
-  // Add search filter if it exists
-  if (Object.keys(searchFilter).length > 0) {
-    filtersToCombine.push(searchFilter)
-  }
-  
-  // If we have multiple filters to combine, use AND
-  if (filtersToCombine.length > 0) {
-    // Merge direct where conditions with combined filters
-    const directConditions = Object.entries(where)
-      .filter(([k]) => k !== 'AND' && k !== 'OR')
-      .map(([k, v]) => ({ [k]: v }))
-    
-    if (filtersToCombine.length === 1 && directConditions.length === 0) {
-      // Only one filter, merge directly
-      Object.assign(where, filtersToCombine[0])
-    } else {
-      // Multiple filters, use AND
-      where.AND = [...filtersToCombine, ...directConditions]
-      // Remove individual properties that are now in AND
-      Object.keys(where).forEach(k => {
-        if (k !== 'AND') delete where[k]
-      })
-    }
-  }
-
-  // Get tickets with enhanced data
-  const tickets = await prisma.ticket.findMany({
-    where,
-    include: {
-      customer: {
-        select: { name: true, email: true, avatar: true },
-      },
-      category: true,
-      assignedAgent: {
-        select: { name: true, email: true, avatar: true },
-      },
-      assignedTeam: {
-        select: { id: true, name: true, color: true },
-      },
-      _count: {
-        select: { comments: true, attachments: true },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 100, // Limit for performance
+export default function AgentTicketsPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { selectedStoreId, loading: storeLoading } = useStore()
+  const [loading, setLoading] = useState(true)
+  const [tickets, setTickets] = useState<any[]>([])
+  const [stats, setStats] = useState({
+    total: 0,
+    open: 0,
+    overdue: 0,
+    facebook: 0,
   })
+  const [teams, setTeams] = useState<any[]>([])
+  const [categories, setCategories] = useState<any[]>([])
 
-  // Get stats
-  const [
-    totalTickets,
-    openTickets,
-    overdueTickets,
-    facebookTickets,
-  ] = await Promise.all([
-    prisma.ticket.count({ where: session.user.role === 'AGENT' ? { OR: [{ assignedAgentId: session.user.id }, { assignedAgentId: null }] } : {} }),
-    prisma.ticket.count({ 
-      where: { 
-        ...(session.user.role === 'AGENT' ? { OR: [{ assignedAgentId: session.user.id }, { assignedAgentId: null }] } : {}),
-        status: { in: ['NEW', 'OPEN', 'IN_PROGRESS'] }
-      } 
-    }),
-    prisma.ticket.count({ 
-      where: { 
-        ...(session.user.role === 'AGENT' ? { OR: [{ assignedAgentId: session.user.id }, { assignedAgentId: null }] } : {}),
-        dueDate: { lt: new Date() },
-        status: { in: ['NEW', 'OPEN', 'IN_PROGRESS'] }
-      } 
-    }),
-    prisma.ticket.count({ 
-      where: { 
-        ...(session.user.role === 'AGENT' ? { OR: [{ assignedAgentId: session.user.id }, { assignedAgentId: null }] } : {}),
-        source: { in: ['FACEBOOK_POST', 'FACEBOOK_COMMENT', 'FACEBOOK_MESSAGE'] }
-      } 
-    }),
-  ])
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/signin')
+    } else if (status === 'authenticated' && session?.user?.role !== 'ADMIN' && session?.user?.role !== 'AGENT') {
+      router.push('/')
+    }
+  }, [status, session, router])
 
-  // Get teams and categories for filters
-  const [teams, categories] = await Promise.all([
-    prisma.team.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
-    prisma.category.findMany({ orderBy: { name: 'asc' } }),
-  ])
+  // Fetch data when store is selected (for admins) or when component mounts (for agents)
+  useEffect(() => {
+    if (status === 'authenticated' && (session?.user?.role === 'ADMIN' || session?.user?.role === 'AGENT') && !storeLoading) {
+      // For admins, require store selection
+      if (session?.user?.role === 'ADMIN' && !selectedStoreId) {
+        setLoading(false)
+        return
+      }
+      fetchData()
+    }
+  }, [status, session, selectedStoreId, storeLoading])
 
-  // Convert Decimal to number for serialization (Client Components can't receive Decimal objects)
-  const serializedTickets = tickets.map(ticket => ({
-    ...ticket,
-    refundAmount: ticket.refundAmount ? parseFloat(ticket.refundAmount.toString()) : null,
-  }))
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+
+      // Build query params
+      const params = new URLSearchParams()
+      
+      // For admins, storeId is required
+      if (session?.user?.role === 'ADMIN' && selectedStoreId) {
+        params.append('storeId', selectedStoreId)
+      } else if (session?.user?.role === 'AGENT' && selectedStoreId) {
+        // For agents, storeId is optional but include if selected
+        params.append('storeId', selectedStoreId)
+      }
+
+      // Add other filters from URL
+      const statusParam = searchParams.get('status')
+      const priorityParam = searchParams.get('priority')
+      const categoryParam = searchParams.get('category')
+      const searchParam = searchParams.get('search')
+      const sourceParam = searchParams.get('source')
+      const teamParam = searchParams.get('team')
+      const assignedToParam = searchParams.get('assignedTo')
+
+      if (statusParam) params.append('status', statusParam)
+      if (priorityParam) params.append('priority', priorityParam)
+      if (categoryParam) params.append('categoryId', categoryParam)
+      if (searchParam) params.append('search', searchParam)
+      if (sourceParam) params.append('source', sourceParam)
+      if (teamParam) params.append('team', teamParam)
+      if (assignedToParam) params.append('assignedTo', assignedToParam)
+
+      // Fetch tickets
+      const ticketsResponse = await fetch(`/api/tickets?${params.toString()}`)
+      if (!ticketsResponse.ok) throw new Error('Failed to fetch tickets')
+      const ticketsData = await ticketsResponse.json()
+      
+      // Convert Decimal to number for serialization
+      const serializedTickets = (ticketsData.tickets || []).map((ticket: any) => ({
+        ...ticket,
+        refundAmount: ticket.refundAmount ? parseFloat(ticket.refundAmount.toString()) : null,
+      }))
+      setTickets(serializedTickets)
+
+      // Fetch stats
+      const statsParams = new URLSearchParams()
+      if (session?.user?.role === 'ADMIN' && selectedStoreId) {
+        statsParams.append('storeId', selectedStoreId)
+      } else if (session?.user?.role === 'AGENT' && selectedStoreId) {
+        statsParams.append('storeId', selectedStoreId)
+      }
+
+      const statsResponse = await fetch(`/api/dashboard/stats?${statsParams.toString()}`)
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json()
+        setStats({
+          total: statsData.totalTickets || 0,
+          open: statsData.openTickets || 0,
+          overdue: 0, // Calculate if needed
+          facebook: 0, // Calculate if needed
+        })
+      }
+
+      // Fetch teams
+      const teamsParams = new URLSearchParams()
+      if (session?.user?.role === 'ADMIN' && selectedStoreId) {
+        teamsParams.append('storeId', selectedStoreId)
+      } else if (session?.user?.role === 'AGENT' && selectedStoreId) {
+        teamsParams.append('storeId', selectedStoreId)
+      }
+
+      const teamsResponse = await fetch(`/api/teams?${teamsParams.toString()}`)
+      if (teamsResponse.ok) {
+        const teamsData = await teamsResponse.json()
+        setTeams(teamsData.teams || [])
+      }
+
+      // Fetch categories
+      const categoriesParams = new URLSearchParams()
+      if (session?.user?.role === 'ADMIN' && selectedStoreId) {
+        categoriesParams.append('storeId', selectedStoreId)
+      } else if (session?.user?.role === 'AGENT' && selectedStoreId) {
+        categoriesParams.append('storeId', selectedStoreId)
+      }
+
+      const categoriesResponse = await fetch(`/api/categories?${categoriesParams.toString()}`)
+      if (categoriesResponse.ok) {
+        const categoriesData = await categoriesResponse.json()
+        setCategories(categoriesData.categories || [])
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (status === 'loading' || storeLoading || loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-gray-500">Loading tickets...</div>
+      </div>
+    )
+  }
+
+  if (session?.user?.role === 'ADMIN' && !selectedStoreId) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-gray-500">Please select a store to view tickets</div>
+      </div>
+    )
+  }
 
   return (
     <ModernInbox 
-      initialTickets={serializedTickets}
-      stats={{
-        total: totalTickets,
-        open: openTickets,
-        overdue: overdueTickets,
-        facebook: facebookTickets,
-      }}
+      initialTickets={tickets}
+      stats={stats}
       teams={teams}
       categories={categories}
     />
   )
 }
-

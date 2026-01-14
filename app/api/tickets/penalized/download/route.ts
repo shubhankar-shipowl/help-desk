@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
     const type = searchParams.get('type') || 'penalized' // penalized or all
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
+    const storeId = searchParams.get('storeId')
 
     // Get tenantId from session (multi-tenant support)
     const tenantId = (session.user as any).tenantId
@@ -31,9 +32,18 @@ export async function GET(req: NextRequest) {
       )
     }
 
+    // For admins, storeId is required to filter data by store
+    if (!storeId) {
+      return NextResponse.json(
+        { error: 'Store ID is required for admin users' },
+        { status: 400 }
+      )
+    }
+
     // Build where clause
     const where: any = {
       tenantId, // Always filter by tenant
+      storeId, // Filter by store
       status: 'RESOLVED',
     }
 
@@ -84,12 +94,16 @@ export async function GET(req: NextRequest) {
       .filter((phone): phone is string => phone !== null && phone !== undefined)
       .map(phone => phone.replace(/[\s\-\(\)]/g, ''))
 
+    // Build order tracking where clause with storeId filter
+    const orderTrackingWhere: any = {
+      tenantId,
+      storeId, // Filter by store
+      consigneeContact: { in: customerPhones },
+    }
+
     const orderTrackingData = customerPhones.length > 0
       ? await prisma.orderTrackingData.findMany({
-          where: {
-            tenantId,
-            consigneeContact: { in: customerPhones },
-          },
+          where: orderTrackingWhere,
           select: {
             consigneeContact: true,
             pickupWarehouse: true,

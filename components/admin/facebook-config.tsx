@@ -7,9 +7,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { Facebook, Save, Eye, EyeOff } from 'lucide-react'
+import { useStore } from '@/lib/store-context'
 
 export function FacebookConfig() {
   const { toast } = useToast()
+  const { selectedStoreId } = useStore()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showPasswords, setShowPasswords] = useState({
@@ -27,12 +29,15 @@ export function FacebookConfig() {
 
   useEffect(() => {
     fetchConfig()
-  }, [])
+  }, [selectedStoreId]) // Refetch when store changes
 
   const fetchConfig = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/integrations/facebook/config')
+      const url = selectedStoreId 
+        ? `/api/integrations/facebook/config?storeId=${selectedStoreId}`
+        : '/api/integrations/facebook/config'
+      const response = await fetch(url)
       
       if (!response.ok) {
         console.error('Failed to fetch Facebook config')
@@ -86,7 +91,10 @@ export function FacebookConfig() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(config),
+        body: JSON.stringify({
+          ...config,
+          storeId: selectedStoreId, // Include storeId in save request
+        }),
       })
 
       if (!response.ok) {

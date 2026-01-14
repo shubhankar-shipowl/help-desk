@@ -1,7 +1,9 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { redirect, notFound } from 'next/navigation'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useSession } from 'next-auth/react'
+import { useRouter, useParams } from 'next/navigation'
+import { useStore } from '@/lib/store-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,88 +11,204 @@ import { formatRelativeTime, formatDate, maskPhoneNumber, maskEmail } from '@/li
 import { User, Mail, Phone, Building, Ticket, ArrowLeft, Calendar, Facebook, Package, Truck } from 'lucide-react'
 import Link from 'next/link'
 
-export default async function CustomerDetailPage({
-  params,
-}: {
-  params: { id: string }
-}) {
-  const session = await getServerSession(authOptions)
+interface Customer {
+  id: string
+  name: string | null
+  email: string
+  phone: string | null
+  company: string | null
+  createdAt: string
+}
 
-  if (!session || (session.user.role !== 'AGENT' && session.user.role !== 'ADMIN')) {
-    redirect('/auth/signin')
+interface Ticket {
+  id: string
+  ticketNumber: string
+  subject: string
+  status: string
+  priority: string
+  createdAt: string
+  category: { name: string } | null
+  assignedAgent: { name: string; email: string } | null
+}
+
+export default function CustomerDetailPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const params = useParams()
+  const { selectedStoreId, loading: storeLoading } = useStore()
+  const customerId = params?.id as string
+
+  const [customer, setCustomer] = useState<Customer | null>(null)
+  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [openTickets, setOpenTickets] = useState(0)
+  const [resolvedTickets, setResolvedTickets] = useState(0)
+  const [avgTime, setAvgTime] = useState('N/A')
+  const [orderTrackingData, setOrderTrackingData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/signin')
+    } else if (status === 'authenticated' && session?.user?.role !== 'ADMIN' && session?.user?.role !== 'AGENT') {
+      router.push('/')
+    }
+  }, [status, session, router])
+
+  // Fetch customer data
+  useEffect(() => {
+    if (status === 'authenticated' && (session?.user?.role === 'ADMIN' || session?.user?.role === 'AGENT') && !storeLoading && customerId) {
+      if (session?.user?.role === 'ADMIN' && !selectedStoreId) {
+        setLoading(false)
+        return
+      }
+      fetchCustomerData()
+    }
+  }, [status, session, selectedStoreId, storeLoading, customerId])
+
+  const fetchCustomerData = async () => {
+    try {
+      setLoading(true)
+
+      // For admins, storeId is required
+      if (session?.user?.role === 'ADMIN' && !selectedStoreId) {
+        return
+      }
+
+      // Fetch customer
+      const customerParams = new URLSearchParams({
+        role: 'CUSTOMER',
+      })
+      if (session?.user?.role === 'ADMIN' && selectedStoreId) {
+        customerParams.append('storeId', selectedStoreId)
+      }
+
+      const usersResponse = await fetch(`/api/users?${customerParams.toString()}`)
+      if (!usersResponse.ok) throw new Error('Failed to fetch customer')
+      const usersData = await usersResponse.json()
+      const foundCustomer = usersData.users?.find((u: any) => u.id === customerId)
+      
+      if (!foundCustomer) {
+        router.push('/agent/customers')
+        return
+      }
+
+      setCustomer(foundCustomer)
+
+      // Fetch tickets for this customer
+      const ticketsParams = new URLSearchParams({
+        customerId: customerId,
+      })
+      if (session?.user?.role === 'ADMIN' && selectedStoreId) {
+        ticketsParams.append('storeId', selectedStoreId)
+      }
+
+      const ticketsResponse = await fetch(`/api/tickets?${ticketsParams.toString()}`)
+      if (!ticketsResponse.ok) throw new Error('Failed to fetch tickets')
+      const ticketsData = await ticketsResponse.json()
+      const customerTickets = ticketsData.tickets || []
+
+      setTickets(customerTickets.slice(0, 10)) // Show first 10
+
+      // Calculate stats
+      const open = customerTickets.filter((t: any) =>
+        ['NEW', 'OPEN', 'PENDING'].includes(t.status)
+      ).length
+      const resolved = customerTickets.filter((t: any) =>
+        t.status === 'RESOLVED' && t.resolvedAt
+      )
+
+      setOpenTickets(open)
+      setResolvedTickets(resolved.length)
+
+      // Calculate average resolution time
+      if (resolved.length > 0) {
+        const totalHours = resolved.reduce((sum: number, ticket: any) => {
+          if (ticket.resolvedAt && ticket.createdAt) {
+            const hours = (new Date(ticket.resolvedAt).getTime() - new Date(ticket.createdAt).getTime()) / (1000 * 60 * 60)
+            return sum + hours
+          }
+          return sum
+        }, 0)
+        const avgHours = totalHours / resolved.length
+        setAvgTime(`${avgHours.toFixed(1)}h`)
+      } else {
+        setAvgTime('N/A')
+      }
+
+      // Fetch order tracking data if phone is available
+      if (foundCustomer.phone) {
+        try {
+          // Build lookup URL with storeId if available
+          const params = new URLSearchParams({
+            phone: foundCustomer.phone.replace(/[\s\-\(\)]/g, ''),
+          })
+          if (selectedStoreId) {
+            params.append('storeId', selectedStoreId)
+          }
+
+          const orderResponse = await fetch(`/api/order-tracking/lookup?${params.toString()}`)
+          if (orderResponse.ok) {
+            const orderData = await orderResponse.json()
+            if (orderData.found && orderData.data) {
+              setOrderTrackingData(orderData.data.slice(0, 5).map((order: any) => ({
+                id: order.trackingId || order.orderId,
+                channelOrderNumber: order.channelOrderNumber || order.orderId,
+                orderId: order.orderId,
+                waybillNumber: order.trackingId,
+                channelOrderDate: order.channelOrderDate,
+                deliveredDate: order.deliveredDate,
+                pickupWarehouse: order.pickupWarehouse,
+              })))
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching order tracking:', error)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching customer data:', error)
+      router.push('/agent/customers')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const customer = await prisma.user.findUnique({
-    where: { id: params.id, role: 'CUSTOMER' },
-    include: {
-      tickets: {
-        include: {
-          category: true,
-          assignedAgent: {
-            select: { name: true, email: true },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 10,
-      },
-      _count: {
-        select: { tickets: true },
-      },
-    },
-  })
+  if (status === 'loading' || storeLoading || loading) {
+    return (
+      <div>
+        <div className="mb-8">
+          <div className="text-gray-500">Loading customer data...</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (session?.user?.role === 'ADMIN' && !selectedStoreId) {
+    return (
+      <div>
+        <div className="mb-8">
+          <h1 className="text-h1">Customer Details</h1>
+          <p className="text-gray-600">Please select a store to view customer details</p>
+        </div>
+      </div>
+    )
+  }
 
   if (!customer) {
-    notFound()
-  }
-
-  // Get tenantId from session
-  const tenantId = (session.user as any).tenantId
-
-  const [openTickets, resolvedTicketsData, orderTrackingData] = await Promise.all([
-    prisma.ticket.count({
-      where: {
-        customerId: customer.id,
-        status: { in: ['NEW', 'OPEN', 'PENDING'] },
-      },
-    }),
-    prisma.ticket.findMany({
-      where: {
-        customerId: customer.id,
-        status: 'RESOLVED',
-      },
-      select: {
-        createdAt: true,
-        resolvedAt: true,
-      },
-    }),
-    // Get order tracking data by phone number if available
-    customer.phone
-      ? prisma.orderTrackingData.findMany({
-          where: {
-            tenantId,
-            consigneeContact: customer.phone.replace(/[\s\-\(\)]/g, ''),
-          },
-          orderBy: {
-            uploadedAt: 'desc',
-          },
-          take: 5, // Get up to 5 most recent orders
-        })
-      : Promise.resolve([]),
-  ])
-
-  // Calculate average resolution time
-  const resolvedTickets = resolvedTicketsData.filter((t) => t.resolvedAt)
-  let avgTime: string = 'N/A'
-  if (resolvedTickets.length > 0) {
-    const totalHours = resolvedTickets.reduce((sum, ticket) => {
-      if (ticket.resolvedAt && ticket.createdAt) {
-        const hours = (ticket.resolvedAt.getTime() - ticket.createdAt.getTime()) / (1000 * 60 * 60)
-        return sum + hours
-      }
-      return sum
-    }, 0)
-    const avgHours = totalHours / resolvedTickets.length
-    avgTime = `${avgHours.toFixed(1)}h`
+    return (
+      <div>
+        <div className="mb-8">
+          <h1 className="text-h1">Customer Not Found</h1>
+          <Link href="/agent/customers">
+            <Button variant="ghost" size="sm" className="mt-4">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Customers
+            </Button>
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -166,7 +284,7 @@ export default async function CustomerDetailPage({
                 <Calendar className="h-5 w-5 text-gray-400" />
                 <div>
                   <div className="text-sm text-gray-600">Member Since</div>
-                  <div className="font-medium">{formatDate(customer.createdAt)}</div>
+                  <div className="font-medium">{formatDate(new Date(customer.createdAt))}</div>
                 </div>
               </div>
             </CardContent>
@@ -182,7 +300,7 @@ export default async function CustomerDetailPage({
                 <div>
                   <div className="text-sm text-gray-600 mb-1">Total Tickets</div>
                   <div className="text-3xl font-bold text-gray-900">
-                    {customer._count.tickets}
+                    {tickets.length}
                   </div>
                 </div>
                 <div>
@@ -191,7 +309,7 @@ export default async function CustomerDetailPage({
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 mb-1">Resolved</div>
-                  <div className="text-3xl font-bold text-green-600">{resolvedTicketsData.length}</div>
+                  <div className="text-3xl font-bold text-green-600">{resolvedTickets}</div>
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 mb-1">Avg Time</div>
@@ -211,7 +329,7 @@ export default async function CustomerDetailPage({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {orderTrackingData.map((order, index) => (
+                {orderTrackingData.map((order) => (
                   <div
                     key={order.id}
                     className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2"
@@ -232,14 +350,14 @@ export default async function CustomerDetailPage({
                       {order.channelOrderDate && (
                         <div className="flex items-center justify-between">
                           <span>Order Date:</span>
-                          <span>{formatDate(order.channelOrderDate)}</span>
+                          <span>{formatDate(new Date(order.channelOrderDate))}</span>
                         </div>
                       )}
                       {order.deliveredDate && (
                         <div className="flex items-center justify-between">
                           <span>Delivered Date:</span>
                           <span className="font-medium text-green-600">
-                            {formatDate(order.deliveredDate)}
+                            {formatDate(new Date(order.deliveredDate))}
                           </span>
                         </div>
                       )}
@@ -262,14 +380,14 @@ export default async function CustomerDetailPage({
           <Card className="border border-gray-200 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-h3">Ticket History</CardTitle>
-              <Link href={`/agent/tickets?customer=${customer.id}`}>
+              <Link href={`/agent/tickets?customer=${customer.id}${selectedStoreId ? `&storeId=${selectedStoreId}` : ''}`}>
                 <Button variant="outline" size="sm">
                   View All
                 </Button>
               </Link>
             </CardHeader>
             <CardContent className="p-0">
-              {customer.tickets.length === 0 ? (
+              {tickets.length === 0 ? (
                 <div className="py-12 text-center">
                   <Ticket className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">No tickets yet</h3>
@@ -277,7 +395,7 @@ export default async function CustomerDetailPage({
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200">
-                  {customer.tickets.map((ticket) => (
+                  {tickets.map((ticket) => (
                     <Link
                       key={ticket.id}
                       href={`/agent/tickets/${ticket.id}`}
@@ -314,7 +432,7 @@ export default async function CustomerDetailPage({
                             {ticket.assignedAgent && (
                               <span>Assigned to {ticket.assignedAgent.name || ticket.assignedAgent.email}</span>
                             )}
-                            <span>{formatRelativeTime(ticket.createdAt)}</span>
+                            <span>{formatRelativeTime(new Date(ticket.createdAt))}</span>
                           </div>
                         </div>
                         <span className="text-gray-400">→</span>
@@ -330,4 +448,3 @@ export default async function CustomerDetailPage({
     </div>
   )
 }
-

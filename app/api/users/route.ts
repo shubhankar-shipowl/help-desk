@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const role = searchParams.get('role')
+    const storeId = searchParams.get('storeId')
 
     // Get tenantId from session (multi-tenant support)
     const tenantId = (session.user as any).tenantId
@@ -35,6 +36,34 @@ export async function GET(req: NextRequest) {
     const where: any = {
       tenantId, // Always filter by tenant
     }
+    
+    // For admins, storeId is required to filter data by store
+    if (session.user.role === 'ADMIN') {
+      if (!storeId) {
+        return NextResponse.json(
+          { error: 'Store ID is required for admin users' },
+          { status: 400 }
+        )
+      }
+      // For customers, filter by tickets' storeId, not user's storeId
+      // For agents/admins, filter by user's storeId
+      if (role && role.toUpperCase() === 'CUSTOMER') {
+        // Customers are filtered by their tickets' storeId
+        // We'll filter this after fetching
+      } else {
+        where.storeId = storeId
+      }
+    } else if (storeId) {
+      // For agents, storeId is optional
+      // For customers, filter by tickets' storeId
+      if (role && role.toUpperCase() === 'CUSTOMER') {
+        // Customers are filtered by their tickets' storeId
+        // We'll filter this after fetching
+      } else {
+        where.storeId = storeId
+      }
+    }
+    
     if (role) {
       where.role = role.toUpperCase()
     }
@@ -51,7 +80,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const users = await prisma.user.findMany({
+    let users = await prisma.user.findMany({
       where,
       select: {
         id: true,
@@ -61,10 +90,36 @@ export async function GET(req: NextRequest) {
         phone: true,
         company: true,
         isActive: true,
+        storeId: true,
+        store: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         createdAt: true,
       },
       orderBy: { name: 'asc' },
     })
+
+    // For customers, filter by tickets' storeId if storeId is provided
+    if (role && role.toUpperCase() === 'CUSTOMER' && storeId) {
+      // Get customer IDs who have tickets in this store
+      const customersWithTickets = await prisma.ticket.findMany({
+        where: {
+          tenantId,
+          storeId,
+          customerId: { in: users.map(u => u.id) },
+        },
+        select: {
+          customerId: true,
+        },
+        distinct: ['customerId'],
+      })
+      
+      const customerIds = new Set(customersWithTickets.map(t => t.customerId))
+      users = users.filter(u => customerIds.has(u.id))
+    }
 
     return NextResponse.json({ users })
   } catch (error: any) {
@@ -86,7 +141,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { email, name, password, role, phone, company } = body
+    const { email, name, password, role, phone, company, storeId } = body
 
     // Validate required fields
     if (!email || !name || !password) {
@@ -172,6 +227,7 @@ export async function POST(req: NextRequest) {
         role: (role || 'AGENT').toUpperCase() as 'ADMIN' | 'AGENT',
         phone: phone || null,
         company: company || null,
+        storeId: storeId || null, // Assign to store if provided
         isActive: true,
       },
       select: {
@@ -182,6 +238,13 @@ export async function POST(req: NextRequest) {
         phone: true,
         company: true,
         isActive: true,
+        storeId: true,
+        store: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         createdAt: true,
       },
     })

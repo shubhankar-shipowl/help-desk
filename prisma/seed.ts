@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { DEFAULT_CATEGORIES, createDefaultCategoriesForStore } from '../lib/default-categories'
 
 const prisma = new PrismaClient()
 
@@ -40,94 +41,32 @@ async function main() {
   })
   console.log(`✓ Created admin user: ${admin.email}`)
 
-  // Create default categories
-  const defaultCategories = [
-    // Parent Categories (with emojis in names)
-    { 
-      name: '📦 Order & Product Issues', 
-      icon: '📦', 
-      color: '#EF4444', 
-      description: 'Issues related to orders and products',
-      subjects: [
-        'Wrong Product Delivered',
-        'Missing Item in Order',
-        'Damaged Product Received',
-        'Defective Product',
-        'Product Not as Described'
-      ]
+  // Get all stores for this tenant
+  const stores = await prisma.store.findMany({
+    where: {
+      tenantId: defaultTenant.id,
+      isActive: true,
     },
-    { 
-      name: '🔄 Return / Refund / Replacement', 
-      icon: '🔄', 
-      color: '#F59E0B', 
-      description: 'Return, refund, and replacement requests',
-      subjects: [
-        'Return Request',
-        'Refund Request',
-        'Replacement Request',
-        'Refund Not Received',
-        'Return Pickup Issue'
-      ]
-    },
-    { 
-      name: '🚚 Delivery Issues', 
-      icon: '🚚', 
-      color: '#3B82F6', 
-      description: 'Issues related to order delivery',
-      subjects: [
-        'Order Not Delivered',
-        'Delayed Delivery',
-        'Tracking Issue',
-        'Delivery Address Change Request'
-      ]
-    },
-    { 
-      name: '💳 Payment Issues', 
-      icon: '💳', 
-      color: '#8B5CF6', 
-      description: 'Issues related to payments and billing',
-      subjects: [
-        'Payment Failed',
-        'Amount Debited but Order Not Placed',
-        'Invoice / Billing Issue'
-      ]
-    },
-  ]
+  })
+  console.log(`Found ${stores.length} active store(s)`)
 
-  // Create categories (check if exists first to avoid duplicates)
+  // Create categories for each store and tenant-level
   console.log('Creating default categories...')
-  for (const category of defaultCategories) {
-    const existing = await prisma.category.findFirst({
-      where: {
-        tenantId: defaultTenant.id,
-        name: category.name,
-      },
-    })
-    
-    if (!existing) {
-      await prisma.category.create({
-        data: {
-          tenantId: defaultTenant.id,
-          name: category.name,
-          icon: category.icon,
-          color: category.color,
-          description: category.description,
-          subjects: category.subjects || null,
-        },
-      })
-      console.log(`  ✓ Created category: ${category.name}`)
-    } else {
-      // Update existing category with subjects if they don't have any
-      if (!existing.subjects && category.subjects) {
-        await prisma.category.update({
-          where: { id: existing.id },
-          data: { subjects: category.subjects },
-        })
-        console.log(`  ✓ Updated category with subjects: ${category.name}`)
-      } else {
-        console.log(`  - Skipped (already exists): ${category.name}`)
-      }
+  
+  // First, create tenant-level categories (available to all stores)
+  console.log('  Creating tenant-level categories...')
+  await createDefaultCategoriesForStore(defaultTenant.id, null, prisma)
+  console.log('    ✓ Created tenant-level categories')
+
+  // Then, create store-specific categories for each store
+  if (stores.length > 0) {
+    console.log('  Creating store-specific categories...')
+    for (const store of stores) {
+      await createDefaultCategoriesForStore(defaultTenant.id, store.id, prisma)
+      console.log(`    ✓ Created categories for store: ${store.name}`)
     }
+  } else {
+    console.log('  No stores found. Categories created at tenant level only.')
   }
 
   console.log('')

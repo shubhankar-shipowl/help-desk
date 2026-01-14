@@ -25,11 +25,25 @@ export async function GET(req: NextRequest) {
       )
     }
 
+    // Get storeId from query parameter (optional)
+    const { searchParams } = new URL(req.url)
+    const storeId = searchParams.get('storeId')
+
+    const where: any = {
+      tenantId, // Always filter by tenant
+      isActive: true,
+    }
+
+    // Filter by store if provided
+    if (storeId !== null && storeId !== undefined && storeId !== '') {
+      where.OR = [
+        { storeId: storeId }, // Store-specific teams
+        { storeId: null }, // Tenant-level teams (available to all stores)
+      ]
+    }
+
     const teams = await prisma.team.findMany({
-      where: {
-        tenantId, // Always filter by tenant
-        isActive: true,
-      },
+      where,
       include: {
         _count: {
           select: {

@@ -13,7 +13,11 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const count = await notificationService.markAllAsRead(session.user.id)
+    // Get storeId from query params
+    const { searchParams } = new URL(req.url)
+    const storeId = searchParams.get('storeId')
+
+    const count = await notificationService.markAllAsRead(session.user.id, storeId || null)
 
     return NextResponse.json({ success: true, count })
   } catch (error: any) {

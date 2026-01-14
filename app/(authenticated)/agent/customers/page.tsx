@@ -1,7 +1,9 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { redirect } from 'next/navigation'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import { useStore } from '@/lib/store-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,86 +12,174 @@ import { formatRelativeTime, maskPhoneNumber, maskEmail } from '@/lib/utils'
 import { User, Mail, Phone, Building, Search, Plus, Ticket, Facebook } from 'lucide-react'
 import Link from 'next/link'
 
-export default async function AgentCustomersPage({
-  searchParams,
-}: {
-  searchParams: { search?: string }
-}) {
-  const session = await getServerSession(authOptions)
-
-  if (!session || (session.user.role !== 'AGENT' && session.user.role !== 'ADMIN')) {
-    redirect('/auth/signin')
+interface CustomerWithStats {
+  id: string
+  name: string | null
+  email: string
+  phone: string | null
+  company: string | null
+  createdAt: Date
+  _count: {
+    tickets: number
   }
+  openTickets: number
+  resolvedTickets: number
+  avgTime: string
+}
 
-  const where: any = {
-    role: 'CUSTOMER',
-  }
+export default function AgentCustomersPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const { selectedStoreId, loading: storeLoading } = useStore()
+  const [customers, setCustomers] = useState<CustomerWithStats[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
 
-  if (searchParams.search) {
-    where.OR = [
-      { name: { contains: searchParams.search, mode: 'insensitive' } },
-      { email: { contains: searchParams.search, mode: 'insensitive' } },
-    ]
-  }
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/signin')
+    } else if (status === 'authenticated' && session?.user?.role !== 'ADMIN' && session?.user?.role !== 'AGENT') {
+      router.push('/')
+    }
+  }, [status, session, router])
 
-  const customers = await prisma.user.findMany({
-    where,
-    include: {
-      _count: {
-        select: {
-          tickets: true,
-        },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-  })
+  // Fetch customers when store is selected
+  useEffect(() => {
+    if (status === 'authenticated' && (session?.user?.role === 'ADMIN' || session?.user?.role === 'AGENT') && !storeLoading) {
+      if (session?.user?.role === 'ADMIN' && !selectedStoreId) {
+        setLoading(false)
+        return
+      }
+      fetchCustomers()
+    }
+  }, [status, session, selectedStoreId, storeLoading])
 
-  // Get ticket stats for each customer
-  const customersWithStats = await Promise.all(
-    customers.map(async (customer) => {
-      const [openTickets, resolvedTicketsData] = await Promise.all([
-        prisma.ticket.count({
-          where: {
+  const fetchCustomers = async () => {
+    try {
+      setLoading(true)
+      
+      // For admins, storeId is required
+      if (session?.user?.role === 'ADMIN' && !selectedStoreId) {
+        return
+      }
+
+      // Build API URL
+      const params = new URLSearchParams({
+        role: 'CUSTOMER',
+      })
+
+      // Add storeId for both admins and agents if store is selected
+      if (selectedStoreId) {
+        params.append('storeId', selectedStoreId)
+      }
+
+      const response = await fetch(`/api/users?${params.toString()}`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch customers')
+      }
+
+      const data = await response.json()
+      let fetchedCustomers = data.users || []
+
+      // Apply search filter client-side
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase()
+        fetchedCustomers = fetchedCustomers.filter((customer: any) =>
+          customer.name?.toLowerCase().includes(query) ||
+          customer.email?.toLowerCase().includes(query)
+        )
+      }
+
+      // Get ticket stats for each customer
+      const customersWithStats = await Promise.all(
+        fetchedCustomers.map(async (customer: any) => {
+          const ticketsParams = new URLSearchParams({
             customerId: customer.id,
-            status: { in: ['NEW', 'OPEN', 'IN_PROGRESS'] },
-          },
-        }),
-        prisma.ticket.findMany({
-          where: {
-            customerId: customer.id,
-            status: 'RESOLVED',
-          },
-          select: {
-            createdAt: true,
-            resolvedAt: true,
-          },
-        }),
-      ])
-
-      // Calculate average resolution time
-      const resolvedTickets = resolvedTicketsData.filter((t) => t.resolvedAt)
-      let avgTime: string = 'N/A'
-      if (resolvedTickets.length > 0) {
-        const totalHours = resolvedTickets.reduce((sum, ticket) => {
-          if (ticket.resolvedAt && ticket.createdAt) {
-            const hours = (ticket.resolvedAt.getTime() - ticket.createdAt.getTime()) / (1000 * 60 * 60)
-            return sum + hours
+          })
+          
+          // Add storeId filter for both admins and agents if store is selected
+          if (selectedStoreId) {
+            ticketsParams.append('storeId', selectedStoreId)
           }
-          return sum
-        }, 0)
-        const avgHours = totalHours / resolvedTickets.length
-        avgTime = `${avgHours.toFixed(1)}h`
-      }
 
-      return {
-        ...customer,
-        openTickets,
-        resolvedTickets: resolvedTicketsData.length,
-        avgTime,
-      }
-    })
-  )
+          const ticketsResponse = await fetch(`/api/tickets?${ticketsParams.toString()}`)
+          const ticketsData = await ticketsResponse.json()
+          const customerTickets = ticketsData.tickets || []
+
+          const openTickets = customerTickets.filter((t: any) =>
+            ['NEW', 'OPEN', 'IN_PROGRESS'].includes(t.status)
+          )
+          const resolvedTickets = customerTickets.filter((t: any) =>
+            t.status === 'RESOLVED' && t.resolvedAt
+          )
+
+          // Calculate average resolution time
+          let avgTime: string = 'N/A'
+          if (resolvedTickets.length > 0) {
+            const totalHours = resolvedTickets.reduce((sum: number, ticket: any) => {
+              if (ticket.resolvedAt && ticket.createdAt) {
+                const hours = (new Date(ticket.resolvedAt).getTime() - new Date(ticket.createdAt).getTime()) / (1000 * 60 * 60)
+                return sum + hours
+              }
+              return sum
+            }, 0)
+            const avgHours = totalHours / resolvedTickets.length
+            avgTime = `${avgHours.toFixed(1)}h`
+          }
+
+          return {
+            ...customer,
+            openTickets: openTickets.length,
+            resolvedTickets: resolvedTickets.length,
+            avgTime,
+            _count: {
+              tickets: customerTickets.length,
+            },
+          }
+        })
+      )
+
+      setCustomers(customersWithStats)
+    } catch (error) {
+      console.error('Error fetching customers:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Refetch when search query changes
+  useEffect(() => {
+    if (selectedStoreId || session?.user?.role === 'AGENT') {
+      fetchCustomers()
+    }
+  }, [searchQuery])
+
+  if (status === 'loading' || storeLoading || loading) {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-h1 mb-2">Customers</h1>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (session?.user?.role === 'ADMIN' && !selectedStoreId) {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-h1 mb-2">Customers</h1>
+            <p className="text-gray-600">Please select a store to view customers</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -112,7 +202,8 @@ export default async function AgentCustomersPage({
             <Input
               type="search"
               placeholder="Search customers by name or email..."
-              defaultValue={searchParams.search}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 bg-gray-50 border-0"
             />
           </div>
@@ -120,18 +211,18 @@ export default async function AgentCustomersPage({
       </Card>
 
       {/* Customers Grid */}
-      {customersWithStats.length === 0 ? (
+      {customers.length === 0 ? (
         <Card className="border border-gray-200 shadow-sm">
           <CardContent className="py-12">
             <div className="text-center">
               <div className="text-4xl mb-4">👥</div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">No customers found</h3>
               <p className="text-sm text-gray-600 mb-6">
-                {searchParams.search
+                {searchQuery
                   ? 'Try adjusting your search criteria'
                   : 'No customers have been created yet'}
               </p>
-              {!searchParams.search && (
+              {!searchQuery && (
                 <Button className="bg-primary hover:bg-primary-dark text-white">
                   <Plus className="mr-2 h-4 w-4" />
                   Create First Customer
@@ -142,7 +233,7 @@ export default async function AgentCustomersPage({
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {customersWithStats.map((customer) => (
+          {customers.map((customer) => (
             <Card
               key={customer.id}
               className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
@@ -222,13 +313,13 @@ export default async function AgentCustomersPage({
       )}
 
       {/* Pagination */}
-      {customersWithStats.length > 0 && (
+      {customers.length > 0 && (
         <div className="mt-6 flex items-center justify-center gap-2">
           <Button variant="outline" size="sm" disabled>
             Previous
           </Button>
           <span className="text-sm text-gray-600">
-            Showing 1-{customersWithStats.length} of {customersWithStats.length} customers
+            Showing 1-{customers.length} of {customers.length} customers
           </span>
           <Button variant="outline" size="sm" disabled>
             Next
@@ -238,4 +329,3 @@ export default async function AgentCustomersPage({
     </div>
   )
 }
-

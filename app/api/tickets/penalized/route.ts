@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     const vendor = searchParams.get('vendor') // Filter by vendor
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
+    const storeId = searchParams.get('storeId')
 
     const skip = (page - 1) * limit
 
@@ -39,6 +40,20 @@ export async function GET(req: NextRequest) {
     const where: any = {
       tenantId, // Always filter by tenant
       status: 'RESOLVED',
+    }
+
+    // For admins, storeId is required to filter data by store
+    if (session.user.role === 'ADMIN') {
+      if (!storeId) {
+        return NextResponse.json(
+          { error: 'Store ID is required for admin users' },
+          { status: 400 }
+        )
+      }
+      where.storeId = storeId
+    } else if (storeId) {
+      // For agents, storeId is optional
+      where.storeId = storeId
     }
 
     // Filter by penalization status
@@ -95,12 +110,18 @@ export async function GET(req: NextRequest) {
       .filter((phone): phone is string => phone !== null && phone !== undefined)
       .map(phone => phone.replace(/[\s\-\(\)]/g, ''))
 
+    // Build order tracking where clause with storeId filter
+    const orderTrackingWhere: any = {
+      tenantId,
+      consigneeContact: { in: customerPhones },
+    }
+    if (storeId) {
+      orderTrackingWhere.storeId = storeId
+    }
+
     const orderTrackingData = customerPhones.length > 0
       ? await prisma.orderTrackingData.findMany({
-          where: {
-            tenantId,
-            consigneeContact: { in: customerPhones },
-          },
+          where: orderTrackingWhere,
           select: {
             consigneeContact: true,
             pickupWarehouse: true,
@@ -149,14 +170,20 @@ export async function GET(req: NextRequest) {
         .filter((phone): phone is string => phone !== null && phone !== undefined)
         .map(phone => phone.replace(/[\s\-\(\)]/g, ''))
 
+      // Build order tracking where clause with storeId and vendor filter
+      const vendorOrderTrackingWhere: any = {
+        tenantId,
+        consigneeContact: { in: allCustomerPhones },
+        pickupWarehouse: vendor,
+      }
+      if (storeId) {
+        vendorOrderTrackingWhere.storeId = storeId
+      }
+
       // Get order tracking data for the specific vendor (pickupWarehouse)
       const vendorOrderTracking = allCustomerPhones.length > 0
         ? await prisma.orderTrackingData.findMany({
-            where: {
-              tenantId,
-              consigneeContact: { in: allCustomerPhones },
-              pickupWarehouse: vendor,
-            },
+            where: vendorOrderTrackingWhere,
             select: {
               consigneeContact: true,
             },

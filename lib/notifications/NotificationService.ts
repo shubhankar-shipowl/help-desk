@@ -651,12 +651,28 @@ export class NotificationService {
   /**
    * Mark all notifications as read for user
    */
-  async markAllAsRead(userId: string) {
+  async markAllAsRead(userId: string, storeId?: string | null) {
+    // Get user role to determine if we should filter by store
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    })
+
+    const where: any = {
+      userId,
+      read: false,
+    }
+
+    // Filter by storeId through ticket relation (for ADMIN and AGENT roles)
+    // Customers see all their notifications regardless of store
+    if (storeId && user?.role !== 'CUSTOMER') {
+      where.ticket = {
+        storeId: storeId,
+      }
+    }
+
     const result = await prisma.notification.updateMany({
-      where: {
-        userId,
-        read: false,
-      },
+      where,
       data: {
         read: true,
         readAt: new Date(),
@@ -669,7 +685,7 @@ export class NotificationService {
   /**
    * Get unread notification count for user
    */
-  async getUnreadCount(userId: string): Promise<number> {
+  async getUnreadCount(userId: string, storeId?: string | null): Promise<number> {
     try {
       if (!userId || typeof userId !== 'string') {
         throw new Error('Invalid userId provided for getUnreadCount')
@@ -678,7 +694,7 @@ export class NotificationService {
       // Get user's creation date to filter out notifications created before account creation
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { createdAt: true },
+        select: { createdAt: true, role: true },
       })
 
       const where: any = {
@@ -690,6 +706,14 @@ export class NotificationService {
       if (user?.createdAt) {
         where.createdAt = {
           gte: user.createdAt,
+        }
+      }
+
+      // Filter by storeId through ticket relation (for ADMIN and AGENT roles)
+      // Customers see all their notifications regardless of store
+      if (storeId && user?.role !== 'CUSTOMER') {
+        where.ticket = {
+          storeId: storeId,
         }
       }
 
@@ -711,6 +735,7 @@ export class NotificationService {
       limit?: number
       read?: boolean
       type?: NotificationType
+      storeId?: string | null
     } = {}
   ) {
     const page = options.page || 1
@@ -720,7 +745,7 @@ export class NotificationService {
     // Get user's creation date to filter out notifications created before account creation
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { createdAt: true },
+      select: { createdAt: true, role: true },
     })
 
     const where: any = {
@@ -740,6 +765,14 @@ export class NotificationService {
 
     if (options.type) {
       where.type = options.type
+    }
+
+    // Filter by storeId through ticket relation (for ADMIN and AGENT roles)
+    // Customers see all their notifications regardless of store
+    if (options.storeId && user?.role !== 'CUSTOMER') {
+      where.ticket = {
+        storeId: options.storeId,
+      }
     }
 
     const [notifications, total, unreadCount] = await Promise.all([

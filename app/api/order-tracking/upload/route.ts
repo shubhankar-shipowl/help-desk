@@ -29,8 +29,36 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Get storeId from form data or query params
     const formData = await req.formData()
     const file = formData.get('file') as File
+    const storeId = formData.get('storeId') as string | null
+
+    // For admins, storeId is required
+    if (session.user.role === 'ADMIN' && !storeId) {
+      return NextResponse.json(
+        { error: 'Store ID is required for admin users' },
+        { status: 400 }
+      )
+    }
+
+    // Validate storeId if provided (must belong to the tenant)
+    if (storeId) {
+      const store = await prisma.store.findFirst({
+        where: {
+          id: storeId,
+          tenantId,
+          isActive: true,
+        },
+      })
+      
+      if (!store) {
+        return NextResponse.json(
+          { error: 'Invalid store ID or store does not belong to this tenant' },
+          { status: 400 }
+        )
+      }
+    }
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
@@ -317,9 +345,11 @@ export async function POST(req: NextRequest) {
     for (const record of records) {
       try {
         // Try to find existing record (using findFirst since unique constraint was removed for nullable)
+        // Include storeId in the search to ensure we match records from the same store
         const existing = await prisma.orderTrackingData.findFirst({
           where: {
             tenantId, // Filter by tenant
+            storeId: storeId || null, // Filter by store (null for tenant-level)
             consigneeContact: record.consigneeContact,
             channelOrderNumber: record.channelOrderNumber,
             waybillNumber: record.waybillNumber,
@@ -344,6 +374,7 @@ export async function POST(req: NextRequest) {
           await prisma.orderTrackingData.create({
             data: {
               tenantId, // Always include tenantId
+              storeId: storeId || null, // Include storeId if provided
               consigneeContact: record.consigneeContact,
               channelOrderNumber: record.channelOrderNumber,
               waybillNumber: record.waybillNumber,

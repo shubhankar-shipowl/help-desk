@@ -19,6 +19,9 @@ export default function PublicNewTicketPage() {
   const [showSuccess, setShowSuccess] = useState(false)
   const [ticketData, setTicketData] = useState<{ id: string; ticketNumber: string; token: string } | null>(null)
   const [categories, setCategories] = useState<Array<{ id: string; name: string; subjects: string[] | null }>>([])
+  const [storeId, setStoreId] = useState<string | null>(null)
+  const [storeName, setStoreName] = useState<string | null>(null)
+  const [supportEmail, setSupportEmail] = useState<string>('')
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -88,8 +91,30 @@ export default function PublicNewTicketPage() {
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const lookupTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Get storeId from URL query parameter
   useEffect(() => {
-    fetch('/api/categories')
+    const params = new URLSearchParams(window.location.search)
+    const storeIdParam = params.get('storeId')
+    if (storeIdParam) {
+      setStoreId(storeIdParam)
+      // Optionally fetch store name for display
+      fetch(`/api/stores/${storeIdParam}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.store) {
+            setStoreName(data.store.name)
+          }
+        })
+        .catch(() => {
+          // Ignore errors - store might not exist or user might not have access
+        })
+    }
+  }, [])
+
+  useEffect(() => {
+    // Fetch categories - filter by storeId if available
+    const url = storeId ? `/api/categories?storeId=${storeId}` : '/api/categories'
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         const categoryArray = data.categories || []
@@ -113,7 +138,23 @@ export default function PublicNewTicketPage() {
         console.error('Error fetching categories:', error)
         setCategories([])
       })
-  }, [])
+  }, [storeId])
+
+  // Fetch support email when storeId is available
+  useEffect(() => {
+    if (storeId) {
+      fetch(`/api/public/support-email?storeId=${storeId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.supportEmail) {
+            setSupportEmail(data.supportEmail)
+          }
+        })
+        .catch((error) => {
+          console.error('Error fetching support email:', error)
+        })
+    }
+  }, [storeId])
 
 
   const validateField = (name: string, value: string) => {
@@ -168,7 +209,15 @@ export default function PublicNewTicketPage() {
         return
       }
 
-      const response = await fetch(`/api/order-tracking/lookup?phone=${encodeURIComponent(normalizedPhone)}`)
+      // Build lookup URL with storeId if available
+      const params = new URLSearchParams({
+        phone: normalizedPhone,
+      })
+      if (storeId) {
+        params.append('storeId', storeId)
+      }
+
+      const response = await fetch(`/api/order-tracking/lookup?${params.toString()}`)
       const data = await response.json()
 
       if (data.found && data.orderId && data.trackingId) {
@@ -420,6 +469,9 @@ export default function PublicNewTicketPage() {
         formDataToSend.append('description', formData.description)
         formDataToSend.append('categoryId', formData.categoryId || '')
         formDataToSend.append('priority', formData.priority)
+        if (storeId) {
+          formDataToSend.append('storeId', storeId)
+        }
         
         allFiles.forEach((file) => {
           formDataToSend.append('attachments', file)
@@ -437,6 +489,7 @@ export default function PublicNewTicketPage() {
             ...formData,
             phone: formData.phone,
             trackingId: formData.trackingId,
+            storeId: storeId || undefined,
           }),
         })
       }
@@ -482,13 +535,24 @@ export default function PublicNewTicketPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-2 sm:py-4 px-3 sm:px-4">
+    <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-white to-teal-50 py-2 sm:py-4 px-3 sm:px-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-3 sm:mb-4">
-          <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg sm:rounded-xl mb-2 shadow-lg">
-            <Ticket className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-          </div>
+        <div className="text-center mb-2 sm:mb-3">
+          {storeName && storeName.toLowerCase().trim() === 'shopperskart' ? (
+            <div className="inline-flex items-center justify-center mb-2 sm:mb-3">
+              <img 
+                src="/shopperkart.avif" 
+                alt="Shopperskart" 
+                className="w-28 h-28 sm:w-36 sm:h-36 md:w-44 md:h-44 object-contain"
+                style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))' }}
+              />
+            </div>
+          ) : (
+            <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl mb-2 shadow-lg" style={{ backgroundColor: '#2bb9cd' }}>
+              <Ticket className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+            </div>
+          )}
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-1 sm:mb-2 px-2">
             Submit a Support Ticket
           </h1>
@@ -506,14 +570,14 @@ export default function PublicNewTicketPage() {
             <span className="text-xs font-medium text-gray-700">
               Form Progress
             </span>
-            <span className="text-xs font-semibold text-indigo-600">
+            <span className="text-xs font-semibold" style={{ color: '#2bb9cd' }}>
               {progress}%
             </span>
           </div>
           <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
             <div 
-              className="h-full bg-gradient-to-r from-indigo-600 to-purple-600 transition-all duration-500 ease-out"
-              style={{ width: `${progress}%` }}
+              className="h-full transition-all duration-500 ease-out"
+              style={{ width: `${progress}%`, backgroundColor: '#2bb9cd' }}
             />
           </div>
         </div>
@@ -521,12 +585,17 @@ export default function PublicNewTicketPage() {
         {/* Main Form Card */}
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
           {/* Card Header */}
-          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-4 sm:px-6 py-2 sm:py-3">
-            <h2 className="text-base sm:text-lg md:text-xl font-bold text-white flex items-center gap-2">
+          <div className="px-4 sm:px-6 py-2 sm:py-3" style={{ backgroundColor: '#2bb9cd' }}>
+            <h2 className="text-base sm:text-lg md:text-xl font-bold text-white flex items-center gap-2 flex-wrap">
               <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
               Create New Ticket
+              {storeName && (
+                <span className="text-xs sm:text-sm font-normal opacity-90">
+                  ({storeName})
+                </span>
+              )}
             </h2>
-            <p className="text-xs text-indigo-100 mt-0.5">
+            <p className="text-xs text-white/90 mt-0.5">
               Fill in the details below and we&apos;ll assist you right away
             </p>
           </div>
@@ -536,8 +605,8 @@ export default function PublicNewTicketPage() {
             {/* Step 1: Personal Information */}
             <div className="space-y-2.5 sm:space-y-3">
               <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
-                <div className="w-6 h-6 sm:w-7 sm:h-7 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
+                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(43, 185, 205, 0.1)' }}>
+                  <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: '#2bb9cd' }} />
                 </div>
                 <h3 className="text-sm sm:text-base font-semibold text-gray-900">
                   Your Information
@@ -560,17 +629,29 @@ export default function PublicNewTicketPage() {
                       name="name"
                       value={formData.name}
                       onChange={(e) => handleChange('name', e.target.value)}
-                      onBlur={() => handleBlur('name')}
                       placeholder="John Doe"
                       className={cn(
                         "w-full pl-10 pr-10 py-2 text-sm rounded-lg border-2 transition-all duration-200",
-                        "focus:outline-none focus:ring-2 sm:focus:ring-4 focus:ring-indigo-100",
+                        "focus:outline-none focus:ring-2 sm:focus:ring-4",
                         errors.name && touched.name
                           ? "border-red-300 bg-red-50 focus:border-red-500"
                           : formData.name && !errors.name
                           ? "border-green-300 bg-green-50 focus:border-green-500"
-                          : "border-gray-200 hover:border-gray-300 focus:border-indigo-500"
+                          : "border-gray-200 hover:border-gray-300"
                       )}
+                      onFocus={(e) => {
+                        if (!errors.name && !touched.name && !formData.name) {
+                          e.target.style.borderColor = '#2bb9cd'
+                          e.target.style.boxShadow = '0 0 0 2px rgba(43, 185, 205, 0.1)'
+                        }
+                      }}
+                      onBlur={(e) => {
+                        handleBlur('name')
+                        if (!errors.name && !touched.name && !formData.name) {
+                          e.target.style.borderColor = ''
+                          e.target.style.boxShadow = ''
+                        }
+                      }}
                     />
                     {formData.name && !errors.name && (
                       <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
@@ -598,17 +679,29 @@ export default function PublicNewTicketPage() {
                       name="email"
                       value={formData.email}
                       onChange={(e) => handleChange('email', e.target.value)}
-                      onBlur={() => handleBlur('email')}
                       placeholder="john@example.com"
                       className={cn(
                         "w-full pl-10 pr-10 py-2 text-sm rounded-lg border-2 transition-all duration-200",
-                        "focus:outline-none focus:ring-2 sm:focus:ring-4 focus:ring-indigo-100",
+                        "focus:outline-none focus:ring-2 sm:focus:ring-4",
                         errors.email && touched.email
                           ? "border-red-300 bg-red-50 focus:border-red-500"
                           : formData.email && !errors.email
                           ? "border-green-300 bg-green-50 focus:border-green-500"
-                          : "border-gray-200 hover:border-gray-300 focus:border-indigo-500"
+                          : "border-gray-200 hover:border-gray-300"
                       )}
+                      onFocus={(e) => {
+                        if (!errors.email && !touched.email && !formData.email) {
+                          e.target.style.borderColor = '#2bb9cd'
+                          e.target.style.boxShadow = '0 0 0 2px rgba(43, 185, 205, 0.1)'
+                        }
+                      }}
+                      onBlur={(e) => {
+                        handleBlur('email')
+                        if (!errors.email && !touched.email && !formData.email) {
+                          e.target.style.borderColor = ''
+                          e.target.style.boxShadow = ''
+                        }
+                      }}
                     />
                     {formData.email && !errors.email && (
                       <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
@@ -637,17 +730,29 @@ export default function PublicNewTicketPage() {
                     name="phone"
                     value={formData.phone}
                     onChange={(e) => handleChange('phone', e.target.value)}
-                    onBlur={() => handleBlur('phone')}
                     placeholder="+1 (555) 123-4567"
                     className={cn(
                       "w-full pl-10 pr-10 py-2 text-sm rounded-lg border-2 transition-all duration-200",
-                      "focus:outline-none focus:ring-2 sm:focus:ring-4 focus:ring-indigo-100",
+                      "focus:outline-none focus:ring-2 sm:focus:ring-4",
                       errors.phone && touched.phone
                         ? "border-red-300 bg-red-50 focus:border-red-500"
                         : formData.phone && !errors.phone
                         ? "border-green-300 bg-green-50 focus:border-green-500"
-                        : "border-gray-200 hover:border-gray-300 focus:border-indigo-500"
+                        : "border-gray-200 hover:border-gray-300"
                     )}
+                    onFocus={(e) => {
+                      if (!errors.phone && !touched.phone && !formData.phone) {
+                        e.target.style.borderColor = '#2bb9cd'
+                        e.target.style.boxShadow = '0 0 0 2px rgba(43, 185, 205, 0.1)'
+                      }
+                    }}
+                    onBlur={(e) => {
+                      handleBlur('phone')
+                      if (!errors.phone && !touched.phone && !formData.phone) {
+                        e.target.style.borderColor = ''
+                        e.target.style.boxShadow = ''
+                      }
+                    }}
                   />
                   {formData.phone && !errors.phone && (
                     <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
@@ -679,17 +784,29 @@ export default function PublicNewTicketPage() {
                     name="order"
                     value={formData.order}
                     onChange={(e) => handleChange('order', e.target.value)}
-                    onBlur={() => handleBlur('order')}
                     placeholder="ORD-123456"
                     className={cn(
                       "w-full pl-10 pr-10 py-2 text-sm rounded-lg border-2 transition-all duration-200",
-                      "focus:outline-none focus:ring-2 sm:focus:ring-4 focus:ring-indigo-100",
+                      "focus:outline-none focus:ring-2 sm:focus:ring-4",
                       errors.order && touched.order
                         ? "border-red-300 bg-red-50 focus:border-red-500"
                         : formData.order && !errors.order
                         ? "border-green-300 bg-green-50 focus:border-green-500"
-                        : "border-gray-200 hover:border-gray-300 focus:border-indigo-500"
+                        : "border-gray-200 hover:border-gray-300"
                     )}
+                    onFocus={(e) => {
+                      if (!errors.order && !touched.order && !formData.order) {
+                        e.target.style.borderColor = '#2bb9cd'
+                        e.target.style.boxShadow = '0 0 0 2px rgba(43, 185, 205, 0.1)'
+                      }
+                    }}
+                    onBlur={(e) => {
+                      handleBlur('order')
+                      if (!errors.order && !touched.order && !formData.order) {
+                        e.target.style.borderColor = ''
+                        e.target.style.boxShadow = ''
+                      }
+                    }}
                   />
                   {formData.order && !errors.order && (
                     <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
@@ -717,17 +834,29 @@ export default function PublicNewTicketPage() {
                     name="trackingId"
                     value={formData.trackingId}
                     onChange={(e) => handleChange('trackingId', e.target.value)}
-                    onBlur={() => handleBlur('trackingId')}
                     placeholder="TRK-123456"
                     className={cn(
                       "w-full pl-10 pr-10 py-2 text-sm rounded-lg border-2 transition-all duration-200",
-                      "focus:outline-none focus:ring-2 sm:focus:ring-4 focus:ring-indigo-100",
+                      "focus:outline-none focus:ring-2 sm:focus:ring-4",
                       errors.trackingId && touched.trackingId
                         ? "border-red-300 bg-red-50 focus:border-red-500"
                         : formData.trackingId && !errors.trackingId
                         ? "border-green-300 bg-green-50 focus:border-green-500"
-                        : "border-gray-200 hover:border-gray-300 focus:border-indigo-500"
+                        : "border-gray-200 hover:border-gray-300"
                     )}
+                    onFocus={(e) => {
+                      if (!errors.trackingId && !touched.trackingId && !formData.trackingId) {
+                        e.target.style.borderColor = '#2bb9cd'
+                        e.target.style.boxShadow = '0 0 0 2px rgba(43, 185, 205, 0.1)'
+                      }
+                    }}
+                    onBlur={(e) => {
+                      handleBlur('trackingId')
+                      if (!errors.trackingId && !touched.trackingId && !formData.trackingId) {
+                        e.target.style.borderColor = ''
+                        e.target.style.boxShadow = ''
+                      }
+                    }}
                   />
                   {formData.trackingId && !errors.trackingId && (
                     <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
@@ -748,8 +877,8 @@ export default function PublicNewTicketPage() {
             {/* Step 2: Issue Details */}
             <div className="space-y-2.5 sm:space-y-3">
               <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
-                <div className="w-6 h-6 sm:w-7 sm:h-7 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-600" />
+                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(43, 185, 205, 0.1)' }}>
+                  <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: '#2bb9cd' }} />
                 </div>
                 <h3 className="text-sm sm:text-base font-semibold text-gray-900">
                   Issue Details
@@ -764,16 +893,28 @@ export default function PublicNewTicketPage() {
                 <select
                   value={formData.categoryId}
                   onChange={(e) => handleChange('categoryId', e.target.value)}
-                  onBlur={() => handleBlur('categoryId')}
                   className={cn(
                     "w-full px-3 py-2 text-sm rounded-lg border-2 transition-all duration-200",
-                    "focus:outline-none focus:ring-2 sm:focus:ring-4 focus:ring-indigo-100",
+                    "focus:outline-none focus:ring-2 sm:focus:ring-4",
                     errors.categoryId && touched.categoryId
                       ? "border-red-300 bg-red-50 focus:border-red-500"
                       : formData.categoryId && !errors.categoryId
                       ? "border-green-300 bg-green-50 focus:border-green-500"
-                      : "border-gray-200 hover:border-gray-300 focus:border-indigo-500"
+                      : "border-gray-200 hover:border-gray-300"
                   )}
+                  onFocus={(e) => {
+                    if (!errors.categoryId && !touched.categoryId && !formData.categoryId) {
+                      e.target.style.borderColor = '#2bb9cd'
+                      e.target.style.boxShadow = '0 0 0 2px rgba(43, 185, 205, 0.1)'
+                    }
+                  }}
+                  onBlur={(e) => {
+                    handleBlur('categoryId')
+                    if (!errors.categoryId && !touched.categoryId && !formData.categoryId) {
+                      e.target.style.borderColor = ''
+                      e.target.style.boxShadow = ''
+                    }
+                  }}
                 >
                   <option value="">Select category</option>
                   {categories.map((cat) => (
@@ -800,18 +941,30 @@ export default function PublicNewTicketPage() {
                     name="subject"
                     value={formData.subject}
                     onChange={(e) => handleChange('subject', e.target.value)}
-                    onBlur={() => handleBlur('subject')}
                     disabled={!formData.categoryId}
                     className={cn(
                       "w-full px-3 py-2 text-sm rounded-lg border-2 transition-all duration-200",
-                      "focus:outline-none focus:ring-2 sm:focus:ring-4 focus:ring-indigo-100",
+                      "focus:outline-none focus:ring-2 sm:focus:ring-4",
                       !formData.categoryId ? "bg-gray-50 cursor-not-allowed" : "",
                       errors.subject && touched.subject
                         ? "border-red-300 bg-red-50 focus:border-red-500"
                         : formData.subject && !errors.subject
                         ? "border-green-300 bg-green-50 focus:border-green-500"
-                        : "border-gray-200 hover:border-gray-300 focus:border-indigo-500"
+                        : "border-gray-200 hover:border-gray-300"
                     )}
+                    onFocus={(e) => {
+                      if (!errors.subject && !touched.subject && !formData.subject && formData.categoryId) {
+                        e.target.style.borderColor = '#2bb9cd'
+                        e.target.style.boxShadow = '0 0 0 2px rgba(43, 185, 205, 0.1)'
+                      }
+                    }}
+                    onBlur={(e) => {
+                      handleBlur('subject')
+                      if (!errors.subject && !touched.subject && !formData.subject && formData.categoryId) {
+                        e.target.style.borderColor = ''
+                        e.target.style.boxShadow = ''
+                      }
+                    }}
                   >
                     <option value="">Select issue type</option>
                     {getAvailableSubjects().map((subject, index) => (
@@ -826,19 +979,19 @@ export default function PublicNewTicketPage() {
                     name="subject"
                     value={formData.subject}
                     onChange={(e) => handleChange('subject', e.target.value)}
-                    onBlur={() => handleBlur('subject')}
                     placeholder="Select category first"
                     disabled={!formData.categoryId}
                     className={cn(
                       "w-full px-3 py-2 text-sm rounded-lg border-2 transition-all duration-200",
-                      "focus:outline-none focus:ring-2 sm:focus:ring-4 focus:ring-indigo-100",
+                      "focus:outline-none focus:ring-2 sm:focus:ring-4",
                       "bg-gray-50 cursor-not-allowed",
                       errors.subject && touched.subject
                         ? "border-red-300 bg-red-50 focus:border-red-500"
                         : formData.subject && !errors.subject
                         ? "border-green-300 bg-green-50 focus:border-green-500"
-                        : "border-gray-200 hover:border-gray-300 focus:border-indigo-500"
+                        : "border-gray-200 hover:border-gray-300"
                     )}
+                    onBlur={() => handleBlur('subject')}
                   />
                 )}
                 {errors.subject && touched.subject && (
@@ -886,18 +1039,30 @@ export default function PublicNewTicketPage() {
                   name="description"
                   value={formData.description}
                   onChange={(e) => handleChange('description', e.target.value)}
-                  onBlur={() => handleBlur('description')}
                   placeholder="Please provide detailed information about your issue..."
                   rows={3}
                   className={cn(
                     "w-full px-3 py-2 text-sm rounded-lg border-2 transition-all duration-200",
-                    "focus:outline-none focus:ring-2 sm:focus:ring-4 focus:ring-indigo-100 resize-none",
+                    "focus:outline-none focus:ring-2 sm:focus:ring-4 resize-none",
                     errors.description && touched.description
                       ? "border-red-300 bg-red-50 focus:border-red-500"
                       : formData.description && !errors.description
                       ? "border-green-300 bg-green-50 focus:border-green-500"
-                      : "border-gray-200 hover:border-gray-300 focus:border-indigo-500"
+                      : "border-gray-200 hover:border-gray-300"
                   )}
+                  onFocus={(e) => {
+                    if (!errors.description && !touched.description && !formData.description) {
+                      e.target.style.borderColor = '#2bb9cd'
+                      e.target.style.boxShadow = '0 0 0 2px rgba(43, 185, 205, 0.1)'
+                    }
+                  }}
+                  onBlur={(e) => {
+                    handleBlur('description')
+                    if (!errors.description && !touched.description && !formData.description) {
+                      e.target.style.borderColor = ''
+                      e.target.style.boxShadow = ''
+                    }
+                  }}
                 />
                 <div className="flex items-center justify-between mt-1 flex-wrap gap-1">
                   {errors.description && touched.description ? (
@@ -955,8 +1120,31 @@ export default function PublicNewTicketPage() {
                         ? "border-green-300 bg-green-50" 
                         : requiresAttachments() && !singleFile
                         ? "border-red-300 bg-red-50 hover:border-red-400"
-                        : "border-gray-300 hover:border-indigo-500 hover:bg-indigo-50 active:bg-indigo-100"
-                    )}>
+                        : "border-gray-300"
+                    )}
+                    onMouseEnter={(e) => {
+                      if (!singleFile && !requiresAttachments()) {
+                        e.currentTarget.style.borderColor = '#2bb9cd'
+                        e.currentTarget.style.backgroundColor = 'rgba(43, 185, 205, 0.05)'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!singleFile && !requiresAttachments()) {
+                        e.currentTarget.style.borderColor = ''
+                        e.currentTarget.style.backgroundColor = ''
+                      }
+                    }}
+                    onMouseDown={(e) => {
+                      if (!singleFile && !requiresAttachments()) {
+                        e.currentTarget.style.backgroundColor = 'rgba(43, 185, 205, 0.1)'
+                      }
+                    }}
+                    onMouseUp={(e) => {
+                      if (!singleFile && !requiresAttachments()) {
+                        e.currentTarget.style.backgroundColor = 'rgba(43, 185, 205, 0.05)'
+                      }
+                    }}
+                    >
                       {singleFile ? (
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -987,8 +1175,8 @@ export default function PublicNewTicketPage() {
                         </div>
                       ) : (
                         <>
-                          <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 bg-indigo-100 rounded-full mb-2">
-                            <Upload className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" />
+                          <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full mb-2" style={{ backgroundColor: 'rgba(43, 185, 205, 0.1)' }}>
+                            <Upload className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: '#2bb9cd' }} />
                           </div>
                           <p className="text-xs font-medium text-gray-900 mb-1">
                             Tap to upload video
@@ -1022,8 +1210,31 @@ export default function PublicNewTicketPage() {
                             ? "border-green-300 bg-green-50" 
                             : requiresAttachments() && !imageFiles[index] && !singleFile && imageFiles.every(f => !f)
                             ? "border-red-300 bg-red-50 hover:border-red-400"
-                            : "border-gray-300 hover:border-indigo-500 hover:bg-indigo-50 active:bg-indigo-100"
-                        )}>
+                            : "border-gray-300"
+                        )}
+                        onMouseEnter={(e) => {
+                          if (!imageFiles[index] && !requiresAttachments()) {
+                            e.currentTarget.style.borderColor = '#2bb9cd'
+                            e.currentTarget.style.backgroundColor = 'rgba(43, 185, 205, 0.05)'
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!imageFiles[index] && !requiresAttachments()) {
+                            e.currentTarget.style.borderColor = ''
+                            e.currentTarget.style.backgroundColor = ''
+                          }
+                        }}
+                        onMouseDown={(e) => {
+                          if (!imageFiles[index] && !requiresAttachments()) {
+                            e.currentTarget.style.backgroundColor = 'rgba(43, 185, 205, 0.1)'
+                          }
+                        }}
+                        onMouseUp={(e) => {
+                          if (!imageFiles[index] && !requiresAttachments()) {
+                            e.currentTarget.style.backgroundColor = 'rgba(43, 185, 205, 0.05)'
+                          }
+                        }}
+                        >
                           {imageFiles[index] ? (
                             <div className="h-full flex flex-col">
                               <div className="flex-1 flex items-center justify-center mb-1">
@@ -1054,8 +1265,8 @@ export default function PublicNewTicketPage() {
                             </div>
                           ) : (
                             <div className="h-full flex flex-col items-center justify-center">
-                              <div className="inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 bg-indigo-100 rounded-full mb-1">
-                                <Upload className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-600" />
+                              <div className="inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-full mb-1" style={{ backgroundColor: 'rgba(43, 185, 205, 0.1)' }}>
+                                <Upload className="w-3 h-3 sm:w-3.5 sm:h-3.5" style={{ color: '#2bb9cd' }} />
                               </div>
                               <p className="text-[9px] sm:text-[10px] font-medium text-gray-900 mb-0.5">
                                 Image {index + 1}
@@ -1077,11 +1288,11 @@ export default function PublicNewTicketPage() {
             <div className="border-t border-gray-200" />
 
             {/* Trust Badges */}
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-2.5 sm:p-3">
+            <div className="rounded-lg p-2.5 sm:p-3" style={{ background: 'linear-gradient(to right, rgba(43, 185, 205, 0.1), rgba(43, 185, 205, 0.05))' }}>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
                 <div>
                   <div className="inline-flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 bg-white rounded-full mb-1 shadow-sm">
-                    <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
+                    <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: '#2bb9cd' }} />
                   </div>
                   <p className="text-xs font-semibold text-gray-900">Fast Response</p>
                   <p className="text-[10px] text-gray-600">Usually within 2 hours</p>
@@ -1095,7 +1306,7 @@ export default function PublicNewTicketPage() {
                 </div>
                 <div>
                   <div className="inline-flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 bg-white rounded-full mb-1 shadow-sm">
-                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-600" />
+                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: '#2bb9cd' }} />
                   </div>
                   <p className="text-xs font-semibold text-gray-900">Expert Support</p>
                   <p className="text-[10px] text-gray-600">Experienced agents ready</p>
@@ -1109,11 +1320,34 @@ export default function PublicNewTicketPage() {
               disabled={isSubmitting}
               className={cn(
                 "w-full py-2.5 sm:py-3 px-6 rounded-lg font-semibold text-white transition-all duration-200 text-sm",
-                "focus:outline-none focus:ring-2 sm:focus:ring-4 focus:ring-indigo-300 touch-manipulation",
+                "focus:outline-none focus:ring-2 sm:focus:ring-4 touch-manipulation",
                 isSubmitting
                   ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 active:from-indigo-800 active:to-purple-800 shadow-lg hover:shadow-xl active:scale-[0.98]"
+                  : "shadow-lg hover:shadow-xl active:scale-[0.98]"
               )}
+              style={!isSubmitting ? { 
+                backgroundColor: '#2bb9cd',
+              } : undefined}
+              onMouseEnter={(e) => {
+                if (!isSubmitting) {
+                  e.currentTarget.style.backgroundColor = '#26a5b8'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isSubmitting) {
+                  e.currentTarget.style.backgroundColor = '#2bb9cd'
+                }
+              }}
+              onMouseDown={(e) => {
+                if (!isSubmitting) {
+                  e.currentTarget.style.backgroundColor = '#2195a8'
+                }
+              }}
+              onMouseUp={(e) => {
+                if (!isSubmitting) {
+                  e.currentTarget.style.backgroundColor = '#26a5b8'
+                }
+              }}
             >
               {isSubmitting ? (
                 <span className="flex items-center justify-center gap-2">
@@ -1134,14 +1368,16 @@ export default function PublicNewTicketPage() {
         </div>
 
         {/* Additional Help Section */}
-        <div className="mt-4 sm:mt-8 text-center px-2">
-          <p className="text-xs sm:text-sm text-gray-600">
-            Need immediate help? Call{' '}
-            <a href="tel:+15551234567" className="text-indigo-600 hover:text-indigo-700 font-medium underline">
-              +1 (555) 123-4567
-            </a>
-          </p>
-        </div>
+        {supportEmail && (
+          <div className="mt-4 sm:mt-8 text-center px-2">
+            <p className="text-xs sm:text-sm text-gray-600">
+              Need immediate help? {' '}
+              <a href={`mailto:${supportEmail}`} className="font-medium underline" style={{ color: '#2bb9cd' }} onMouseEnter={(e) => e.currentTarget.style.color = '#26a5b8'} onMouseLeave={(e) => e.currentTarget.style.color = '#2bb9cd'}>
+                {supportEmail}
+              </a>
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1150,11 +1386,11 @@ export default function PublicNewTicketPage() {
 // Success Screen Component
 function SuccessScreen({ ticketNumber, ticketId, token }: { ticketNumber: string; ticketId: string; token: string }) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-indigo-50 flex items-center justify-center px-3 sm:px-4 py-4 sm:py-8">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-cyan-50 flex items-center justify-center px-3 sm:px-4 py-4 sm:py-8">
       <div className="max-w-md w-full text-center">
         <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-8 md:p-12">
           {/* Success Animation */}
-          <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full mb-4 sm:mb-6 animate-bounce">
+          <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full mb-2 sm:mb-3 animate-bounce">
             <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-white" />
           </div>
           
@@ -1162,28 +1398,31 @@ function SuccessScreen({ ticketNumber, ticketId, token }: { ticketNumber: string
             Ticket Submitted Successfully!
           </h2>
           
-          <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6 px-2">
+          <p className="text-sm sm:text-base text-gray-600 mb-2 sm:mb-3 px-2">
             We&apos;ve received your ticket and sent a confirmation to your email. 
             Our team will get back to you shortly.
           </p>
 
-          <div className="bg-indigo-50 rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6">
+          <div className="rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-2 sm:mb-3" style={{ backgroundColor: 'rgba(43, 185, 205, 0.1)' }}>
             <p className="text-xs sm:text-sm text-gray-700 mb-1.5 sm:mb-2">
               Your Ticket ID
             </p>
-            <p className="text-2xl sm:text-3xl font-bold text-indigo-600 break-all">
+            <p className="text-2xl sm:text-3xl font-bold break-all" style={{ color: '#2bb9cd' }}>
               {ticketNumber}
             </p>
           </div>
 
-          <p className="text-xs sm:text-sm text-gray-500 mb-4 sm:mb-6 px-2">
+          <p className="text-xs sm:text-sm text-gray-500 mb-2 sm:mb-3 px-2">
             Redirecting you to your ticket in 3 seconds...
           </p>
 
           <div className="flex flex-col gap-2 sm:gap-3">
             <Link
               href={`/tickets/${ticketId}?token=${token}`}
-              className="px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg sm:rounded-xl font-semibold hover:shadow-lg active:scale-[0.98] transition-all text-sm sm:text-base touch-manipulation"
+              className="px-4 sm:px-6 py-2.5 sm:py-3 text-white rounded-lg sm:rounded-xl font-semibold hover:shadow-lg active:scale-[0.98] transition-all text-sm sm:text-base touch-manipulation"
+              style={{ backgroundColor: '#2bb9cd' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#26a5b8'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2bb9cd'}
             >
               View Your Ticket
             </Link>

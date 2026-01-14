@@ -23,7 +23,11 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const count = await notificationService.getUnreadCount(userId)
+    // Get storeId from query params
+    const { searchParams } = new URL(req.url)
+    const storeId = searchParams.get('storeId')
+
+    const count = await notificationService.getUnreadCount(userId, storeId || null)
 
     return NextResponse.json({ count: count || 0 })
   } catch (error: any) {

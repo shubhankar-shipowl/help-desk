@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const phone = searchParams.get('phone')
+    const storeId = searchParams.get('storeId') // Get storeId from query params (for public URLs)
 
     if (!phone) {
       return NextResponse.json(
@@ -55,14 +56,33 @@ export async function GET(req: NextRequest) {
     // Normalize phone number (remove spaces, dashes, etc.)
     const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '')
 
+    // Build where clause
+    const where: any = {
+      tenantId, // Always filter by tenant
+      consigneeContact: normalizedPhone,
+    }
+
+    // Filter by storeId if provided (for public URLs with storeId in query params)
+    if (storeId) {
+      // Validate storeId belongs to tenant
+      const store = await prisma.store.findFirst({
+        where: {
+          id: storeId,
+          tenantId,
+          isActive: true,
+        },
+      })
+      
+      if (store) {
+        where.storeId = storeId
+      }
+    }
+
     // Find matching records
     // Note: If you get "Cannot read properties of undefined", restart the dev server
     // after running: npx prisma generate
     const records = await prisma.orderTrackingData.findMany({
-      where: {
-        tenantId, // Always filter by tenant
-        consigneeContact: normalizedPhone,
-      },
+      where,
       orderBy: {
         uploadedAt: 'desc',
       },

@@ -15,11 +15,13 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
+import { useStore } from '@/lib/store-context'
 import { Plus, X } from 'lucide-react'
 
 export function AddCategoryDialog() {
   const router = useRouter()
   const { toast } = useToast()
+  const { selectedStoreId } = useStore()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [subjects, setSubjects] = useState<string[]>([''])
@@ -66,6 +68,7 @@ export function AddCategoryDialog() {
         body: JSON.stringify({
           ...formData,
           subjects: validSubjects.length > 0 ? validSubjects : null,
+          storeId: selectedStoreId,
         }),
       })
 

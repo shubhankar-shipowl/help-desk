@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useNotificationSocket } from '@/lib/notifications/client'
+import { useStore } from '@/lib/store-context'
 import { TicketDetail } from './ticket-detail'
 import { formatRelativeTime, maskEmail } from '@/lib/utils'
 import { TicketStatus, TicketPriority } from '@prisma/client'
@@ -71,25 +72,9 @@ export function ModernInbox({ initialTickets, stats, teams, categories }: Modern
   const router = useRouter()
   const socket = useNotificationSocket()
   const { toast } = useToast()
-  const [tickets, setTickets] = useState<Ticket[]>(
-    initialTickets.map(ticket => {
-      // Debug: Log tickets without subject
-      const subject = (ticket as any).subject || ticket.subject
-      if (!subject) {
-        console.warn('[ModernInbox] Ticket missing subject:', {
-          id: ticket.id,
-          ticketNumber: ticket.ticketNumber,
-          hasSubject: !!ticket.subject,
-          ticketKeys: Object.keys(ticket),
-          fullTicket: JSON.stringify(ticket, null, 2),
-        })
-      }
-      return {
-        ...ticket,
-        subject: subject || 'No subject',
-      } as Ticket
-    })
-  )
+  const { selectedStoreId } = useStore()
+  // Start with empty array - we'll fetch fresh data on mount to respect store selection
+  const [tickets, setTickets] = useState<Ticket[]>([])
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [loading, setLoading] = useState(false)
   const [view, setView] = useState<'list' | 'kanban'>('list')
@@ -111,7 +96,10 @@ export function ModernInbox({ initialTickets, stats, teams, categories }: Modern
   // Fetch available agents
   useEffect(() => {
     if (session?.user?.role === 'ADMIN' || session?.user?.role === 'AGENT') {
-      fetch('/api/users?role=AGENT')
+      const url = selectedStoreId
+        ? `/api/users?role=AGENT&storeId=${selectedStoreId}`
+        : '/api/users?role=AGENT'
+      fetch(url)
         .then(res => res.json())
         .then(data => {
           if (data.users) {
@@ -128,7 +116,7 @@ export function ModernInbox({ initialTickets, stats, teams, categories }: Modern
         })
         .catch(console.error)
     }
-  }, [session])
+  }, [session, selectedStoreId])
 
   // Listen for ticket updates via WebSocket
   useEffect(() => {
@@ -446,9 +434,10 @@ export function ModernInbox({ initialTickets, stats, teams, categories }: Modern
     }
   }, [socket, selectedTicket, session, statusFilter, assignedFilter])
 
+  // Fetch tickets on mount and when filters/store changes
   useEffect(() => {
     fetchTickets()
-  }, [statusFilter, priorityFilter, assignedFilter, searchQuery])
+  }, [statusFilter, priorityFilter, assignedFilter, searchQuery, selectedStoreId])
 
   const handleDeleteClick = (ticketId: string) => {
     setTicketToDelete(ticketId)
@@ -511,6 +500,10 @@ export function ModernInbox({ initialTickets, stats, teams, categories }: Modern
         }
       }
       if (searchQuery) params.append('search', searchQuery)
+      // Add storeId filter if a store is selected
+      if (selectedStoreId) {
+        params.append('storeId', selectedStoreId)
+      }
 
       const response = await fetch(`/api/tickets?${params.toString()}`)
       const data = await response.json()

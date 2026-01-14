@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
+import { useStore } from '@/lib/store-context'
 import Link from 'next/link'
 import { 
   Ticket, Mail, Phone, User, FileText, Upload, X, CheckCircle, 
@@ -14,6 +15,7 @@ import { cn } from '@/lib/utils'
 export default function AgentNewTicketPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { selectedStoreId } = useStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [ticketData, setTicketData] = useState<{ id: string; ticketNumber: string } | null>(null)
@@ -64,7 +66,10 @@ export default function AgentNewTicketPage() {
   const [touched, setTouched] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
-    fetch('/api/categories')
+    const url = selectedStoreId
+      ? `/api/categories?storeId=${selectedStoreId}`
+      : '/api/categories'
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         const categoryArray = data.categories || []
@@ -88,7 +93,7 @@ export default function AgentNewTicketPage() {
         console.error('Error fetching categories:', error)
         setCategories([])
       })
-  }, [])
+  }, [selectedStoreId])
 
   const priorities = [
     { value: 'LOW', label: 'Low', color: 'bg-gray-100 text-gray-700 border-gray-300', description: 'General inquiry' },

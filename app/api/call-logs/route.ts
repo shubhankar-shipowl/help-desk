@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
     const remark = searchParams.get('remark')
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
+    const storeId = searchParams.get('storeId')
 
     const skip = (page - 1) * limit
 
@@ -44,6 +45,27 @@ export async function GET(req: NextRequest) {
       agent: {
         tenantId, // Filter by tenant through agent relation
       },
+    }
+
+    // For admins, storeId is required to filter data by store
+    if (session.user.role === 'ADMIN') {
+      if (!storeId) {
+        return NextResponse.json(
+          { error: 'Store ID is required for admin users' },
+          { status: 400 }
+        )
+      }
+      // Filter by store through agent's storeId
+      where.agent = {
+        ...where.agent,
+        storeId: storeId,
+      }
+    } else if (storeId) {
+      // For agents, storeId is optional
+      where.agent = {
+        ...where.agent,
+        storeId: storeId,
+      }
     }
 
     // If agent, only show their own calls (unless admin)

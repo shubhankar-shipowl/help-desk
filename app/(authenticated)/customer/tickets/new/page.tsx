@@ -15,9 +15,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
+import { useStore } from '@/lib/store-context'
 
 export default function NewTicketPage() {
   const router = useRouter()
+  const { selectedStoreId } = useStore()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [categories, setCategories] = useState<Array<{ id: string; name: string; subjects: string[] | null }>>([])
@@ -53,7 +55,10 @@ export default function NewTicketPage() {
   }
 
   useEffect(() => {
-    fetch('/api/categories')
+    const url = selectedStoreId
+      ? `/api/categories?storeId=${selectedStoreId}`
+      : '/api/categories'
+    fetch(url)
       .then((res) => res.json())
       .then((data) => {
         const categoryArray = data.categories || []
@@ -64,7 +69,7 @@ export default function NewTicketPage() {
         })))
       })
       .catch(console.error)
-  }, [])
+  }, [selectedStoreId])
 
   // Reset subject when category changes
   useEffect(() => {

@@ -4,8 +4,6 @@ import { Badge } from '@/components/ui/badge'
 import { formatRelativeTime, formatDate } from '@/lib/utils'
 import { Ticket, Calendar, User } from 'lucide-react'
 import { notFound } from 'next/navigation'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,14 +53,6 @@ export default async function PublicTicketViewPage({
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-4xl mx-auto">
-        <div className="mb-6">
-          <Link href="/tickets/new">
-            <Button variant="ghost" size="sm">
-              ← Create New Ticket
-            </Button>
-          </Link>
-        </div>
-
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -74,11 +64,12 @@ export default async function PublicTicketViewPage({
                 ticket.status === 'RESOLVED'
                   ? 'bg-green-600 text-white'
                   : ticket.status === 'OPEN'
-                  ? 'bg-primary text-white'
+                  ? 'text-white'
                   : ticket.status === 'PENDING'
                   ? 'bg-warning text-white'
                   : 'bg-gray-400 text-white'
               }
+              style={ticket.status === 'OPEN' ? { backgroundColor: '#2bb9cd' } : undefined}
             >
               {ticket.status}
             </Badge>
@@ -113,8 +104,12 @@ export default async function PublicTicketViewPage({
                       className={`p-4 rounded-lg ${
                         comment.author.role === 'CUSTOMER'
                           ? 'bg-gray-50 border border-gray-200'
-                          : 'bg-primary/5 border border-primary/20'
+                          : 'border'
                       }`}
+                      style={comment.author.role !== 'CUSTOMER' ? { 
+                        backgroundColor: 'rgba(43, 185, 205, 0.05)', 
+                        borderColor: 'rgba(43, 185, 205, 0.2)' 
+                      } : undefined}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <span className="font-semibold text-sm">

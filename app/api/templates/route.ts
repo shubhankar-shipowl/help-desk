@@ -29,11 +29,20 @@ export async function GET(req: NextRequest) {
     const type = searchParams.get('type') || 'CANNED_RESPONSE'
     const category = searchParams.get('category')
     const search = searchParams.get('search')
+    const storeId = searchParams.get('storeId')
 
     const where: any = {
       tenantId, // Always filter by tenant
       type,
       isActive: true,
+    }
+
+    // Filter by store if provided
+    if (storeId !== null && storeId !== undefined && storeId !== '') {
+      where.OR = [
+        { storeId: storeId }, // Store-specific templates
+        { storeId: null }, // Tenant-level templates (available to all stores)
+      ]
     }
 
     if (category) {

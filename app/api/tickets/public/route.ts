@@ -22,6 +22,8 @@ export async function POST(req: NextRequest) {
     let priority: string
     let attachments: File[] = []
 
+    let storeId: string | null = null
+
     // Check if request is FormData (file upload) or JSON
     if (contentType.includes('multipart/form-data')) {
       const formData = await req.formData()
@@ -34,6 +36,7 @@ export async function POST(req: NextRequest) {
       description = (formData.get('description') as string) || ''
       categoryId = (formData.get('categoryId') as string) || ''
       priority = (formData.get('priority') as string) || 'NORMAL'
+      storeId = (formData.get('storeId') as string) || null
       
       // Handle file attachments
       const files = formData.getAll('attachments') as File[]
@@ -49,6 +52,7 @@ export async function POST(req: NextRequest) {
       description = body.description
       categoryId = body.categoryId || ''
       priority = body.priority || 'NORMAL'
+      storeId = body.storeId || null
     }
 
     // Validate required fields
@@ -145,6 +149,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Validate storeId if provided (must belong to the tenant)
+    if (storeId) {
+      const store = await prisma.store.findFirst({
+        where: {
+          id: storeId,
+          tenantId,
+          isActive: true,
+        },
+      })
+      
+      if (!store) {
+        return NextResponse.json(
+          { error: 'Invalid store ID or store does not belong to this tenant' },
+          { status: 400 }
+        )
+      }
+    }
+
     // Create ticket with order ID and tracking ID in description
     // Include order ID and tracking ID at the beginning of description for easy reference
     const descriptionWithOrder = `Order ID: ${order}\nTracking ID: ${trackingId}\n\n${description}`
@@ -152,6 +174,7 @@ export async function POST(req: NextRequest) {
     const ticket = await prisma.ticket.create({
       data: {
         tenantId, // Always include tenantId
+        storeId: storeId || null, // Include storeId if provided
         ticketNumber: generateTicketNumber(),
         subject,
         description: descriptionWithOrder,

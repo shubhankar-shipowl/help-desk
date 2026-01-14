@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
     const groupBy = searchParams.get('groupBy') || 'day' // day, week, month
+    const storeId = searchParams.get('storeId')
 
     // Get tenantId from session (multi-tenant support)
     const tenantId = (session.user as any).tenantId
@@ -29,6 +30,20 @@ export async function GET(req: NextRequest) {
 
     const where: any = {
       tenantId, // Always filter by tenant
+    }
+
+    // For admins, storeId is required to filter data by store
+    if (session.user.role === 'ADMIN') {
+      if (!storeId) {
+        return NextResponse.json(
+          { error: 'Store ID is required for admin users' },
+          { status: 400 }
+        )
+      }
+      where.storeId = storeId
+    } else if (storeId) {
+      // For agents, storeId is optional
+      where.storeId = storeId
     }
 
     if (startDate) {

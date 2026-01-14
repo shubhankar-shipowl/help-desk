@@ -17,6 +17,8 @@ import {
   ChevronRight,
   Phone,
   AlertTriangle,
+  Store,
+  Mail,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSidebar } from './sidebar-context'
@@ -67,6 +69,12 @@ export function Sidebar() {
       icon: Phone,
       agentOnly: false, // Both agents and admins can access
     },
+    {
+      label: 'Mail',
+      href: '/agent/mail',
+      icon: Mail,
+      agentOnly: true, // Both agents and admins can access
+    },
   ]
 
   const adminPenalizationItems: NavItem[] = [
@@ -95,6 +103,12 @@ export function Sidebar() {
       label: 'Users',
       href: '/admin/users',
       icon: UserCog,
+      adminOnly: true,
+    },
+    {
+      label: 'Stores',
+      href: '/admin/stores',
+      icon: Store,
       adminOnly: true,
     },
   ]

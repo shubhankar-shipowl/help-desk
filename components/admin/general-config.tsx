@@ -8,9 +8,11 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
 import { Settings, Save, Phone } from 'lucide-react'
+import { useStore } from '@/lib/store-context'
 
 export function GeneralConfig() {
   const { toast } = useToast()
+  const { selectedStoreId } = useStore()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -21,12 +23,15 @@ export function GeneralConfig() {
 
   useEffect(() => {
     fetchConfig()
-  }, [])
+  }, [selectedStoreId]) // Refetch when store changes
 
   const fetchConfig = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/integrations/general/config')
+      const url = selectedStoreId 
+        ? `/api/integrations/general/config?storeId=${selectedStoreId}`
+        : '/api/integrations/general/config'
+      const response = await fetch(url)
       
       if (!response.ok) {
         console.error('Failed to fetch general config')
@@ -51,13 +56,13 @@ export function GeneralConfig() {
   const handleSave = async () => {
     try {
       setSaving(true)
-      
       const response = await fetch('/api/integrations/general/config', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(config),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...config,
+          storeId: selectedStoreId, // Include storeId in save request
+        }),
       })
 
       if (!response.ok) {

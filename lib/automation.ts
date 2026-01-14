@@ -6,19 +6,34 @@ import fs from 'fs'
 import path from 'path'
 
 // Helper function to get system setting with tenant context
-async function getSystemSetting(key: string, tenantId?: string): Promise<string | null> {
+// Tries store-specific setting first, then falls back to tenant-level setting
+async function getSystemSetting(key: string, tenantId?: string, storeId?: string | null): Promise<string | null> {
   if (!tenantId) return null
   
   try {
-    const setting = await prisma.systemSettings.findUnique({
-      where: {
-        tenantId_key: {
+    // First try to find store-specific setting if storeId is provided
+    if (storeId) {
+      const storeSetting = await prisma.systemSettings.findFirst({
+        where: {
           tenantId,
+          storeId,
           key,
         },
+      })
+      if (storeSetting) {
+        return storeSetting.value || null
+      }
+    }
+    
+    // Fall back to tenant-level setting (where storeId is null)
+    const tenantSetting = await prisma.systemSettings.findFirst({
+      where: {
+        tenantId,
+        storeId: null,
+        key,
       },
     })
-    return setting?.value || null
+    return tenantSetting?.value || null
   } catch (error) {
     console.error(`Error fetching system setting ${key}:`, error)
     return null
@@ -112,6 +127,7 @@ export async function autoAssignTicket(ticketId: string) {
           <p><a href="${getAppUrl()}/agent/tickets/${ticketId}">View Ticket</a></p>
         `,
         tenantId: ticket.tenantId,
+        storeId: ticket.storeId || null,
       })
     } catch (error) {
       console.error('Error sending email notification:', error)
@@ -171,6 +187,7 @@ export async function autoResolveInactiveTickets(daysInactive: number = 7, tenan
           <p><a href="${getAppUrl()}/customer/tickets/${ticket.id}">View Ticket</a></p>
         `,
         tenantId: ticket.tenantId,
+        storeId: ticket.storeId || null,
       })
     }
 
@@ -231,6 +248,7 @@ export async function sendTicketAcknowledgment(ticketId: string, tenantId?: stri
         <p><a href="${getAppUrl()}/tickets/${ticket.id}">Track your ticket</a></p>
       `,
       tenantId: ticket.tenantId,
+      storeId: ticket.storeId || null,
     })
     return
   }
@@ -274,10 +292,10 @@ export async function sendTicketAcknowledgment(ticketId: string, tenantId?: stri
     TICKET_URL: ticketUrl,
     PORTAL_URL: portalUrl,
     EXPECTED_RESPONSE_TIME: '24 hours',
-    COMPANY_NAME: (ticket.tenantId ? await getSystemSetting('COMPANY_NAME', ticket.tenantId) : null) || process.env.COMPANY_NAME || 'Shipowl Support',
-    COMPANY_ADDRESS: (ticket.tenantId ? await getSystemSetting('COMPANY_ADDRESS', ticket.tenantId) : null) || process.env.COMPANY_ADDRESS || '',
-    SUPPORT_EMAIL: (ticket.tenantId ? await getSystemSetting('SUPPORT_EMAIL', ticket.tenantId) : null) || process.env.SUPPORT_EMAIL || process.env.SMTP_USER || 'support@example.com',
-    SUPPORT_PHONE: (ticket.tenantId ? await getSystemSetting('SUPPORT_PHONE', ticket.tenantId) : null) || process.env.SUPPORT_PHONE || '',
+    COMPANY_NAME: (ticket.tenantId ? await getSystemSetting('COMPANY_NAME', ticket.tenantId, ticket.storeId) : null) || process.env.COMPANY_NAME || 'Shipowl Support',
+    COMPANY_ADDRESS: (ticket.tenantId ? await getSystemSetting('COMPANY_ADDRESS', ticket.tenantId, ticket.storeId) : null) || process.env.COMPANY_ADDRESS || '',
+    SUPPORT_EMAIL: (ticket.tenantId ? await getSystemSetting('SUPPORT_EMAIL', ticket.tenantId, ticket.storeId) : null) || process.env.SUPPORT_EMAIL || process.env.SMTP_USER || 'support@example.com',
+    SUPPORT_PHONE: (ticket.tenantId ? await getSystemSetting('SUPPORT_PHONE', ticket.tenantId, ticket.storeId) : null) || process.env.SUPPORT_PHONE || '',
     CUSTOMER_EMAIL: ticket.customer.email,
     FACEBOOK_URL: process.env.FACEBOOK_URL || '#',
     TWITTER_URL: process.env.TWITTER_URL || '#',
@@ -297,6 +315,7 @@ export async function sendTicketAcknowledgment(ticketId: string, tenantId?: stri
     html,
     messageId,
     tenantId: ticket.tenantId,
+    storeId: ticket.storeId || null,
   })
 
   // Store Message-ID in ticket for email threading

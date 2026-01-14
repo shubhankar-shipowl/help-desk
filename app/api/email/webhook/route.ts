@@ -42,6 +42,8 @@ export async function POST(req: NextRequest) {
 
     // Extract email information
     const fromEmail = emailData.from || emailData.sender || emailData['envelope[from]'] || emailData['from']
+    const fromName = emailData.fromName || emailData['from-name'] || emailData['from_name'] || null
+    const toEmail = emailData.to || emailData.recipient || emailData['envelope[to]'] || emailData['to'] || ''
     const subject = emailData.subject || emailData['subject'] || ''
     const textContent = emailData.text || emailData['body-plain'] || emailData['body_text'] || emailData['text'] || ''
     const htmlContent = emailData.html || emailData['body-html'] || emailData['body_html'] || emailData['html'] || ''
@@ -73,6 +75,9 @@ export async function POST(req: NextRequest) {
     } else {
       parsedHeaders = headers
     }
+
+    // Extract message ID from headers
+    const messageId = parsedHeaders['message-id'] || parsedHeaders['Message-ID'] || emailData.messageId || emailData['message-id'] || `<${Date.now()}-${Math.random().toString(36).substring(7)}@email>`
 
     // Extract ticket ID from email headers or subject
     let ticketId: string | null = null
@@ -172,6 +177,9 @@ export async function POST(req: NextRequest) {
 
     // Find ticket by ID or ticket number
     let ticket = null
+    let tenantId: string | undefined
+    let storeId: string | null = null
+    
     if (ticketId) {
       ticket = await prisma.ticket.findUnique({
         where: { id: ticketId },
@@ -183,6 +191,51 @@ export async function POST(req: NextRequest) {
         where: { ticketNumber },
         include: { customer: true },
       })
+    }
+
+    // Get tenantId and storeId from ticket if found
+    if (ticket) {
+      tenantId = ticket.tenantId
+      storeId = ticket.storeId
+    } else {
+      // Try to find default tenant if no ticket found
+      const defaultTenant = await prisma.tenant.findFirst({
+        where: { slug: 'default' },
+      })
+      tenantId = defaultTenant?.id
+    }
+
+    // Store email in database (even if ticket not found)
+    if (tenantId && messageId) {
+      try {
+        // Check if email already exists
+        const existingEmail = await prisma.email.findUnique({
+          where: { messageId },
+        })
+
+        if (!existingEmail) {
+          await prisma.email.create({
+            data: {
+              tenantId,
+              storeId,
+              messageId,
+              fromEmail,
+              fromName,
+              toEmail,
+              subject,
+              textContent,
+              htmlContent,
+              headers: parsedHeaders,
+              ticketId: ticket?.id || null,
+              processed: !!ticket,
+              processedAt: ticket ? new Date() : null,
+            },
+          })
+        }
+      } catch (error: any) {
+        // Log error but don't fail the webhook
+        console.error('[Email Webhook] Error storing email:', error)
+      }
     }
 
     if (!ticket) {
@@ -293,6 +346,22 @@ export async function POST(req: NextRequest) {
       // Process attachments based on email service format
       // This is a simplified version - actual implementation depends on your email service
       console.log('[Email Webhook] Attachments found:', Object.keys(attachmentData))
+    }
+
+    // Update email record to mark as processed
+    if (messageId) {
+      try {
+        await prisma.email.updateMany({
+          where: { messageId },
+          data: {
+            processed: true,
+            processedAt: new Date(),
+            ticketId: ticket.id,
+          },
+        })
+      } catch (error: any) {
+        console.error('[Email Webhook] Error updating email:', error)
+      }
     }
 
     // Create comment from email reply

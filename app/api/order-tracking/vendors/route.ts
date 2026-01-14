@@ -25,12 +25,30 @@ export async function GET(req: NextRequest) {
       )
     }
 
+    // Get storeId from query params
+    const { searchParams } = new URL(req.url)
+    const storeId = searchParams.get('storeId')
+
+    // For admins, storeId is required to filter data by store
+    if (session.user.role === 'ADMIN') {
+      if (!storeId) {
+        return NextResponse.json(
+          { error: 'Store ID is required for admin users' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Build where clause
+    const where: any = { tenantId }
+    if (storeId) {
+      where.storeId = storeId
+    }
+
     // Get all order tracking data with pickup warehouses (used as vendors)
     // Since pickupWarehouse is required, we don't need to check for null
     const orderTrackingData = await prisma.orderTrackingData.findMany({
-      where: {
-        tenantId,
-      },
+      where,
       select: {
         pickupWarehouse: true,
       },

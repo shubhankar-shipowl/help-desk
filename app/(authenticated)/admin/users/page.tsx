@@ -1,7 +1,9 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { redirect } from 'next/navigation'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useSession } from 'next-auth/react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useStore } from '@/lib/store-context'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,82 +14,153 @@ import { AddUserDialog } from '@/components/admin/add-user-dialog'
 import { UserActionsMenu } from '@/components/admin/user-actions-menu'
 import { maskPhoneNumber, maskEmail } from '@/lib/utils'
 
-export default async function AdminUsersPage({
-  searchParams,
-}: {
-  searchParams: { search?: string; role?: string }
-}) {
-  const session = await getServerSession(authOptions)
-
-  if (!session || session.user.role !== 'ADMIN') {
-    redirect('/auth/signin')
+interface UserWithStats {
+  id: string
+  name: string | null
+  email: string
+  role: string
+  phone: string | null
+  company: string | null
+  isActive: boolean
+  _count: {
+    tickets: number
+    assignedTickets: number
   }
+  openTickets: number
+  resolvedTickets: number
+}
 
-  const where: any = {}
-
-  // Filter by role
-  if (searchParams.role && searchParams.role !== 'all') {
-    where.role = searchParams.role.toUpperCase()
-  }
-
-  // Search filter
-  if (searchParams.search) {
-    where.OR = [
-      { name: { contains: searchParams.search, mode: 'insensitive' } },
-      { email: { contains: searchParams.search, mode: 'insensitive' } },
-    ]
-  }
-
-  const users = await prisma.user.findMany({
-    where,
-    include: {
-      _count: {
-        select: {
-          tickets: true,
-          assignedTickets: true,
-        },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 100,
+export default function AdminUsersPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { selectedStoreId, loading: storeLoading } = useStore()
+  const [users, setUsers] = useState<UserWithStats[]>([])
+  const [roleCounts, setRoleCounts] = useState({
+    ADMIN: 0,
+    AGENT: 0,
+    CUSTOMER: 0,
   })
+  const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
+  const [roleFilter, setRoleFilter] = useState(searchParams.get('role') || 'all')
 
-  // Get additional stats for each user
-  const usersWithStats = await Promise.all(
-    users.map(async (user) => {
-      const [openTickets, resolvedTickets] = await Promise.all([
-        prisma.ticket.count({
-          where: {
-            customerId: user.id,
-            status: { in: ['NEW', 'OPEN', 'IN_PROGRESS'] },
-          },
-        }),
-        prisma.ticket.count({
-          where: {
-            customerId: user.id,
-            status: 'RESOLVED',
-          },
-        }),
-      ])
+  // Redirect if not admin
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/signin')
+    } else if (status === 'authenticated' && session?.user?.role !== 'ADMIN') {
+      router.push('/')
+    }
+  }, [status, session, router])
 
-      return {
-        ...user,
-        openTickets,
-        resolvedTickets,
+  // Fetch users when store is selected
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user?.role === 'ADMIN' && !storeLoading && selectedStoreId) {
+      fetchUsers()
+    }
+  }, [status, session, selectedStoreId, storeLoading, roleFilter, searchQuery])
+
+  const fetchUsers = async () => {
+    if (!selectedStoreId) return
+
+    try {
+      setLoading(true)
+      const params = new URLSearchParams({
+        storeId: selectedStoreId,
+      })
+      
+      if (roleFilter && roleFilter !== 'all') {
+        params.append('role', roleFilter)
       }
-    })
-  )
 
-  const roleCounts = {
-    ADMIN: await prisma.user.count({ where: { role: 'ADMIN' } }),
-    AGENT: await prisma.user.count({ where: { role: 'AGENT' } }),
-    CUSTOMER: await prisma.user.count({ where: { role: 'CUSTOMER' } }),
+      const response = await fetch(`/api/users?${params.toString()}`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch users')
+      }
+
+      const data = await response.json()
+      let fetchedUsers = data.users || []
+
+      // Apply search filter client-side
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase()
+        fetchedUsers = fetchedUsers.filter((user: any) =>
+          user.name?.toLowerCase().includes(query) ||
+          user.email?.toLowerCase().includes(query)
+        )
+      }
+
+      // Calculate stats for each user
+      const usersWithStats = await Promise.all(
+        fetchedUsers.map(async (user: any) => {
+          const ticketsResponse = await fetch(
+            `/api/tickets?storeId=${selectedStoreId}&customerId=${user.id}`
+          )
+          const ticketsData = await ticketsResponse.json()
+          const userTickets = ticketsData.tickets || []
+
+          const openTickets = userTickets.filter((t: any) =>
+            ['NEW', 'OPEN', 'IN_PROGRESS'].includes(t.status)
+          ).length
+          const resolvedTickets = userTickets.filter((t: any) =>
+            t.status === 'RESOLVED'
+          ).length
+
+          return {
+            ...user,
+            _count: {
+              tickets: userTickets.length,
+              assignedTickets: user.role === 'AGENT' ? userTickets.length : 0,
+            },
+            openTickets,
+            resolvedTickets,
+          }
+        })
+      )
+
+      // Calculate role counts
+      const counts = {
+        ADMIN: usersWithStats.filter((u) => u.role === 'ADMIN').length,
+        AGENT: usersWithStats.filter((u) => u.role === 'AGENT').length,
+        CUSTOMER: usersWithStats.filter((u) => u.role === 'CUSTOMER').length,
+      }
+
+      setUsers(usersWithStats)
+      setRoleCounts(counts)
+    } catch (error) {
+      console.error('Error fetching users:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const roleColors: Record<string, string> = {
     ADMIN: 'bg-red-100 text-red-700',
     AGENT: 'bg-blue-100 text-blue-700',
     CUSTOMER: 'bg-gray-100 text-gray-700',
+  }
+
+  if (status === 'loading' || storeLoading || loading) {
+    return (
+      <div>
+        <div className="mb-6">
+          <h1 className="text-h1 mb-2">User Management</h1>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!selectedStoreId) {
+    return (
+      <div>
+        <div className="mb-6">
+          <h1 className="text-h1 mb-2">User Management</h1>
+          <p className="text-gray-600">Please select a store to view users</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -137,63 +210,51 @@ export default async function AdminUsersPage({
       {/* Filters and Search */}
       <Card className="border border-gray-200 mb-6">
         <CardContent className="p-4">
-          <form action="/admin/users" method="get" className="flex flex-col md:flex-row gap-4">
+          <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <Input
-                name="search"
                 placeholder="Search users by name or email..."
                 className="pl-10"
-                defaultValue={searchParams.search}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
-              {searchParams.role && (
-                <input type="hidden" name="role" value={searchParams.role} />
-              )}
             </div>
             <div className="flex gap-2">
-              <Link href="/admin/users?role=all">
-                <Button
-                  variant={!searchParams.role || searchParams.role === 'all' ? 'default' : 'outline'}
-                  size="sm"
-                >
-                  All
-                </Button>
-              </Link>
-              <Link href="/admin/users?role=admin">
-                <Button
-                  variant={searchParams.role === 'admin' ? 'default' : 'outline'}
-                  size="sm"
-                >
-                  <Shield className="h-4 w-4 mr-1" />
-                  Admin
-                </Button>
-              </Link>
-              <Link href="/admin/users?role=agent">
-                <Button
-                  variant={searchParams.role === 'agent' ? 'default' : 'outline'}
-                  size="sm"
-                >
-                  <UserCheck className="h-4 w-4 mr-1" />
-                  Agent
-                </Button>
-              </Link>
-              <Link href="/admin/users?role=customer">
-                <Button
-                  type="button"
-                  variant={searchParams.role === 'customer' ? 'default' : 'outline'}
-                  size="sm"
-                >
-                  <User className="h-4 w-4 mr-1" />
-                  Customer
-                </Button>
-              </Link>
+              <Button
+                variant={roleFilter === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setRoleFilter('all')}
+              >
+                All
+              </Button>
+              <Button
+                variant={roleFilter === 'admin' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setRoleFilter('admin')}
+              >
+                <Shield className="h-4 w-4 mr-1" />
+                Admin
+              </Button>
+              <Button
+                variant={roleFilter === 'agent' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setRoleFilter('agent')}
+              >
+                <UserCheck className="h-4 w-4 mr-1" />
+                Agent
+              </Button>
+              <Button
+                variant={roleFilter === 'customer' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setRoleFilter('customer')}
+              >
+                <User className="h-4 w-4 mr-1" />
+                Customer
+              </Button>
             </div>
-            <Button type="submit" variant="outline" size="sm">
-              <Search className="h-4 w-4 mr-2" />
-              Search
-            </Button>
             <AddUserDialog />
-          </form>
+          </div>
         </CardContent>
       </Card>
 
@@ -206,7 +267,7 @@ export default async function AdminUsersPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {usersWithStats.length === 0 ? (
+          {users.length === 0 ? (
             <div className="text-center py-12">
               <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600">No users found</p>
@@ -225,7 +286,7 @@ export default async function AdminUsersPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {usersWithStats.map((user) => (
+                  {users.map((user) => (
                     <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-3">
@@ -314,4 +375,3 @@ export default async function AdminUsersPage({
     </div>
   )
 }
-

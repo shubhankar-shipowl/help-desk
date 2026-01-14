@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
     const teamId = searchParams.get('teamId')
+    const storeId = searchParams.get('storeId')
 
     const dateFilter: any = {}
     if (startDate || endDate) {
@@ -40,6 +41,20 @@ export async function GET(req: NextRequest) {
     const where: any = {
       tenantId, // Always filter by tenant
       ...dateFilter,
+    }
+
+    // For admins, storeId is required to filter data by store
+    if (session.user.role === 'ADMIN') {
+      if (!storeId) {
+        return NextResponse.json(
+          { error: 'Store ID is required for admin users' },
+          { status: 400 }
+        )
+      }
+      where.storeId = storeId
+    } else if (storeId) {
+      // For agents, storeId is optional
+      where.storeId = storeId
     }
 
     // Filter by team if specified

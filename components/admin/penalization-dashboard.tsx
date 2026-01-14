@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useStore } from '@/lib/store-context'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -57,6 +58,7 @@ interface Ticket {
 
 export function PenalizationDashboard() {
   const { toast } = useToast()
+  const { selectedStoreId } = useStore()
   const [activeTab, setActiveTab] = useState('filtered')
   
   // Section 1: Filtered Reports
@@ -90,8 +92,13 @@ export function PenalizationDashboard() {
 
   // Fetch vendors list
   const fetchVendors = async () => {
+    if (!selectedStoreId) {
+      setVendors([])
+      return
+    }
+    
     try {
-      const response = await fetch('/api/order-tracking/vendors')
+      const response = await fetch(`/api/order-tracking/vendors?storeId=${selectedStoreId}`)
       const data = await response.json()
       if (response.ok && data.vendors) {
         setVendors(data.vendors.sort())
@@ -103,12 +110,22 @@ export function PenalizationDashboard() {
 
   // Fetch filtered tickets
   const fetchFilteredTickets = async () => {
+    if (!selectedStoreId) {
+      toast({
+        title: 'Error',
+        description: 'Please select a store to view penalization data',
+        variant: 'destructive',
+      })
+      return
+    }
+
     try {
       setFilteredLoading(true)
       const params = new URLSearchParams({
         page: filteredPage.toString(),
         limit: '50',
         filter,
+        storeId: selectedStoreId,
       })
 
       if (vendorFilter && vendorFilter !== 'all') {
@@ -146,12 +163,22 @@ export function PenalizationDashboard() {
 
   // Fetch pending tickets
   const fetchPendingTickets = async () => {
+    if (!selectedStoreId) {
+      toast({
+        title: 'Error',
+        description: 'Please select a store to view pending penalization data',
+        variant: 'destructive',
+      })
+      return
+    }
+
     try {
       setPendingLoading(true)
       const params = new URLSearchParams({
         page: pendingPage.toString(),
         limit: '50',
         days: '30', // Last 30 days
+        storeId: selectedStoreId,
       })
 
       const response = await fetch(`/api/tickets/pending-penalization?${params.toString()}`)
@@ -176,13 +203,15 @@ export function PenalizationDashboard() {
   }
 
   useEffect(() => {
-    if (activeTab === 'filtered') {
-      fetchVendors()
-      fetchFilteredTickets()
-    } else if (activeTab === 'pending') {
-      fetchPendingTickets()
+    if (selectedStoreId) {
+      if (activeTab === 'filtered') {
+        fetchVendors()
+        fetchFilteredTickets()
+      } else if (activeTab === 'pending') {
+        fetchPendingTickets()
+      }
     }
-  }, [activeTab, filteredPage, filter, vendorFilter, startDate, endDate, pendingPage])
+  }, [activeTab, filteredPage, filter, vendorFilter, startDate, endDate, pendingPage, selectedStoreId])
 
   const handlePenalize = async () => {
     if (!selectedTicket) return

@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '50')
     const days = parseInt(searchParams.get('days') || '7') // Default: last 7 days
+    const storeId = searchParams.get('storeId')
 
     const skip = (page - 1) * limit
 
@@ -38,13 +39,27 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch resolved tickets that are NOT penalized, resolved within the last N days
-    const where = {
+    const where: any = {
       tenantId, // Always filter by tenant
       status: 'RESOLVED' as const,
       isPenalized: false,
       resolvedAt: {
         gte: dateThreshold,
       },
+    }
+
+    // For admins, storeId is required to filter data by store
+    if (session.user.role === 'ADMIN') {
+      if (!storeId) {
+        return NextResponse.json(
+          { error: 'Store ID is required for admin users' },
+          { status: 400 }
+        )
+      }
+      where.storeId = storeId
+    } else if (storeId) {
+      // For agents, storeId is optional
+      where.storeId = storeId
     }
 
     const [tickets, total] = await Promise.all([

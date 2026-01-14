@@ -5,6 +5,7 @@ import { NotificationItem } from './NotificationItem'
 import { EmptyNotifications } from './EmptyNotifications'
 import { Button } from '@/components/ui/button'
 import { useNotificationSocket } from '@/lib/notifications/client'
+import { useStore } from '@/lib/store-context'
 
 interface Notification {
   id: string
@@ -30,6 +31,7 @@ interface Notification {
 
 export function NotificationList() {
   const socket = useNotificationSocket()
+  const { selectedStoreId } = useStore()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [unreadCount, setUnreadCount] = useState(0)
@@ -37,7 +39,7 @@ export function NotificationList() {
   useEffect(() => {
     fetchNotifications()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [selectedStoreId])
 
   useEffect(() => {
     if (!socket) return
@@ -63,7 +65,15 @@ export function NotificationList() {
   async function fetchNotifications() {
     setLoading(true)
     try {
-      const response = await fetch('/api/notifications?limit=50')
+      const params = new URLSearchParams()
+      params.append('limit', '50')
+      
+      // Add storeId if available (for admins/agents)
+      if (selectedStoreId) {
+        params.append('storeId', selectedStoreId)
+      }
+      
+      const response = await fetch(`/api/notifications?${params.toString()}`)
       const data = await response.json()
       setNotifications(data.notifications || [])
       setUnreadCount(data.unreadCount || 0)
@@ -76,7 +86,13 @@ export function NotificationList() {
 
   async function markAllAsRead() {
     try {
-      await fetch('/api/notifications/mark-all-read', { method: 'PATCH' })
+      const params = new URLSearchParams()
+      // Add storeId if available (for admins/agents)
+      if (selectedStoreId) {
+        params.append('storeId', selectedStoreId)
+      }
+      
+      await fetch(`/api/notifications/mark-all-read?${params.toString()}`, { method: 'PATCH' })
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
       setUnreadCount(0)
       

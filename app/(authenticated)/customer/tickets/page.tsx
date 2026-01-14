@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
+import { useStore } from '@/lib/store-context'
 import { useNotificationSocket } from '@/lib/notifications/client'
 import {
   Search, Plus, Filter, TrendingUp, TrendingDown, Clock,
@@ -46,6 +47,7 @@ interface Stats {
 export default function CustomerTicketsPage() {
   const { data: session } = useSession()
   const router = useRouter()
+  const { selectedStoreId, loading: storeLoading } = useStore()
   const socket = useNotificationSocket()
   const [tickets, setTickets] = useState<TicketData[]>([])
   const [loading, setLoading] = useState(true)
@@ -60,10 +62,15 @@ export default function CustomerTicketsPage() {
   })
 
   useEffect(() => {
-    if (session) {
+    if (session && !storeLoading) {
+      // For admins, require store selection
+      if (session.user.role === 'ADMIN' && !selectedStoreId) {
+        setLoading(false)
+        return
+      }
       fetchTickets()
     }
-  }, [session])
+  }, [session, selectedStoreId, storeLoading])
 
   // Listen for ticket deletion via WebSocket
   useEffect(() => {
@@ -120,7 +127,25 @@ export default function CustomerTicketsPage() {
   async function fetchTickets() {
     try {
       setLoading(true)
-      const response = await fetch('/api/tickets')
+      
+      // For admins, storeId is required
+      if (session?.user?.role === 'ADMIN' && !selectedStoreId) {
+        setTickets([])
+        setLoading(false)
+        return
+      }
+
+      // Build API URL with storeId for admins
+      const params = new URLSearchParams()
+      if (session?.user?.role === 'ADMIN' && selectedStoreId) {
+        params.append('storeId', selectedStoreId)
+      } else if (session?.user?.role === 'AGENT' && selectedStoreId) {
+        params.append('storeId', selectedStoreId)
+      }
+      // For customers, don't pass storeId - they see all their tickets
+
+      const url = params.toString() ? `/api/tickets?${params.toString()}` : '/api/tickets'
+      const response = await fetch(url)
       if (!response.ok) throw new Error('Failed to fetch tickets')
       
       const data = await response.json()
@@ -273,6 +298,7 @@ export default function CustomerTicketsPage() {
           loading={loading}
           statusFilter={statusFilter}
           session={session}
+          selectedStoreId={selectedStoreId}
           onDeleteTicket={session?.user?.role === 'ADMIN' ? handleDeleteTicket : undefined}
         />
       </div>
@@ -497,12 +523,27 @@ function FiltersSection({
 // TICKETS SECTION
 // ========================================
 
-function TicketsSection({ tickets, loading, statusFilter, onDeleteTicket }: any) {
+function TicketsSection({ tickets, loading, statusFilter, onDeleteTicket, session, selectedStoreId }: any) {
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow-md p-8 text-center">
         <div className="w-12 h-12 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
         <p className="text-body text-gray-600">Loading your tickets...</p>
+      </div>
+    )
+  }
+
+  // Show message for admins without store selection
+  if (session?.user?.role === 'ADMIN' && !selectedStoreId) {
+    return (
+      <div className="bg-white rounded-lg shadow-md p-8 text-center">
+        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Ticket className="w-8 h-8 text-gray-400" />
+        </div>
+        <h3 className="text-h3 text-gray-900 mb-2">Please select a store</h3>
+        <p className="text-body text-gray-600 mb-4">
+          Please select a store from the dropdown to view tickets for that store.
+        </p>
       </div>
     )
   }

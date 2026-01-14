@@ -84,47 +84,55 @@ async function cleanDatabase() {
     const orderData = await prisma.orderTrackingData.deleteMany({})
     console.log(`   ✅ Deleted ${orderData.count} order tracking records`)
 
-    console.log('📊 Step 15: Deleting system settings...')
+    console.log('📊 Step 15: Deleting notification templates...')
+    const notificationTemplates = await prisma.notificationTemplate.deleteMany({})
+    console.log(`   ✅ Deleted ${notificationTemplates.count} notification templates`)
+
+    console.log('📊 Step 16: Deleting system settings...')
     const settings = await prisma.systemSettings.deleteMany({})
     console.log(`   ✅ Deleted ${settings.count} system settings`)
 
-    console.log('📊 Step 16: Deleting templates...')
+    console.log('📊 Step 17: Deleting templates...')
     const templates = await prisma.template.deleteMany({})
     console.log(`   ✅ Deleted ${templates.count} templates`)
 
-    console.log('📊 Step 17: Deleting auto assignment rules...')
+    console.log('📊 Step 18: Deleting auto assignment rules...')
     const rules = await prisma.autoAssignmentRule.deleteMany({})
     console.log(`   ✅ Deleted ${rules.count} auto assignment rules`)
 
-    console.log('📊 Step 18: Deleting Facebook integrations...')
+    console.log('📊 Step 19: Deleting Facebook integrations...')
     const fbIntegrations = await prisma.facebookIntegration.deleteMany({})
     console.log(`   ✅ Deleted ${fbIntegrations.count} Facebook integrations`)
 
-    console.log('📊 Step 19: Deleting tags...')
+    console.log('📊 Step 20: Deleting tags...')
     const tags = await prisma.tag.deleteMany({})
     console.log(`   ✅ Deleted ${tags.count} tags`)
 
-    console.log('📊 Step 20: Deleting team members...')
+    console.log('📊 Step 21: Deleting team members...')
     const teamMembers = await prisma.teamMember.deleteMany({})
     console.log(`   ✅ Deleted ${teamMembers.count} team members`)
 
-    console.log('📊 Step 21: Deleting SLA rules...')
+    console.log('📊 Step 22: Deleting SLA rules...')
     const slaRules = await prisma.sLARule.deleteMany({})
     console.log(`   ✅ Deleted ${slaRules.count} SLA rules`)
 
-    console.log('📊 Step 22: Deleting teams...')
+    console.log('📊 Step 23: Deleting teams...')
     const teams = await prisma.team.deleteMany({})
     console.log(`   ✅ Deleted ${teams.count} teams`)
 
-    console.log('📊 Step 23: Deleting categories...')
+    console.log('📊 Step 24: Deleting categories...')
     const categories = await prisma.category.deleteMany({})
     console.log(`   ✅ Deleted ${categories.count} categories`)
 
-    console.log('📊 Step 24: Deleting users...')
+    console.log('📊 Step 25: Deleting stores...')
+    const stores = await prisma.store.deleteMany({})
+    console.log(`   ✅ Deleted ${stores.count} stores`)
+
+    console.log('📊 Step 26: Deleting users...')
     const users = await prisma.user.deleteMany({})
     console.log(`   ✅ Deleted ${users.count} users`)
 
-    console.log('📊 Step 25: Deleting tenants...')
+    console.log('📊 Step 27: Deleting tenants...')
     const tenants = await prisma.tenant.deleteMany({})
     console.log(`   ✅ Deleted ${tenants.count} tenants`)
 
@@ -146,6 +154,7 @@ async function cleanDatabase() {
     console.log(`   - Call Logs: ${callLogs.count}`)
     console.log(`   - Tickets: ${tickets.count}`)
     console.log(`   - Order Tracking Data: ${orderData.count}`)
+    console.log(`   - Notification Templates: ${notificationTemplates.count}`)
     console.log(`   - System Settings: ${settings.count}`)
     console.log(`   - Templates: ${templates.count}`)
     console.log(`   - Auto Assignment Rules: ${rules.count}`)
@@ -155,6 +164,7 @@ async function cleanDatabase() {
     console.log(`   - SLA Rules: ${slaRules.count}`)
     console.log(`   - Teams: ${teams.count}`)
     console.log(`   - Categories: ${categories.count}`)
+    console.log(`   - Stores: ${stores.count}`)
     console.log(`   - Users: ${users.count}`)
     console.log(`   - Tenants: ${tenants.count}`)
     console.log('')

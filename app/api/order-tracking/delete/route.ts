@@ -27,15 +27,42 @@ export async function DELETE(req: NextRequest) {
       )
     }
 
-    // Get query parameter to confirm deletion
+    // Get query parameters
     const { searchParams } = new URL(req.url)
     const confirm = searchParams.get('confirm')
+    const storeId = searchParams.get('storeId')
 
     if (confirm !== 'true') {
       return NextResponse.json(
         { error: 'Deletion must be confirmed. Add ?confirm=true to the request.' },
         { status: 400 }
       )
+    }
+
+    // For admins, storeId is required to filter data by store
+    if (session.user.role === 'ADMIN' && !storeId) {
+      return NextResponse.json(
+        { error: 'Store ID is required for admin users' },
+        { status: 400 }
+      )
+    }
+
+    // Validate storeId if provided
+    if (storeId) {
+      const store = await prisma.store.findFirst({
+        where: {
+          id: storeId,
+          tenantId,
+          isActive: true,
+        },
+      })
+      
+      if (!store) {
+        return NextResponse.json(
+          { error: 'Invalid store ID or store does not belong to this tenant' },
+          { status: 400 }
+        )
+      }
     }
 
     // Check if model exists
@@ -47,10 +74,14 @@ export async function DELETE(req: NextRequest) {
       )
     }
 
-    // Count existing records for this tenant
-    const count = await prisma.orderTrackingData.count({
-      where: { tenantId },
-    })
+    // Build where clause
+    const where: any = { tenantId }
+    if (storeId) {
+      where.storeId = storeId
+    }
+
+    // Count existing records
+    const count = await prisma.orderTrackingData.count({ where })
 
     if (count === 0) {
       return NextResponse.json({
@@ -60,10 +91,8 @@ export async function DELETE(req: NextRequest) {
       })
     }
 
-    // Delete all records for this tenant
-    const result = await prisma.orderTrackingData.deleteMany({
-      where: { tenantId }, // Only delete data from this tenant
-    })
+    // Delete records
+    const result = await prisma.orderTrackingData.deleteMany({ where })
 
     console.log(`[Order Tracking] Deleted ${result.count} records by admin ${session.user.id}`)
 

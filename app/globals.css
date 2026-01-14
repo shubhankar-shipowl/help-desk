@@ -2,6 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Email content styling */
+.email-content {
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.email-content p {
+  margin-bottom: 1em;
+}
+
+.email-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.email-content a {
+  color: #6366f1;
+  text-decoration: underline;
+}
+
+.email-content a:hover {
+  color: #4f46e5;
+}
+
 @layer base {
   :root {
     /* Colors - Primary */
