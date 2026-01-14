@@ -103,22 +103,30 @@ export async function POST(req: NextRequest) {
     ]
 
     for (const setting of settingsToSave) {
-      await prisma.systemSettings.upsert({
+      // Check if setting already exists (tenant-level, storeId: null)
+      const existing = await prisma.systemSettings.findFirst({
         where: {
-          tenantId_key: {
-            tenantId,
-            key: setting.key,
-          },
-        },
-        update: {
-          value: setting.value,
-        },
-        create: {
           tenantId,
+          storeId: null,
           key: setting.key,
-          value: setting.value,
         },
       })
+
+      if (existing) {
+        await prisma.systemSettings.update({
+          where: { id: existing.id },
+          data: { value: setting.value },
+        })
+      } else {
+        await prisma.systemSettings.create({
+          data: {
+            tenantId,
+            storeId: null, // Tenant-level setting
+            key: setting.key,
+            value: setting.value,
+          },
+        })
+      }
     }
 
     return NextResponse.json({

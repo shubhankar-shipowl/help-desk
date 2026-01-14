@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
+import StoreSelect from '@/components/stores/StoreSelect'
 
 interface EditUserDialogProps {
   user: {
@@ -29,6 +30,7 @@ interface EditUserDialogProps {
     role: string
     phone?: string | null
     isActive: boolean
+    storeId?: string | null
   }
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -44,6 +46,7 @@ export function EditUserDialog({ user, open, onOpenChange, onSuccess }: EditUser
     role: user.role,
     phone: user.phone || '',
     isActive: user.isActive,
+    storeId: user.storeId || null,
   })
 
   useEffect(() => {
@@ -54,6 +57,7 @@ export function EditUserDialog({ user, open, onOpenChange, onSuccess }: EditUser
         role: user.role,
         phone: user.phone || '',
         isActive: user.isActive,
+        storeId: user.storeId || null,
       })
     }
   }, [open, user])
@@ -72,6 +76,7 @@ export function EditUserDialog({ user, open, onOpenChange, onSuccess }: EditUser
           role: formData.role,
           phone: formData.phone,
           isActive: formData.isActive,
+          storeId: formData.storeId,
         }),
       })
 
@@ -174,6 +179,16 @@ export function EditUserDialog({ user, open, onOpenChange, onSuccess }: EditUser
                 </SelectContent>
               </Select>
             </div>
+            {(formData.role === 'AGENT' || formData.role === 'ADMIN') && (
+              <div className="space-y-2">
+                <StoreSelect
+                  value={formData.storeId}
+                  onChange={(storeId) => setFormData({ ...formData, storeId })}
+                  label="Assign to Store"
+                  required={false}
+                />
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

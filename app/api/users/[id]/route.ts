@@ -110,6 +110,28 @@ export async function PATCH(
       updateData.phone = body.phone
     }
 
+    // Only admins can update storeId
+    if (isAdmin && body.storeId !== undefined) {
+      // Validate storeId if provided (must belong to tenant)
+      if (body.storeId) {
+        const store = await prisma.store.findFirst({
+          where: {
+            id: body.storeId,
+            tenantId,
+            isActive: true,
+          },
+        })
+
+        if (!store) {
+          return NextResponse.json(
+            { error: 'Invalid store ID or store does not belong to this tenant' },
+            { status: 400 }
+          )
+        }
+      }
+      updateData.storeId = body.storeId || null
+    }
+
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
     }

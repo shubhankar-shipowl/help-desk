@@ -33,6 +33,7 @@ interface UserActionsMenuProps {
     role: string
     isActive: boolean
     phone?: string | null
+    storeId?: string | null
   }
 }
 
