@@ -173,11 +173,36 @@ export async function fetchGmailEmails(
                 console.log(`[IMAP] Parsing email ${seqno}, buffer size: ${emailBuffer.length} bytes`)
                 simpleParser(emailBuffer)
                   .then((parsed: ParsedMail) => {
+                    // Handle 'from' field - can be AddressObject or AddressObject[]
+                    let fromEmail = ''
+                    let fromName: string | null = null
+                    if (parsed.from) {
+                      if (Array.isArray(parsed.from)) {
+                        fromEmail = parsed.from[0]?.address || ''
+                        fromName = parsed.from[0]?.name || null
+                      } else {
+                        fromEmail = parsed.from.value?.[0]?.address || ''
+                        fromName = parsed.from.value?.[0]?.name || null
+                      }
+                    }
+
+                    // Handle 'to' field - can be AddressObject or AddressObject[]
+                    let toEmail = ''
+                    if (parsed.to) {
+                      if (Array.isArray(parsed.to)) {
+                        toEmail = parsed.to[0]?.address || ''
+                      } else if (typeof parsed.to === 'object' && 'value' in parsed.to) {
+                        toEmail = parsed.to.value?.[0]?.address || parsed.to.text || ''
+                      } else if (typeof parsed.to === 'object' && 'text' in parsed.to) {
+                        toEmail = parsed.to.text || ''
+                      }
+                    }
+
                     const fetchedEmail: FetchedEmail = {
                       messageId: parsed.messageId || `<${Date.now()}-${Math.random().toString(36).substring(7)}@gmail>`,
-                      fromEmail: parsed.from?.value[0]?.address || '',
-                      fromName: parsed.from?.value[0]?.name || null,
-                      toEmail: parsed.to?.value[0]?.address || parsed.to?.text || '',
+                      fromEmail,
+                      fromName,
+                      toEmail,
                       subject: parsed.subject || '(No Subject)',
                       date: parsed.date || new Date(),
                       textContent: parsed.text || null,
