@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Test IMAP connection
-    return new Promise((resolve) => {
+    return new Promise<NextResponse>((resolve) => {
       const imap = new Imap({
         user: imapEmail,
         password: imapAppPassword,
