@@ -174,13 +174,16 @@ export async function fetchGmailEmails(
                 simpleParser(emailBuffer)
                   .then((parsed: ParsedMail) => {
                     // Handle 'from' field - can be AddressObject or AddressObject[]
+                    // AddressObject has a 'value' property which is an array of {address, name}
                     let fromEmail = ''
                     let fromName: string | null = null
                     if (parsed.from) {
                       if (Array.isArray(parsed.from)) {
-                        fromEmail = parsed.from[0]?.address || ''
-                        fromName = parsed.from[0]?.name || null
+                        // If array, each element is AddressObject with value property
+                        fromEmail = parsed.from[0]?.value?.[0]?.address || ''
+                        fromName = parsed.from[0]?.value?.[0]?.name || null
                       } else {
+                        // If single AddressObject, access value array
                         fromEmail = parsed.from.value?.[0]?.address || ''
                         fromName = parsed.from.value?.[0]?.name || null
                       }
@@ -190,11 +193,11 @@ export async function fetchGmailEmails(
                     let toEmail = ''
                     if (parsed.to) {
                       if (Array.isArray(parsed.to)) {
-                        toEmail = parsed.to[0]?.address || ''
-                      } else if (typeof parsed.to === 'object' && 'value' in parsed.to) {
+                        // If array, each element is AddressObject with value property
+                        toEmail = parsed.to[0]?.value?.[0]?.address || ''
+                      } else {
+                        // If single AddressObject, access value array or text
                         toEmail = parsed.to.value?.[0]?.address || parsed.to.text || ''
-                      } else if (typeof parsed.to === 'object' && 'text' in parsed.to) {
-                        toEmail = parsed.to.text || ''
                       }
                     }
 
@@ -390,11 +393,13 @@ export async function fetchAndStoreGmailEmails(
         // Note: createMany doesn't support createdAt override in some Prisma versions,
         // so we'll use individual creates in a transaction for better compatibility
         await prisma.$transaction(
-          batch.map(emailData =>
-            prisma.email.create({
-              data: emailData,
-            })
-          ),
+          async (tx) => {
+            for (const emailData of batch) {
+              await tx.email.create({
+                data: emailData,
+              })
+            }
+          },
           {
             timeout: 30000, // 30 second timeout per batch
           }

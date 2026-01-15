@@ -9,20 +9,25 @@ const globalForPrisma = globalThis as unknown as {
 // This ensures new enum values are picked up without server restart
 if (process.env.NODE_ENV === "development") {
   const currentSchemaVersion = "1.0.4"; // Increment this when schema changes (added Email model)
-  if (globalForPrisma.prisma && globalForPrisma.prismaVersion !== currentSchemaVersion) {
+  const existingPrisma = globalForPrisma.prisma;
+  if (existingPrisma && globalForPrisma.prismaVersion !== currentSchemaVersion) {
     console.log("[Prisma] Schema changed, recreating Prisma client...");
-    globalForPrisma.prisma.$disconnect().catch(() => {
+    existingPrisma.$disconnect().catch(() => {
       // Ignore disconnect errors
     });
     globalForPrisma.prisma = undefined;
   }
   // Force clear if Email model doesn't exist
-  if (globalForPrisma.prisma && !('email' in globalForPrisma.prisma)) {
-    console.log("[Prisma] Email model missing, recreating Prisma client...");
-    globalForPrisma.prisma.$disconnect().catch(() => {
-      // Ignore disconnect errors
-    });
-    globalForPrisma.prisma = undefined;
+  const currentPrisma = globalForPrisma.prisma;
+  if (currentPrisma) {
+    const hasEmailModel = 'email' in currentPrisma;
+    if (!hasEmailModel) {
+      console.log("[Prisma] Email model missing, recreating Prisma client...");
+      (currentPrisma as PrismaClient).$disconnect().catch(() => {
+        // Ignore disconnect errors
+      });
+      globalForPrisma.prisma = undefined;
+    }
   }
   globalForPrisma.prismaVersion = currentSchemaVersion;
 }
