@@ -9,7 +9,7 @@ emailQueue.process(
   'send-email',
   5, // Concurrency: process 5 emails at a time
   async (job) => {
-    const { notificationId, to, subject, html, text, type, userId, tenantId, inReplyTo, references } = job.data
+    const { notificationId, to, subject, html, text, type, userId, tenantId, storeId, inReplyTo, references } = job.data
 
     console.log(`[Email Worker] 📧 Processing email job:`, {
       jobId: job.id,
@@ -19,20 +19,24 @@ emailQueue.process(
       type,
       format: text ? 'plain text' : 'html',
       tenantId: tenantId || 'default',
+      storeId: storeId || 'default',
     })
 
     try {
-      // Get tenantId from user if not provided in job data
+      // Get tenantId and storeId from user or notification if not provided
       let finalTenantId = tenantId
-      if (!finalTenantId && userId) {
+      let finalStoreId = storeId
+      
+      if ((!finalTenantId || !finalStoreId) && userId) {
         try {
           const user = await prisma.user.findUnique({
             where: { id: userId },
-            select: { tenantId: true },
+            select: { tenantId: true, storeId: true },
           })
-          finalTenantId = user?.tenantId || undefined
+          finalTenantId = finalTenantId || user?.tenantId || undefined
+          finalStoreId = finalStoreId || user?.storeId || undefined
         } catch (error) {
-          console.warn(`[Email Worker] Could not fetch tenantId from user ${userId}:`, error)
+          console.warn(`[Email Worker] Could not fetch tenant/store from user ${userId}:`, error)
         }
       }
 
@@ -45,7 +49,13 @@ emailQueue.process(
         inReplyTo,
         references,
         tenantId: finalTenantId,
+        storeId: finalStoreId,
       })
+
+      // Check if email was actually sent successfully
+      if (!result.success) {
+        throw new Error(result.error?.message || 'Email sending failed')
+      }
 
       // Update delivery log
       await prisma.notificationDeliveryLog.updateMany({
@@ -56,16 +66,16 @@ emailQueue.process(
         data: {
           status: 'SENT',
           sentAt: new Date(),
-          messageId: (result as any).messageId || undefined,
+          messageId: result.messageId || undefined,
         },
       })
 
       console.log(`[Email Worker] ✅ Email sent successfully:`, {
         notificationId,
         to,
-        messageId: (result as any).messageId,
+        messageId: result.messageId,
       })
-      return { success: true, messageId: (result as any).messageId }
+      return { success: true, messageId: result.messageId }
     } catch (error: any) {
       console.error(`[Email Worker] ❌ Email send failed:`, {
         notificationId,

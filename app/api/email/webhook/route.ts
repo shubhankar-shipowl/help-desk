@@ -365,12 +365,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Create comment from email reply
+    const commentNow = new Date()
     const comment = await prisma.comment.create({
       data: {
         content: replyContent.trim(),
         ticketId: ticket.id,
         authorId: customer.id,
         isInternal: false,
+        createdAt: commentNow,
+        updatedAt: commentNow,
       },
       include: {
         author: {

@@ -23,8 +23,8 @@ interface Store {
   isActive: boolean
   createdAt: string
   _count?: {
-    users: number
-    tickets: number
+    User: number
+    Ticket: number
   }
 }
 
@@ -243,10 +243,10 @@ export default function StoresPage() {
             {store._count && (
               <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between text-sm">
                 <span className="text-gray-600">
-                  {store._count.users} Agent{store._count.users !== 1 ? 's' : ''}
+                  {store._count.User} Agent{store._count.User !== 1 ? 's' : ''}
                 </span>
                 <span className="text-gray-600">
-                  {store._count.tickets} Ticket{store._count.tickets !== 1 ? 's' : ''}
+                  {store._count.Ticket} Ticket{store._count.Ticket !== 1 ? 's' : ''}
                 </span>
               </div>
             )}

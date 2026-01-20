@@ -96,7 +96,7 @@ export class TicketNotificationTriggers {
         await notificationService.createNotification({
           type: 'TICKET_MENTION',
           title: 'You were mentioned',
-          message: `${comment.author?.name || comment.author?.email} mentioned you in ticket ${ticket.ticketNumber}`,
+          message: `${comment.User?.name || comment.User?.email} mentioned you in ticket ${ticket.ticketNumber}`,
           userId: mentionedUserId,
           ticketId: ticket.id,
           actorId: comment.authorId,
@@ -109,13 +109,13 @@ export class TicketNotificationTriggers {
       }
     } else {
       // Public reply
-      if (comment.author.role === 'CUSTOMER') {
+      if (comment.User?.role === 'CUSTOMER') {
         // Customer replied - notify assigned agent
         if (ticket.assignedAgentId) {
           await notificationService.createNotification({
             type: 'TICKET_REPLY',
             title: 'New Customer Reply',
-            message: `${comment.author?.name || comment.author?.email} replied to ticket ${ticket.ticketNumber}`,
+            message: `${comment.User?.name || comment.User?.email} replied to ticket ${ticket.ticketNumber}`,
             userId: ticket.assignedAgentId,
             ticketId: ticket.id,
             actorId: comment.authorId,
@@ -128,17 +128,29 @@ export class TicketNotificationTriggers {
         }
       } else {
         // Agent replied - notify customer with full reply content
+        // The customer relation might be named differently in Prisma (User_Ticket_customerIdToUser)
+        const customer = ticket.customer || ticket.User_Ticket_customerIdToUser
+        
         console.log('[TicketTriggers] Agent reply - notifying customer:', {
           customerId: ticket.customerId,
-          customerEmail: ticket.customer?.email,
+          customerEmail: customer?.email,
           replyContent: comment.content?.substring(0, 50),
         })
 
+        // If customer not included, fetch from database
+        let customerEmail = customer?.email
+        if (!customerEmail && ticket.customerId) {
+          const fetchedCustomer = await prisma.user.findUnique({
+            where: { id: ticket.customerId },
+            select: { email: true, name: true },
+          })
+          customerEmail = fetchedCustomer?.email
+        }
+
         // Verify customer has email before creating notification
-        if (!ticket.customer?.email) {
+        if (!customerEmail) {
           console.error('[TicketTriggers] ❌ Cannot notify customer: No email address found', {
             customerId: ticket.customerId,
-            customer: ticket.customer,
           })
           return
         }
@@ -146,7 +158,7 @@ export class TicketNotificationTriggers {
         await notificationService.createNotification({
           type: 'TICKET_REPLY',
           title: 'New Reply on Your Ticket',
-          message: `${comment.author?.name || 'An agent'} replied to your ticket ${ticket.ticketNumber}`,
+          message: `${comment.User?.name || 'An agent'} replied to your ticket ${ticket.ticketNumber}`,
           userId: ticket.customerId,
           ticketId: ticket.id,
           actorId: comment.authorId,
@@ -155,8 +167,8 @@ export class TicketNotificationTriggers {
             ticketSubject: ticket.subject,
             replyContent: comment.content, // Full reply content for email
             replyPreview: comment.content.substring(0, 100),
-            agentName: comment.author?.name || 'Support Agent',
-            agentEmail: comment.author?.email || '',
+            agentName: comment.User?.name || 'Support Agent',
+            agentEmail: comment.User?.email || '',
           },
           channels: ['IN_APP', 'EMAIL'],
         })

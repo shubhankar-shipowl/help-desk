@@ -47,15 +47,24 @@ export async function GET(req: NextRequest) {
       include: {
         _count: {
           select: {
-            tickets: true,
-            members: true,
+            Ticket: true,
+            TeamMember: true,
           },
         },
       },
       orderBy: { name: 'asc' },
     })
 
-    return NextResponse.json({ teams })
+    // Transform teams to use frontend-friendly field names
+    const transformedTeams = teams.map((team: any) => ({
+      ...team,
+      _count: {
+        tickets: team._count?.Ticket || 0,
+        members: team._count?.TeamMember || 0,
+      },
+    }))
+
+    return NextResponse.json({ teams: transformedTeams })
   } catch (error: any) {
     console.error('Error fetching teams:', error)
     return NextResponse.json(

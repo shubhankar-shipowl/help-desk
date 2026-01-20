@@ -7,7 +7,7 @@ import { useNotificationSocket } from '@/lib/notifications/client'
 import { useStore } from '@/lib/store-context'
 import { TicketDetail } from './ticket-detail'
 import { formatRelativeTime, maskEmail } from '@/lib/utils'
-import { TicketStatus, TicketPriority } from '@prisma/client'
+import { Ticket_status, Ticket_priority } from '@prisma/client'
 import {
   Search, Plus, Filter, MoreVertical, Clock, MessageSquare,
   User, Mail, Phone, Tag, AlertCircle, CheckCircle, XCircle,
@@ -36,8 +36,8 @@ interface Ticket {
     email: string
     avatar?: string | null
   }
-  status: TicketStatus
-  priority: TicketPriority
+  status: Ticket_status
+  priority: Ticket_priority
   assignedAgent?: {
     name: string | null
     email: string

@@ -50,8 +50,8 @@ export async function GET(req: NextRequest) {
         updatedAt: true,
         _count: {
           select: {
-            users: true,
-            tickets: true,
+            User: true,
+            Ticket: true,
           },
         },
       },

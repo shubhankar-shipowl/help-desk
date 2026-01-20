@@ -149,40 +149,18 @@ export async function GET(req: NextRequest) {
     const categoryId = searchParams.get('categoryId')
     const customerId = searchParams.get('customerId')
     const storeId = searchParams.get('storeId')
-    const assignedAgentId = searchParams.get('assignedAgentId')
 
     const where: any = {
       tenantId, // Always filter by tenant
     }
 
-    // For admins, storeId is required to filter data by store
-    // If not provided, return empty array instead of error to prevent UI breakage
-    if (session.user.role === 'ADMIN') {
-      if (!storeId) {
-        // Return empty array for admins without storeId selection
-        return NextResponse.json({ tickets: [] })
-      }
-      where.storeId = storeId
-    } else if (session.user.role === 'AGENT' && storeId) {
-      // For agents, storeId is optional
-      where.storeId = storeId
-    }
-    // Note: For CUSTOMER role, we don't filter by storeId - customers should see all their tickets
-
     // If customerId is provided in query params, use it (for admins/agents viewing customer tickets)
     if (customerId && (session.user.role === 'ADMIN' || session.user.role === 'AGENT')) {
       where.customerId = customerId
     } else if (session.user.role === 'CUSTOMER') {
-      // Customers should see ALL their tickets regardless of store
       where.customerId = session.user.id
-      console.log('[Tickets API] Customer query - filtering by customerId:', session.user.id, 'tenantId:', tenantId)
     } else if (session.user.role === 'AGENT') {
       where.assignedAgentId = session.user.id
-    }
-
-    // Support assignedAgentId filter for admin queries
-    if (assignedAgentId && session.user.role === 'ADMIN') {
-      where.assignedAgentId = assignedAgentId
     }
 
     // Handle status filter - can be comma-separated string or single value
@@ -214,6 +192,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (categoryId) where.categoryId = categoryId
+    if (storeId) where.storeId = storeId
 
     const tickets = await prisma.ticket.findMany({
       where,
@@ -228,34 +207,37 @@ export async function GET(req: NextRequest) {
         updatedAt: true,
         resolvedAt: true,
         customerId: true,
-        customer: {
+        User_Ticket_customerIdToUser: {
           select: { name: true, email: true },
         },
-        category: true,
-        assignedAgent: {
+        Category: true,
+        User_Ticket_assignedAgentIdToUser: {
           select: { name: true, email: true },
         },
-        store: {
+        Store: {
           select: { id: true, name: true },
         },
         _count: {
-          select: { comments: true, attachments: true },
+          select: { Comment: true, Attachment: true },
         },
       },
       orderBy: { createdAt: 'desc' },
     })
 
-    // Debug logging for customer queries
-    if (session.user.role === 'CUSTOMER') {
-      console.log('[Tickets API] Customer tickets query result:', {
-        customerId: session.user.id,
-        ticketsFound: tickets.length,
-        ticketNumbers: tickets.map(t => t.ticketNumber),
-        whereClause: where,
-      })
-    }
+    // Transform tickets to use frontend-friendly field names
+    const transformedTickets = tickets.map((ticket: any) => ({
+      ...ticket,
+      customer: ticket.User_Ticket_customerIdToUser || null,
+      category: ticket.Category || null,
+      assignedAgent: ticket.User_Ticket_assignedAgentIdToUser || null,
+      store: ticket.Store || null,
+      _count: {
+        comments: ticket._count?.Comment || 0,
+        attachments: ticket._count?.Attachment || 0,
+      },
+    }))
 
-    return NextResponse.json({ tickets })
+    return NextResponse.json({ tickets: transformedTickets })
   } catch (error: any) {
     console.error('Error fetching tickets:', error)
     return NextResponse.json(

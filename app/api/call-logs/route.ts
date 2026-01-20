@@ -40,10 +40,10 @@ export async function GET(req: NextRequest) {
 
     const skip = (page - 1) * limit
 
-    // Build where clause - filter by tenant through agent
+    // Build where clause - filter by tenant through agent (User relation)
     const where: any = {
-      agent: {
-        tenantId, // Filter by tenant through agent relation
+      User: {
+        tenantId, // Filter by tenant through User relation
       },
     }
 
@@ -55,15 +55,15 @@ export async function GET(req: NextRequest) {
           { status: 400 }
         )
       }
-      // Filter by store through agent's storeId
-      where.agent = {
-        ...where.agent,
+      // Filter by store through User's storeId
+      where.User = {
+        ...where.User,
         storeId: storeId,
       }
     } else if (storeId) {
       // For agents, storeId is optional
-      where.agent = {
-        ...where.agent,
+      where.User = {
+        ...where.User,
         storeId: storeId,
       }
     }
@@ -124,8 +124,8 @@ export async function GET(req: NextRequest) {
 
     // Build where clause for dates (without agent restriction for calendar dots)
     const datesWhere: any = {
-      agent: {
-        tenantId, // Filter by tenant through agent relation
+      User: {
+        tenantId, // Filter by tenant through User relation
       },
     }
     if (session.user.role === 'AGENT') {
@@ -137,14 +137,14 @@ export async function GET(req: NextRequest) {
       prisma.callLog.findMany({
         where,
         include: {
-          agent: {
+          User: {
             select: {
               id: true,
               name: true,
               email: true,
             },
           },
-          ticket: {
+          Ticket: {
             select: {
               id: true,
               ticketNumber: true,
@@ -177,11 +177,11 @@ export async function GET(req: NextRequest) {
       return {
         id: log.id,
         ticketId: log.ticketId,
-        ticketNumber: log.ticket?.ticketNumber,
-        ticketSubject: log.ticket?.subject,
+        ticketNumber: log.Ticket?.ticketNumber,
+        ticketSubject: log.Ticket?.subject,
         agentId: log.agentId,
-        agentName: log.agent.name,
-        agentEmail: log.agent.email,
+        agentName: log.User.name,
+        agentEmail: log.User.email,
         customerName: log.customerName,
         customerPhone: log.customerPhone,
         agentPhone: log.agentPhone,

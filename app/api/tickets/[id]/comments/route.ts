@@ -60,7 +60,7 @@ export async function POST(
         id: resolvedParams.id,
         tenantId, // Security: Only access tickets from same tenant
       },
-      include: { customer: true, assignedAgent: true },
+      include: { User_Ticket_customerIdToUser: true, User_Ticket_assignedAgentIdToUser: true },
     })
 
     if (!ticket) {
@@ -80,15 +80,19 @@ export async function POST(
       )
     }
 
+    const commentNow = new Date()
     const comment = await prisma.comment.create({
       data: {
+        id: crypto.randomUUID(), // Generate unique ID
         content: content || 'Attachment only',
         isInternal: isInternal || false,
         ticketId: resolvedParams.id,
         authorId: session.user.id,
+        createdAt: commentNow,
+        updatedAt: commentNow,
       },
       include: {
-        author: {
+        User: {
           select: { id: true, name: true, email: true, avatar: true, role: true },
         },
       },
@@ -124,6 +128,7 @@ export async function POST(
               // Create attachment record with MEGA file URL
               await prisma.attachment.create({
                 data: {
+                  id: crypto.randomUUID(), // Generate unique ID
                   filename: file.name,
                   fileUrl: uploadResult.fileUrl, // Stores /api/storage/mega/{fileHandle}
                   fileSize: uploadResult.fileSize,
@@ -157,9 +162,10 @@ export async function POST(
     const fullTicket = await prisma.ticket.findUnique({
       where: { id: ticket.id },
       include: {
-        customer: true,
-        assignedAgent: true,
-        category: true,
+        User_Ticket_customerIdToUser: true,
+        User_Ticket_assignedAgentIdToUser: true,
+        Category: true,
+        Email: true, // Include linked emails
       },
     })
 
@@ -167,13 +173,59 @@ export async function POST(
       const fullComment = await prisma.comment.findUnique({
         where: { id: comment.id },
         include: {
-          author: true,
+          User: true,
         },
       })
 
       if (fullComment) {
         const { ticketNotificationTriggers } = await import('@/lib/notifications/triggers/ticketTriggers')
         await ticketNotificationTriggers.onNewReply(fullComment, fullTicket)
+      }
+
+      // Create EmailReply record if this is an agent reply and ticket was created from email
+      if (!isInternal && session.user.role !== 'CUSTOMER') {
+        // Find the original email that created this ticket
+        const originalEmail = await prisma.email.findFirst({
+          where: { ticketId: ticket.id },
+          orderBy: { createdAt: 'asc' },
+        })
+
+        if (originalEmail) {
+          try {
+            const customerEmail = fullTicket.User_Ticket_customerIdToUser?.email
+            if (customerEmail) {
+              const replyNow = new Date()
+              await prisma.emailReply.create({
+                data: {
+                  id: crypto.randomUUID(),
+                  tenantId,
+                  storeId: ticket.storeId || null,
+                  originalEmailId: originalEmail.id,
+                  ticketId: ticket.id,
+                  sentBy: session.user.id,
+                  toEmail: customerEmail,
+                  subject: `Re: ${ticket.subject}`,
+                  bodyText: content,
+                  bodyHtml: null,
+                  inReplyTo: fullTicket.originalEmailMessageId || null,
+                  references: fullTicket.originalEmailMessageId || null,
+                  status: 'SENT',
+                  sentAt: replyNow,
+                  createdAt: replyNow,
+                  updatedAt: replyNow,
+                },
+              })
+              console.log(`[Comments] ✅ EmailReply created for ticket ${ticket.ticketNumber}:`, {
+                originalEmailId: originalEmail.id,
+                toEmail: customerEmail,
+                contentPreview: content.substring(0, 50),
+              })
+            }
+          } catch (emailReplyError) {
+            console.error('[Comments] Error creating EmailReply:', emailReplyError)
+            // Don't fail the request if EmailReply creation fails
+          }
+        }
       }
     }
 
@@ -230,7 +282,7 @@ export async function GET(
         isInternal: session.user.role === 'CUSTOMER' ? false : undefined, // Customers can't see internal notes
       },
       include: {
-        author: {
+        User: {
           select: { id: true, name: true, email: true, avatar: true, role: true },
         },
       },

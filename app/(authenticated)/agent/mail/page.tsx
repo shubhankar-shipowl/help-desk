@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { useStore } from '@/lib/store-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,9 +14,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Mail, MailOpen, Clock, User, FileText, Loader2, AlertCircle, RefreshCw, Download, ChevronDown, ChevronUp, Calendar, AtSign, Trash2, CheckSquare, Square, AlertTriangle } from 'lucide-react'
+
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Mail, MailOpen, Clock, User, FileText, Loader2, AlertCircle, RefreshCw, Download, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calendar, AtSign, Trash2, CheckSquare, Square, AlertTriangle, Paperclip, Radio, Wifi, WifiOff, Play, Pause, Plus, Send, MessageSquare, Upload, X, Image, Smile } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { useToast } from '@/components/ui/use-toast'
+import { cn } from '@/lib/utils'
+
+interface EmailAttachment {
+  id: string
+  filename: string
+  mimeType: string
+  size: number
+  fileUrl: string | null
+}
 
 interface Email {
   id: string
@@ -30,12 +44,29 @@ interface Email {
   readAt: Date | null
   createdAt: Date
   ticketId: string | null
+  hasAttachments: boolean
+  EmailAttachment?: EmailAttachment[]
+  replies?: Array<{
+    id: string
+    subject: string
+    bodyText: string | null
+    sentAt: Date | null
+  }>
   ticket: {
     id: string
     ticketNumber: string
     subject: string
     status: string
   } | null
+}
+
+// Helper function to format file size
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 export default function MailPage() {
@@ -57,25 +88,442 @@ export default function MailPage() {
     type: 'selected' | 'all'
     count: number
   }>({ open: false, type: 'selected', count: 0 })
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [pageSize] = useState(25) // Emails per page
 
-  // Fetch emails from database when filter or store changes
-  useEffect(() => {
-    if (!storeLoading) {
-      fetchEmails()
+  // Real-time sync state
+  const [syncRunning, setSyncRunning] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<{
+    lastSync: string | null
+    emailsSynced: number
+    idleConnected: boolean
+  } | null>(null)
+  const [syncLoading, setSyncLoading] = useState(false)
+
+  // Reply and Ticket Modal states
+  const [replyModal, setReplyModal] = useState<{
+    open: boolean
+    email: Email | null
+  }>({ open: false, email: null })
+  const [ticketModal, setTicketModal] = useState<{
+    open: boolean
+    email: Email | null
+  }>({ open: false, email: null })
+  const [categories, setCategories] = useState<Array<{ id: string; name: string; subjects: string[] | null }>>([])
+  const [replying, setReplying] = useState(false)
+  const [creatingTicket, setCreatingTicket] = useState(false)
+  const [replyForm, setReplyForm] = useState({
+    subject: '',
+    body: '',
+    toEmail: '',
+    ccEmail: '',
+  })
+  
+  // Inline reply state (Gmail-style)
+  const [showInlineReply, setShowInlineReply] = useState(false)
+  const [ccVisible, setCcVisible] = useState(false)
+  const [bccVisible, setBccVisible] = useState(false)
+  const [bccEmail, setBccEmail] = useState('')
+  const [replyAttachments, setReplyAttachments] = useState<File[]>([])
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const replyFileInputRef = useRef<HTMLInputElement>(null)
+  const replyImageInputRef = useRef<HTMLInputElement>(null)
+  
+  // Common emojis for quick picker
+  const commonEmojis = ['😊', '👍', '🙏', '❤️', '😂', '🎉', '✅', '⭐', '🔥', '💯', '👏', '🤝', '📧', '📞', '🛒', '📦']
+  const [ticketForm, setTicketForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    order: '',
+    trackingId: '',
+    subject: '',
+    description: '',
+    categoryId: '',
+    priority: 'NORMAL',
+    assignedAgentId: '',
+  })
+  const [ticketFormErrors, setTicketFormErrors] = useState<Record<string, string>>({})
+  const lookupTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // File upload states
+  const [attachments, setAttachments] = useState<File[]>([])
+  const [singleFile, setSingleFile] = useState<File | null>(null)
+  const [imageFiles, setImageFiles] = useState<[File | null, File | null, File | null]>([null, null, null])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const singleFileInputRef = useRef<HTMLInputElement>(null)
+  const imageFileInputRefs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)]
+
+  // Check if selected category requires attachments
+  const requiresAttachments = () => {
+    if (!ticketForm.categoryId) return false
+    const selectedCategory = categories.find(cat => cat.id === ticketForm.categoryId)
+    if (!selectedCategory) return false
+    
+    const categoryName = selectedCategory.name.toLowerCase()
+    // Remove emojis and special characters, normalize spaces
+    const cleanName = categoryName.replace(/[📦🔄&/]/g, ' ').replace(/\s+/g, ' ').trim()
+    
+    // Check for "Order & Product Issues" or similar
+    const isOrderProduct = cleanName.includes('order') && cleanName.includes('product')
+    
+    // Check for "Return / Refund / Replacement" or similar
+    const isReturnRefund = cleanName.includes('return') && (cleanName.includes('refund') || cleanName.includes('replacement'))
+    
+    return isOrderProduct || isReturnRefund
+  }
+
+  // Format file size helper
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  }
+
+  // File upload handlers
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) {
+      const maxSize = 10 * 1024 * 1024 // 10MB
+      const validFiles = files.filter(file => {
+        if (file.size > maxSize) {
+          toast({
+            title: 'File too large',
+            description: `${file.name} exceeds 10MB limit`,
+            variant: 'destructive',
+          })
+          return false
+        }
+        return true
+      })
+      
+      const newFiles = [...attachments, ...validFiles].slice(0, 5)
+      setAttachments(newFiles)
+      
+      if (validFiles.length > 0) {
+        toast({
+          title: 'Files selected',
+          description: `${validFiles.length} file(s) added`,
+        })
+      }
     }
-  }, [filter, selectedStoreId, storeLoading])
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
 
-  const fetchEmails = async () => {
+  const handleSingleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Check if it's a video
+      if (!file.type.startsWith('video/')) {
+        toast({
+          title: 'Invalid file type',
+          description: 'Only video files are allowed in this section',
+          variant: 'destructive',
+        })
+        if (singleFileInputRef.current) {
+          singleFileInputRef.current.value = ''
+        }
+        return
+      }
+      const maxSize = 10 * 1024 * 1024 // 10MB
+      if (file.size > maxSize) {
+        toast({
+          title: 'File too large',
+          description: `${file.name} exceeds 10MB limit`,
+          variant: 'destructive',
+        })
+        if (singleFileInputRef.current) {
+          singleFileInputRef.current.value = ''
+        }
+        return
+      }
+      setSingleFile(file)
+      if (ticketFormErrors.attachments) {
+        setTicketFormErrors(prev => {
+          const newErrors = { ...prev }
+          delete newErrors.attachments
+          return newErrors
+        })
+      }
+      toast({
+        title: 'Video selected',
+        description: `${file.name} added`,
+      })
+    }
+    if (singleFileInputRef.current) {
+      singleFileInputRef.current.value = ''
+    }
+  }
+
+  const handleImageFileSelect = (index: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Check if it's an image
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: 'Invalid file type',
+          description: 'Only images are allowed in this section',
+          variant: 'destructive',
+        })
+        if (imageFileInputRefs[index].current) {
+          imageFileInputRefs[index].current.value = ''
+        }
+        return
+      }
+      const maxSize = 10 * 1024 * 1024 // 10MB
+      if (file.size > maxSize) {
+        toast({
+          title: 'File too large',
+          description: `${file.name} exceeds 10MB limit`,
+          variant: 'destructive',
+        })
+        if (imageFileInputRefs[index].current) {
+          imageFileInputRefs[index].current.value = ''
+        }
+        return
+      }
+      const newImageFiles: [File | null, File | null, File | null] = [...imageFiles]
+      newImageFiles[index] = file
+      setImageFiles(newImageFiles)
+      if (ticketFormErrors.attachments) {
+        setTicketFormErrors(prev => {
+          const newErrors = { ...prev }
+          delete newErrors.attachments
+          return newErrors
+        })
+      }
+      toast({
+        title: 'Image selected',
+        description: `${file.name} added`,
+      })
+    }
+    if (imageFileInputRefs[index].current) {
+      imageFileInputRefs[index].current.value = ''
+    }
+  }
+
+  const handleRemoveAttachment = (index: number) => {
+    setAttachments(attachments.filter((_, i) => i !== index))
+  }
+
+  const handleRemoveSingleFile = () => {
+    setSingleFile(null)
+  }
+
+  const handleRemoveImageFile = (index: number) => {
+    const newImageFiles: [File | null, File | null, File | null] = [...imageFiles]
+    newImageFiles[index] = null
+    setImageFiles(newImageFiles)
+  }
+
+  // Get available subjects based on selected category
+  const getAvailableSubjects = () => {
+    if (!ticketForm.categoryId) {
+      return []
+    }
+    const selectedCategory = categories.find(cat => cat.id === ticketForm.categoryId)
+    if (!selectedCategory) {
+      return []
+    }
+    // Use subjects from database if available, otherwise return empty array
+    // Handle JSON field which might be stored as object or array
+    if (selectedCategory.subjects) {
+      if (Array.isArray(selectedCategory.subjects)) {
+        return selectedCategory.subjects.filter((s: any) => s && typeof s === 'string' && s.trim() !== '')
+      }
+      // If it's an object, try to convert it
+      if (typeof selectedCategory.subjects === 'object') {
+        const subjectsArray = Object.values(selectedCategory.subjects).filter((s: any) => s && typeof s === 'string' && s.trim() !== '')
+        return subjectsArray.length > 0 ? subjectsArray : []
+      }
+    }
+    return []
+  }
+
+  // Reset subject when category changes
+  useEffect(() => {
+    if (ticketModal.open && ticketForm.categoryId) {
+      setTicketForm(prev => ({ ...prev, subject: '' }))
+    }
+  }, [ticketForm.categoryId, ticketModal.open])
+
+
+  // Reset to page 1 when filter changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filter, selectedStoreId])
+
+  // Fetch categories for ticket creation
+  useEffect(() => {
+    if (selectedStoreId) {
+      const url = selectedStoreId ? `/api/categories?storeId=${selectedStoreId}` : '/api/categories'
+      fetch(url)
+        .then((res) => res.json())
+      .then((data) => {
+        const categoryArray = data.categories || []
+        setCategories(categoryArray.map((cat: any) => ({
+          id: cat.id,
+          name: cat.name,
+          subjects: cat.subjects || null,
+        })))
+      })
+        .catch((error) => {
+          console.error('Error fetching categories:', error)
+          setCategories([])
+        })
+    }
+  }, [selectedStoreId])
+
+  // Fetch emails from database when filter, store, or page changes (with debounce)
+  const fetchDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  
+  useEffect(() => {
+    // Clear any existing debounce timer
+    if (fetchDebounceRef.current) {
+      clearTimeout(fetchDebounceRef.current)
+    }
+    
+    if (!storeLoading && selectedStoreId) {
+      // Debounce the fetch to prevent rapid re-fetching during initialization
+      fetchDebounceRef.current = setTimeout(() => {
+        fetchEmails()
+      }, 100) // 100ms debounce
+    } else if (!storeLoading && session?.user?.role !== 'ADMIN') {
+      // For non-admin users without a store requirement
+      fetchDebounceRef.current = setTimeout(() => {
+        fetchEmails()
+      }, 100)
+    }
+    
+    return () => {
+      if (fetchDebounceRef.current) {
+        clearTimeout(fetchDebounceRef.current)
+      }
+    }
+  }, [filter, selectedStoreId, storeLoading, currentPage])
+
+  // Check sync status on load and periodically
+  useEffect(() => {
+    if (selectedStoreId) {
+      // Check sync status immediately on mount to restore state
+      checkSyncStatus()
+      const interval = setInterval(checkSyncStatus, 10000) // Check every 10 seconds
+      return () => clearInterval(interval)
+    } else {
+      // Reset sync state when store changes
+      setSyncRunning(false)
+      setSyncStatus(null)
+    }
+  }, [selectedStoreId])
+
+  // Auto-refresh emails when sync is running (silent - no loading spinner)
+  useEffect(() => {
+    if (syncRunning && selectedStoreId) {
+      const interval = setInterval(() => {
+        fetchEmails(true) // Pass silent=true to avoid showing loading spinner
+      }, 15000) // Refresh every 15 seconds when sync is running
+      return () => clearInterval(interval)
+    }
+  }, [syncRunning, selectedStoreId, filter, currentPage])
+
+  const checkSyncStatus = async () => {
+    if (!selectedStoreId) return
+    
+    try {
+      const response = await fetch(`/api/emails/sync?storeId=${selectedStoreId}`)
+      const data = await response.json()
+      
+      if (response.ok) {
+        setSyncRunning(data.isRunning || false)
+        if (data.status) {
+          setSyncStatus({
+            lastSync: data.status.lastSync,
+            emailsSynced: data.status.emailsSynced || 0,
+            idleConnected: data.status.idleConnected || false,
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error checking sync status:', error)
+    }
+  }
+
+  const toggleSync = async () => {
+    if (!selectedStoreId) {
+      toast({
+        title: 'Error',
+        description: 'Please select a store first',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setSyncLoading(true)
+    try {
+      const action = syncRunning ? 'stop' : 'start'
+      const response = await fetch('/api/emails/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, storeId: selectedStoreId }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || `Failed to ${action} sync`)
+      }
+
+      setSyncRunning(data.isRunning)
+      if (data.status) {
+        setSyncStatus({
+          lastSync: data.status.lastSync,
+          emailsSynced: data.status.emailsSynced || 0,
+          idleConnected: data.status.idleConnected || false,
+        })
+      }
+
+      toast({
+        title: 'Success',
+        description: data.message,
+      })
+
+      // Refresh emails after starting sync
+      if (action === 'start') {
+        setTimeout(() => fetchEmails(), 2000)
+      }
+    } catch (error: any) {
+      console.error('Error toggling sync:', error)
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to toggle sync',
+        variant: 'destructive',
+      })
+    } finally {
+      setSyncLoading(false)
+    }
+  }
+
+  const fetchEmails = async (silent = false) => {
     // For admins, require store selection
     if (session?.user?.role === 'ADMIN' && !selectedStoreId) {
       setLoading(false)
       return
     }
 
-    setLoading(true)
+    // Only show loading spinner for non-silent refreshes
+    if (!silent) {
+      setLoading(true)
+    }
+    
     try {
       const params = new URLSearchParams()
-      params.append('limit', '50') // Show 50 latest emails
+      params.append('page', currentPage.toString())
+      params.append('limit', pageSize.toString())
       
       if (filter === 'unread') {
         params.append('read', 'false')
@@ -99,10 +547,14 @@ export default function MailPage() {
       setUnreadCount(data.unreadCount || 0)
       setTotalCount(data.totalAll || data.total || 0) // Use totalAll for "All" count
       setReadCount(data.readCount || 0)
+      setTotalPages(data.totalPages || 1)
     } catch (error: any) {
       console.error('Error fetching emails:', error)
     } finally {
-      setLoading(false)
+      // Only update loading state for non-silent refreshes
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }
 
@@ -332,6 +784,366 @@ export default function MailPage() {
     }
   }
 
+  const openReplyModal = (email: Email) => {
+    setReplyForm({
+      subject: email.subject.startsWith('Re:') ? email.subject : `Re: ${email.subject}`,
+      body: '',
+      toEmail: email.fromEmail,
+      ccEmail: '',
+    })
+    setReplyModal({ open: true, email })
+  }
+
+  const closeReplyModal = () => {
+    setReplyModal({ open: false, email: null })
+    setReplyForm({ subject: '', body: '', toEmail: '', ccEmail: '' })
+  }
+
+  const sendReply = async () => {
+    // For inline reply, use expandedEmailId; for modal, use replyModal.email
+    const emailId = expandedEmailId || replyModal.email?.id
+    
+    if (!emailId || !replyForm.body.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a reply message',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setReplying(true)
+    try {
+      const response = await fetch(`/api/emails/${emailId}/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          subject: replyForm.subject,
+          body: replyForm.body,
+          toEmail: replyForm.toEmail,
+          ccEmail: replyForm.ccEmail || undefined,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send reply')
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Email reply sent successfully',
+      })
+
+      // Close inline reply form or modal
+      setShowInlineReply(false)
+      closeReplyModal()
+      setReplyForm({ subject: '', body: '', toEmail: '', ccEmail: '' })
+      fetchEmails() // Refresh to show updated email
+    } catch (error: any) {
+      console.error('Error sending reply:', error)
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to send email reply',
+        variant: 'destructive',
+      })
+    } finally {
+      setReplying(false)
+    }
+  }
+
+  const openTicketModal = async (email: Email) => {
+    if (email.ticketId) {
+      // Verify the ticket actually exists before showing error
+      try {
+        const response = await fetch(`/api/tickets/${email.ticketId}`)
+        if (response.ok) {
+          const ticketData = await response.json()
+          if (ticketData.ticket) {
+            toast({
+              title: 'Already Linked',
+              description: 'This email is already linked to a ticket',
+              variant: 'destructive',
+            })
+            return
+          }
+        }
+        // Ticket doesn't exist - backend will clear invalid ticketId when creating new ticket
+        // Continue to open modal
+      } catch (error) {
+        console.error('Error checking ticket:', error)
+        // If check fails, allow ticket creation to proceed
+        // Backend will verify and clear invalid ticketId if needed
+      }
+    }
+    // Pre-fill form with email data
+    const emailContent = email.textContent || email.htmlContent?.replace(/<[^>]*>/g, '') || ''
+    setTicketForm({
+      name: email.fromName || email.fromEmail.split('@')[0] || '',
+      email: email.fromEmail,
+      phone: '',
+      order: '',
+      trackingId: '',
+      subject: email.subject,
+      description: emailContent.substring(0, 5000), // Limit description length
+      categoryId: '',
+      priority: 'NORMAL',
+      assignedAgentId: '',
+    })
+    setTicketFormErrors({})
+    // Reset file uploads
+    setAttachments([])
+    setSingleFile(null)
+    setImageFiles([null, null, null])
+    setTicketModal({ open: true, email })
+  }
+
+  const closeTicketModal = () => {
+    // Clear timeout if modal is closed
+    if (lookupTimeoutRef.current) {
+      clearTimeout(lookupTimeoutRef.current)
+    }
+    setTicketModal({ open: false, email: null })
+    setTicketForm({
+      name: '',
+      email: '',
+      phone: '',
+      order: '',
+      trackingId: '',
+      subject: '',
+      description: '',
+      categoryId: '',
+      priority: 'NORMAL',
+      assignedAgentId: '',
+    })
+    setTicketFormErrors({})
+    // Reset file uploads
+    setAttachments([])
+    setSingleFile(null)
+    setImageFiles([null, null, null])
+  }
+
+  // Lookup Order ID and Tracking ID by phone number
+  const lookupOrderTracking = async (phone: string) => {
+    try {
+      // Normalize phone number
+      const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '')
+      
+      if (normalizedPhone.length < 10) {
+        return
+      }
+
+      // Build lookup URL with storeId if available
+      const params = new URLSearchParams({
+        phone: normalizedPhone,
+      })
+      if (selectedStoreId) {
+        params.append('storeId', selectedStoreId)
+      }
+
+      const response = await fetch(`/api/order-tracking/lookup?${params.toString()}`)
+      const data = await response.json()
+
+      if (data.found && data.orderId && data.trackingId) {
+        // Auto-fill Order ID and Tracking ID
+        setTicketForm(prev => ({
+          ...prev,
+          order: data.orderId,
+          trackingId: data.trackingId,
+        }))
+        
+        // Clear any existing errors for these fields
+        setTicketFormErrors(prev => ({
+          ...prev,
+          order: '',
+          trackingId: '',
+        }))
+
+        toast({
+          title: 'Order information found',
+          description: 'Order ID and Tracking ID have been auto-filled',
+        })
+      }
+    } catch (error) {
+      // Silently fail - don't show error if lookup fails
+      console.error('Error looking up order tracking:', error)
+    }
+  }
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (lookupTimeoutRef.current) {
+        clearTimeout(lookupTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const validateTicketForm = (): boolean => {
+    const errors: Record<string, string> = {}
+    
+    if (!ticketForm.name.trim()) {
+      errors.name = 'Name is required'
+    } else if (ticketForm.name.trim().length < 2) {
+      errors.name = 'Name must be at least 2 characters'
+    }
+    
+    if (!ticketForm.email.trim()) {
+      errors.email = 'Email is required'
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(ticketForm.email)) {
+        errors.email = 'Please enter a valid email address'
+      }
+    }
+    
+    if (!ticketForm.phone.trim()) {
+      errors.phone = 'Phone number is required'
+    }
+    
+    if (!ticketForm.order.trim()) {
+      errors.order = 'Order ID is required'
+    }
+    
+    if (!ticketForm.trackingId.trim()) {
+      errors.trackingId = 'Tracking ID is required'
+    }
+    
+    if (!ticketForm.categoryId.trim()) {
+      errors.categoryId = 'Category is required'
+    }
+    
+    if (!ticketForm.subject.trim()) {
+      errors.subject = 'Subject is required'
+    } else if (ticketForm.subject.trim().length < 5) {
+      errors.subject = 'Subject must be at least 5 characters'
+    }
+    
+    if (!ticketForm.description.trim()) {
+      errors.description = 'Description is required'
+    } else if (ticketForm.description.trim().length < 20) {
+      errors.description = 'Please provide more details (at least 20 characters)'
+    }
+    
+    // Check if attachments are required for selected category
+    if (requiresAttachments()) {
+      // Collect all files: single file + image files + old attachments
+      const allFiles: File[] = []
+      if (singleFile) allFiles.push(singleFile)
+      imageFiles.forEach(file => {
+        if (file) allFiles.push(file)
+      })
+      attachments.forEach(file => allFiles.push(file))
+
+      if (allFiles.length === 0) {
+        errors.attachments = 'Images or videos are required for this category'
+      }
+    }
+    
+    setTicketFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const createTicketFromEmail = async () => {
+    if (!ticketModal.email) return
+
+    // Validate form
+    if (!validateTicketForm()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please fill in all required fields correctly',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setCreatingTicket(true)
+    try {
+      // Collect all files: single file + image files + attachments
+      const allFiles: File[] = []
+      if (singleFile) allFiles.push(singleFile)
+      imageFiles.forEach(file => {
+        if (file) allFiles.push(file)
+      })
+      attachments.forEach(file => allFiles.push(file))
+
+      let response: Response
+
+      if (allFiles.length > 0) {
+        // Use FormData for file uploads
+        const formDataToSend = new FormData()
+        formDataToSend.append('name', ticketForm.name.trim())
+        formDataToSend.append('email', ticketForm.email.trim())
+        formDataToSend.append('phone', ticketForm.phone.trim())
+        formDataToSend.append('order', ticketForm.order.trim())
+        formDataToSend.append('trackingId', ticketForm.trackingId.trim())
+        formDataToSend.append('subject', ticketForm.subject.trim())
+        formDataToSend.append('description', ticketForm.description.trim())
+        formDataToSend.append('categoryId', ticketForm.categoryId || '')
+        formDataToSend.append('priority', ticketForm.priority)
+        if (ticketForm.assignedAgentId) {
+          formDataToSend.append('assignedAgentId', ticketForm.assignedAgentId)
+        }
+
+        allFiles.forEach(file => {
+          formDataToSend.append('attachments', file)
+        })
+
+        response = await fetch(`/api/emails/${ticketModal.email.id}/create-ticket`, {
+          method: 'POST',
+          body: formDataToSend,
+        })
+      } else {
+        // Use JSON for no files
+        response = await fetch(`/api/emails/${ticketModal.email.id}/create-ticket`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: ticketForm.name.trim(),
+            email: ticketForm.email.trim(),
+            phone: ticketForm.phone.trim(),
+            order: ticketForm.order.trim(),
+            trackingId: ticketForm.trackingId.trim(),
+            subject: ticketForm.subject.trim(),
+            description: ticketForm.description.trim(),
+            categoryId: ticketForm.categoryId || undefined,
+            priority: ticketForm.priority,
+            assignedAgentId: ticketForm.assignedAgentId || undefined,
+          }),
+        })
+      }
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create ticket')
+      }
+
+      toast({
+        title: 'Success',
+        description: `Ticket ${data.ticket?.ticketNumber} created successfully`,
+      })
+
+      closeTicketModal()
+      fetchEmails() // Refresh to show updated email with ticket link
+    } catch (error: any) {
+      console.error('Error creating ticket:', error)
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create ticket from email',
+        variant: 'destructive',
+      })
+    } finally {
+      setCreatingTicket(false)
+    }
+  }
+
+
   if (storeLoading || loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -360,178 +1172,283 @@ export default function MailPage() {
   }
 
   return (
-    <div>
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-h1 mb-2">Mail</h1>
-            <p className="text-gray-600">View and manage all incoming emails</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {unreadCount > 0 && (
-              <Badge 
-                variant="destructive" 
-                className="text-sm font-semibold px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white border-0"
-              >
-                {unreadCount} unread
-              </Badge>
-            )}
-            {selectedEmails.size > 0 && (
-              <>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={deleteSelectedEmails}
-                  disabled={deleting}
-                  className="gap-2 bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm"
-                >
-                  {deleting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-4 h-4" />
-                  )}
-                  {deleting ? 'Deleting...' : `Delete Selected (${selectedEmails.size})`}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSelectedEmails(new Set())}
-                  disabled={deleting}
-                  className="font-medium border-gray-300 hover:bg-gray-50"
-                >
-                  Cancel
-                </Button>
-              </>
-            )}
-            {selectedEmails.size === 0 && (
-              <>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={deleteAllEmails}
-                  disabled={deleting || emails.length === 0}
-                  className="gap-2 bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm"
-                >
-                  {deleting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-4 h-4" />
-                  )}
-                  {deleting ? 'Deleting...' : 'Delete All'}
-                </Button>
-                <div className="h-6 w-px bg-gray-300 mx-1" />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fetchFromGmail('unread')}
-                  disabled={fetching || !selectedStoreId}
-                  className="gap-2 font-medium border-gray-300 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
-                >
-                  {fetching ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Download className="w-4 h-4" />
-                  )}
-                  {fetching ? 'Fetching...' : 'Fetch Unread'}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fetchFromGmail('latest')}
-                  disabled={fetching || !selectedStoreId}
-                  className="gap-2 font-medium border-gray-300 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
-                >
-                  {fetching ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                  {fetching ? 'Fetching...' : 'Fetch Latest'}
-                </Button>
-              </>
-            )}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-200 shadow-sm">
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <Mail className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-800">Mail</h1>
+                  <p className="text-sm text-slate-500">Manage your inbox</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-3">
+              {unreadCount > 0 && (
+                <div className="flex items-center bg-red-50 text-red-600 px-4 py-2 rounded-lg border border-red-100">
+                  <span className="font-semibold">{unreadCount}</span>
+                  <span className="ml-1 text-sm">unread</span>
+                </div>
+              )}
+              
+              {selectedEmails.size > 0 ? (
+                <>
+                  <Button
+                    onClick={deleteSelectedEmails}
+                    disabled={deleting}
+                    className="gap-2 bg-red-500 hover:bg-red-600 text-white shadow-md"
+                  >
+                    {deleting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                    <span className="font-medium">{deleting ? 'Deleting...' : `Delete Selected (${selectedEmails.size})`}</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedEmails(new Set())}
+                    disabled={deleting}
+                    className="font-medium"
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    onClick={deleteAllEmails}
+                    disabled={deleting || emails.length === 0}
+                    className="gap-2 bg-red-500 hover:bg-red-600 text-white shadow-md"
+                  >
+                    {deleting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                    <span className="font-medium">{deleting ? 'Deleting...' : 'Delete All'}</span>
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    onClick={() => fetchFromGmail('unread')}
+                    disabled={fetching || !selectedStoreId}
+                    className="gap-2"
+                  >
+                    {fetching ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    <span className="font-medium">{fetching ? 'Fetching...' : 'Fetch Unread'}</span>
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    onClick={() => fetchFromGmail('latest')}
+                    disabled={fetching || !selectedStoreId}
+                    className="gap-2"
+                  >
+                    {fetching ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    <span className="font-medium">{fetching ? 'Fetching...' : 'Fetch Latest'}</span>
+                  </Button>
+                  
+                  <Button
+                    variant={syncRunning ? 'default' : 'outline'}
+                    onClick={toggleSync}
+                    disabled={syncLoading || !selectedStoreId}
+                    className={cn(
+                      "gap-2",
+                      syncRunning && "bg-green-600 hover:bg-green-700 text-white"
+                    )}
+                  >
+                    {syncLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : syncRunning ? (
+                      <Wifi className="w-4 h-4" />
+                    ) : (
+                      <WifiOff className="w-4 h-4" />
+                    )}
+                    <span className="font-medium">{syncLoading ? 'Loading...' : syncRunning ? 'Sync On' : 'Sync Off'}</span>
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="mb-6 flex gap-2">
-        <Button
-          variant={filter === 'all' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setFilter('all')}
-        >
-          All ({totalCount})
-        </Button>
-        <Button
-          variant={filter === 'unread' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setFilter('unread')}
-        >
-          Unread ({unreadCount})
-        </Button>
-        <Button
-          variant={filter === 'read' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setFilter('read')}
-        >
-          Read ({readCount})
-        </Button>
-      </div>
-
-      {/* Email List */}
-      {emails.length === 0 ? (
-        <Card>
-          <CardContent className="py-12">
-            <div className="text-center">
-              <Mail className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">
-                {filter === 'unread' ? 'No unread emails' : 'No emails found'}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-2">
-          {/* Select All Checkbox */}
-          {emails.length > 0 && (
-            <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
+      <div className="px-6 py-6">
+        {/* Tabs and Search */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-6 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex space-x-2">
               <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleSelectAll}
-                className="gap-2 h-8"
+                onClick={() => setFilter('all')}
+                className={cn(
+                  "px-5 py-2.5 rounded-lg font-medium transition-all",
+                  filter === 'all'
+                    ? "bg-blue-500 text-white shadow-md hover:bg-blue-600"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
               >
-                {selectedEmails.size === emails.length ? (
+                All ({totalCount})
+              </Button>
+              <Button
+                onClick={() => setFilter('unread')}
+                className={cn(
+                  "px-5 py-2.5 rounded-lg font-medium transition-all",
+                  filter === 'unread'
+                    ? "bg-blue-500 text-white shadow-md hover:bg-blue-600"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
+              >
+                Unread ({unreadCount})
+              </Button>
+              <Button
+                onClick={() => setFilter('read')}
+                className={cn(
+                  "px-5 py-2.5 rounded-lg font-medium transition-all",
+                  filter === 'read'
+                    ? "bg-blue-500 text-white shadow-md hover:bg-blue-600"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
+              >
+                Read ({readCount})
+              </Button>
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-between text-sm text-slate-500">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <button onClick={toggleSelectAll} className="flex items-center gap-2">
+                {selectedEmails.size === emails.length && emails.length > 0 ? (
                   <CheckSquare className="w-4 h-4 text-primary" />
                 ) : (
                   <Square className="w-4 h-4 text-gray-400" />
                 )}
-                <span className="text-sm text-gray-600">
-                  {selectedEmails.size === emails.length ? 'Deselect All' : 'Select All'}
+                <span>{selectedEmails.size === emails.length && emails.length > 0 ? 'Deselect All' : 'Select All'}</span>
+              </button>
+            </label>
+            <span>Showing {emails.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}-{Math.min(currentPage * pageSize, filter === 'all' ? totalCount : filter === 'unread' ? unreadCount : readCount)} of {filter === 'all' ? totalCount : filter === 'unread' ? unreadCount : readCount}</span>
+          </div>
+        </div>
+
+        {/* Real-time Sync Status Bar */}
+        {syncRunning && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Wifi className="w-5 h-5 text-green-600" />
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-green-800">
+                  Real-time sync active
                 </span>
-              </Button>
-              {selectedEmails.size > 0 && (
-                <span className="text-sm text-gray-500">
-                  {selectedEmails.size} of {emails.length} selected
+                {syncStatus?.idleConnected && (
+                  <span className="ml-2 text-xs text-green-600">• Connected</span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-4 text-sm text-green-700">
+              {syncStatus?.lastSync && (
+                <span>
+                  Last sync: {new Date(syncStatus.lastSync).toLocaleTimeString()}
                 </span>
               )}
-            </div>
-          )}
-          
-          {emails.map((email) => {
-            const isExpanded = expandedEmailId === email.id
-            const isSelected = selectedEmails.has(email.id)
-            return (
-              <Card
-                key={email.id}
-                className={`transition-all hover:shadow-md ${
-                  !email.read ? 'border-l-4 border-l-blue-500 bg-blue-50/50' : ''
-                } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+              {syncStatus?.emailsSynced !== undefined && syncStatus.emailsSynced > 0 && (
+                <span className="font-medium">
+                  {syncStatus.emailsSynced} emails synced
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleSync}
+                disabled={syncLoading}
+                className="text-green-700 hover:text-green-800 hover:bg-green-100 h-7 px-2"
               >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0 flex items-start gap-2">
+                {syncLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Pause className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Fetching Loader Overlay - Only show when fetching and no emails yet */}
+        {fetching && emails.length === 0 && (
+          <Card className="mb-4">
+            <CardContent className="py-12">
+              <div className="text-center">
+                <div className="relative mx-auto w-16 h-16 mb-4">
+                  <div className="absolute inset-0 rounded-full border-4 border-blue-100"></div>
+                  <div className="absolute inset-0 rounded-full border-4 border-blue-500 border-t-transparent animate-spin"></div>
+                  <Mail className="absolute inset-0 w-8 h-8 text-blue-500 m-auto" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Fetching Emails...</h3>
+                <p className="text-sm text-gray-500 max-w-sm mx-auto">
+                  Connecting to Gmail and downloading emails. This may take a moment if you have many unread emails.
+                </p>
+                <div className="flex items-center justify-center gap-1 mt-4">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Email List - Full Width Layout */}
+        {/* Show empty state only when NOT fetching AND no emails */}
+        {!fetching && emails.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-96 flex items-center justify-center">
+            <div className="text-center">
+              <Mail className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-slate-600 mb-2">
+                {filter === 'unread' ? 'No Unread Emails' : 'No Emails Found'}
+              </h3>
+              <p className="text-slate-500">
+                {filter === 'unread' ? 'All caught up! No unread emails.' : 'Select a different filter or fetch new emails'}
+              </p>
+            </div>
+          </div>
+        ) : emails.length > 0 && !expandedEmailId ? (
+          // Full-width Email List View (show emails even when fetching in background)
+          <div>
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              {emails.map((email) => {
+                const isSelected = selectedEmails.has(email.id)
+                return (
+                  <div
+                    key={email.id}
+                    onClick={() => {
+                      setExpandedEmailId(email.id)
+                      if (!email.read) {
+                        markAsRead(email.id)
+                      }
+                    }}
+                    className={cn(
+                      "p-4 border-b border-slate-100 cursor-pointer transition-all hover:bg-slate-50",
+                      !email.read && "bg-blue-50/50",
+                      isSelected && "ring-2 ring-primary ring-offset-2"
+                    )}
+                  >
+                    <div className="flex items-start space-x-4">
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -540,170 +1457,1152 @@ export default function MailPage() {
                         className="mt-1"
                       >
                         {isSelected ? (
-                          <CheckSquare className="w-5 h-5 text-primary" />
+                          <CheckSquare className="w-4 h-4 text-primary" />
                         ) : (
-                          <Square className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+                          <Square className="w-4 h-4 text-gray-400 hover:text-gray-600" />
                         )}
                       </button>
-                      {email.read ? (
-                        <MailOpen className="w-5 h-5 text-gray-400 mt-1" />
-                      ) : (
-                        <Mail className="w-5 h-5 text-blue-600 mt-1" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-gray-900 truncate">
-                              {email.fromName || email.fromEmail}
-                            </span>
+                      
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
+                        {(email.fromName || email.fromEmail).charAt(0).toUpperCase()}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center space-x-2">
+                            <h3 className="font-semibold text-slate-800">{email.fromName || email.fromEmail}</h3>
                             {!email.read && (
-                              <Badge variant="default" className="text-xs">
+                              <span className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full font-medium">
                                 New
-                              </Badge>
+                              </span>
                             )}
                             {email.ticket && (
-                              <Badge variant="outline" className="text-xs">
-                                {email.ticket.ticketNumber}
+                              <Badge className="text-xs bg-green-100 text-green-700 border-green-300">
+                                ✓ Ticket
                               </Badge>
                             )}
+                            {email.hasAttachments && <Paperclip className="w-4 h-4 text-slate-400" />}
                           </div>
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {email.subject}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-shrink-0 text-xs text-gray-500" title={format(new Date(email.createdAt), 'PPpp')}>
+                          <div className="flex items-center text-xs text-slate-400">
+                            <Clock className="w-3 h-3 mr-1" />
                             {format(new Date(email.createdAt), 'MMM d, yyyy h:mm a')}
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleEmailExpansion(email.id)
-                            }}
-                          >
-                            {isExpanded ? (
-                              <ChevronUp className="w-4 h-4" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4" />
-                            )}
-                          </Button>
                         </div>
-                      </div>
-                      {!isExpanded ? (
-                        <p className="text-sm text-gray-600 line-clamp-2">
+                        
+                        <p className="text-sm font-medium text-slate-600 mb-1">
+                          {email.subject || '(No Subject)'}
+                        </p>
+                        
+                        <p className="text-sm text-slate-500 truncate">
                           {getEmailPreview(email)}
                         </p>
-                      ) : (
-                        <div className="mt-4 space-y-4">
-                          {/* Email Header */}
-                          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                            <div className="space-y-3">
-                              <div className="flex items-start gap-3">
-                                <div className="flex-shrink-0 mt-0.5">
-                                  <User className="w-4 h-4 text-gray-500" />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-4">
+                <div className="text-sm text-slate-500">
+                  Page {currentPage} of {totalPages}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="gap-1"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="gap-1"
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : !fetching && expandedEmailId && (
+          // Full-width Email Detail View
+          (() => {
+            const selectedEmail = emails.find(e => e.id === expandedEmailId)
+            if (!selectedEmail) return null
+            return (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+                {/* Back Button Header */}
+                <div className="p-4 border-b border-slate-200 bg-slate-50">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setExpandedEmailId(null)
+                      setShowInlineReply(false)
+                    }}
+                    className="gap-2"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Back to Inbox
+                  </Button>
+                </div>
+
+                <div className="p-6 border-b border-slate-200">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-start space-x-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
+                        {(selectedEmail.fromName || selectedEmail.fromEmail).charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-bold text-slate-800">{selectedEmail.fromName || selectedEmail.fromEmail}</h2>
+                        <p className="text-sm text-slate-500">{selectedEmail.fromEmail}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleEmailSelection(selectedEmail.id)
+                        }}
+                        className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                      >
+                        {selectedEmails.has(selectedEmail.id) ? (
+                          <CheckSquare className="w-5 h-5 text-primary" />
+                        ) : (
+                          <Square className="w-5 h-5 text-slate-400" />
+                        )}
+                      </button>
+                      <button 
+                        className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                        onClick={() => {
+                          setSelectedEmails(new Set([selectedEmail.id]))
+                          deleteSelectedEmails()
+                        }}
+                      >
+                        <Trash2 className="w-5 h-5 text-slate-400" />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center text-slate-600">
+                      <span className="font-medium w-20">To:</span>
+                      <span>{selectedEmail.toEmail}</span>
+                    </div>
+                    <div className="flex items-center text-slate-600">
+                      <span className="font-medium w-20">Date:</span>
+                      <span>{format(new Date(selectedEmail.createdAt), 'MMM d, yyyy h:mm a')}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4">
+                    <h3 className="text-lg font-semibold text-slate-800">
+                      {selectedEmail.subject || '(No Subject)'}
+                    </h3>
+                  </div>
+                </div>
+                
+                <div className="p-6">
+                  <div className="prose max-w-none">
+                    {selectedEmail.htmlContent ? (
+                      <div
+                        className="text-slate-700 leading-relaxed"
+                        dangerouslySetInnerHTML={{ __html: selectedEmail.htmlContent }}
+                        style={{
+                          fontFamily: 'system-ui, -apple-system, sans-serif',
+                          lineHeight: '1.6',
+                        }}
+                      />
+                    ) : (
+                      <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+                        {selectedEmail.textContent || 'No content available'}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Attachments Section */}
+                  {(selectedEmail.EmailAttachment && selectedEmail.EmailAttachment.length > 0) ? (
+                    <div className="mt-6 bg-slate-50 rounded-lg border border-slate-200 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Paperclip className="w-4 h-4 text-slate-500" />
+                        <span className="text-sm font-medium text-slate-700">
+                          Attachments ({selectedEmail.EmailAttachment.length})
+                        </span>
+                      </div>
+                      <div className="grid gap-2">
+                        {selectedEmail.EmailAttachment.map((attachment) => (
+                          attachment.fileUrl ? (
+                            <a
+                              key={attachment.id}
+                              href={attachment.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                                  <FileText className="w-5 h-5 text-blue-600" />
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-xs text-gray-500 mb-1">From</div>
-                                  <div className="text-sm font-medium text-gray-900">
-                                    {email.fromName && (
-                                      <span className="block">{email.fromName}</span>
-                                    )}
-                                    <span className="text-gray-600">{email.fromEmail}</span>
+                                <div>
+                                  <div className="text-sm font-medium text-slate-900 group-hover:text-blue-600">
+                                    {attachment.filename}
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    {attachment.mimeType} • {formatFileSize(attachment.size)}
                                   </div>
                                 </div>
                               </div>
-                              
-                              <div className="flex items-start gap-3">
-                                <div className="flex-shrink-0 mt-0.5">
-                                  <AtSign className="w-4 h-4 text-gray-500" />
+                              <Download className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />
+                            </a>
+                          ) : (
+                            <div
+                              key={attachment.id}
+                              className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
+                                  <FileText className="w-5 h-5 text-amber-600" />
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-xs text-gray-500 mb-1">To</div>
-                                  <div className="text-sm text-gray-900">{email.toEmail}</div>
-                                </div>
-                              </div>
-                              
-                              <div className="flex items-start gap-3">
-                                <div className="flex-shrink-0 mt-0.5">
-                                  <Calendar className="w-4 h-4 text-gray-500" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-xs text-gray-500 mb-1">Date</div>
-                                  <div className="text-sm text-gray-900">
-                                    {format(new Date(email.createdAt), 'EEEE, MMMM d, yyyy')}
+                                <div>
+                                  <div className="text-sm font-medium text-slate-900">
+                                    {attachment.filename}
                                   </div>
-                                  <div className="text-xs text-gray-500 mt-0.5">
-                                    {format(new Date(email.createdAt), 'h:mm a')}
+                                  <div className="text-xs text-amber-600">
+                                    Processing... • {formatFileSize(attachment.size)}
                                   </div>
                                 </div>
                               </div>
+                              <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />
                             </div>
-                          </div>
+                          )
+                        ))}
+                      </div>
+                    </div>
+                  ) : selectedEmail.hasAttachments ? (
+                    <div className="mt-6 bg-amber-50 rounded-lg border border-amber-200 p-4">
+                      <div className="flex items-center gap-2">
+                        <Paperclip className="w-4 h-4 text-amber-500" />
+                        <span className="text-sm font-medium text-amber-700">
+                          This email has attachments (processing or data unavailable)
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
 
-                          {/* Email Subject */}
-                          <div className="border-b border-gray-200 pb-3">
-                            <div className="text-xs text-gray-500 mb-1">Subject</div>
-                            <div className="text-base font-semibold text-gray-900">{email.subject}</div>
-                          </div>
-
-                          {/* Email Body */}
-                          <div className="bg-white rounded-lg border border-gray-200 p-6 min-h-[200px]">
-                            {email.htmlContent ? (
-                              <div
-                                className="prose prose-sm max-w-none text-gray-700 email-content"
-                                dangerouslySetInnerHTML={{ __html: email.htmlContent }}
-                                style={{
-                                  fontFamily: 'system-ui, -apple-system, sans-serif',
-                                  lineHeight: '1.6',
-                                }}
-                              />
-                            ) : (
-                              <div 
-                                className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed"
-                                style={{
-                                  fontFamily: 'system-ui, -apple-system, sans-serif',
-                                  lineHeight: '1.8',
-                                }}
-                              >
-                                {email.textContent || 'No content available'}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      {email.ticket && (
-                        <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
-                          <FileText className="w-3 h-3" />
-                          <span>Linked to ticket: {email.ticket.ticketNumber}</span>
-                        </div>
-                      )}
-                      {!email.read && (
-                        <div className={isExpanded ? "mt-4 pt-4 border-t border-gray-200" : "mt-3"}>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              markAsRead(email.id)
-                            }}
+                  {/* Replies Section */}
+                  {selectedEmail.replies && selectedEmail.replies.length > 0 && (
+                    <div className="mt-6 bg-green-50 rounded-lg border border-green-200 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Send className="w-4 h-4 text-green-600" />
+                        <span className="text-sm font-medium text-green-700">
+                          Your Replies ({selectedEmail.replies.length})
+                        </span>
+                      </div>
+                      <div className="space-y-3">
+                        {selectedEmail.replies.map((reply: any) => (
+                          <div
+                            key={reply.id}
+                            className="p-4 bg-white rounded-lg border border-green-200"
                           >
-                            Mark as Read
-                          </Button>
-                        </div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-xs text-slate-500">
+                                {reply.sentAt ? format(new Date(reply.sentAt), 'MMM d, yyyy h:mm a') : 'Pending'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                              {reply.bodyText || 'No content'}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Linked Ticket */}
+                  {selectedEmail.ticket && (
+                    <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
+                      <FileText className="w-4 h-4" />
+                      <span>Linked to ticket: <strong>{selectedEmail.ticket.ticketNumber}</strong></span>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Action Buttons - Only show when reply is not open */}
+                {!showInlineReply && (
+                  <div className="p-6 border-t border-slate-200 bg-slate-50">
+                    <div className="flex items-center space-x-3">
+                      <Button
+                        onClick={() => {
+                          setShowInlineReply(true)
+                          setReplyForm({
+                            subject: `Re: ${selectedEmail.subject}`,
+                            body: '',
+                            toEmail: selectedEmail.fromEmail,
+                            ccEmail: '',
+                          })
+                          setBccEmail('')
+                          setCcVisible(false)
+                          setBccVisible(false)
+                        }}
+                        className="gap-2 bg-blue-500 hover:bg-blue-600 text-white shadow-md"
+                      >
+                        <Send className="w-4 h-4" />
+                        <span>Reply</span>
+                      </Button>
+                      
+                      {!selectedEmail.read && (
+                        <Button
+                          variant="outline"
+                          onClick={() => markAsRead(selectedEmail.id)}
+                        >
+                          Mark as Read
+                        </Button>
+                      )}
+                      
+                      {!selectedEmail.ticket && (
+                        <Button
+                          variant="outline"
+                          onClick={() => openTicketModal(selectedEmail)}
+                        >
+                          Create Ticket
+                        </Button>
                       )}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                )}
+
+                {/* Gmail-Style Inline Reply Form */}
+                {showInlineReply && (
+                  <div className="border-t border-slate-200">
+                    <div className="p-6">
+                      {/* Reply Header */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2 text-slate-700">
+                          <Send className="w-5 h-5" />
+                          <span className="font-medium">Reply</span>
+                        </div>
+                        <button 
+                          onClick={() => setShowInlineReply(false)}
+                          className="text-slate-500 hover:text-slate-700 p-1 hover:bg-slate-100 rounded"
+                        >
+                          <ChevronUp className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      {/* From Field (Display Only) */}
+                      <div className="mb-3 flex items-center text-sm">
+                        <span className="text-slate-600 w-16">From:</span>
+                        <span className="text-slate-900">{selectedEmail.toEmail}</span>
+                      </div>
+
+                      {/* To Field */}
+                      <div className="mb-3 flex items-start">
+                        <span className="text-slate-600 w-16 pt-2 text-sm">To:</span>
+                        <div className="flex-1">
+                          <input
+                            type="text"
+                            value={replyForm.toEmail}
+                            onChange={(e) => setReplyForm({ ...replyForm, toEmail: e.target.value })}
+                            className="w-full px-3 py-2 border-b border-slate-300 focus:border-blue-500 focus:outline-none text-sm"
+                          />
+                          {!ccVisible && !bccVisible && (
+                            <div className="mt-1 flex gap-3">
+                              <button 
+                                onClick={() => setCcVisible(true)}
+                                className="text-sm text-slate-600 hover:text-slate-900"
+                              >
+                                Cc
+                              </button>
+                              <button 
+                                onClick={() => setBccVisible(true)}
+                                className="text-sm text-slate-600 hover:text-slate-900"
+                              >
+                                Bcc
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* CC Field */}
+                      {ccVisible && (
+                        <div className="mb-3 flex items-center">
+                          <span className="text-slate-600 w-16 text-sm">Cc:</span>
+                          <input
+                            type="text"
+                            value={replyForm.ccEmail}
+                            onChange={(e) => setReplyForm({ ...replyForm, ccEmail: e.target.value })}
+                            placeholder="CC email addresses"
+                            className="flex-1 px-3 py-2 border-b border-slate-300 focus:border-blue-500 focus:outline-none text-sm"
+                          />
+                        </div>
+                      )}
+
+                      {/* BCC Field */}
+                      {bccVisible && (
+                        <div className="mb-3 flex items-center">
+                          <span className="text-slate-600 w-16 text-sm">Bcc:</span>
+                          <input
+                            type="text"
+                            value={bccEmail}
+                            onChange={(e) => setBccEmail(e.target.value)}
+                            placeholder="BCC email addresses"
+                            className="flex-1 px-3 py-2 border-b border-slate-300 focus:border-blue-500 focus:outline-none text-sm"
+                          />
+                        </div>
+                      )}
+
+                      {/* Subject Field */}
+                      <div className="mb-4 flex items-center">
+                        <span className="text-slate-600 w-16 text-sm">Subject:</span>
+                        <input
+                          type="text"
+                          value={replyForm.subject}
+                          readOnly
+                          className="flex-1 px-3 py-2 border-b border-slate-300 focus:border-blue-500 focus:outline-none text-sm bg-slate-50"
+                        />
+                      </div>
+
+                      {/* Message Textarea */}
+                      <div className="mb-4">
+                        <textarea
+                          value={replyForm.body}
+                          onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
+                          placeholder="Type your reply here..."
+                          className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none text-sm min-h-[200px] resize-y"
+                        />
+                      </div>
+
+                      {/* Attached Files Preview */}
+                      {replyAttachments.length > 0 && (
+                        <div className="mb-4 flex flex-wrap gap-2">
+                          {replyAttachments.map((file, index) => (
+                            <div key={index} className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg text-sm">
+                              <Paperclip className="w-4 h-4 text-slate-500" />
+                              <span className="text-slate-700 max-w-[150px] truncate">{file.name}</span>
+                              <button
+                                onClick={() => setReplyAttachments(prev => prev.filter((_, i) => i !== index))}
+                                className="text-slate-400 hover:text-red-500"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Hidden File Inputs */}
+                      <input
+                        type="file"
+                        ref={replyFileInputRef}
+                        className="hidden"
+                        multiple
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || [])
+                          setReplyAttachments(prev => [...prev, ...files])
+                          if (replyFileInputRef.current) replyFileInputRef.current.value = ''
+                        }}
+                      />
+                      <input
+                        type="file"
+                        ref={replyImageInputRef}
+                        className="hidden"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || [])
+                          setReplyAttachments(prev => [...prev, ...files])
+                          if (replyImageInputRef.current) replyImageInputRef.current.value = ''
+                        }}
+                      />
+
+                      {/* Action Bar */}
+                      <div className="flex items-center justify-between pt-2">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            onClick={() => sendReply()}
+                            disabled={replying || !replyForm.body.trim()}
+                            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                          >
+                            {replying ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Send className="w-4 h-4" />
+                            )}
+                            {replying ? 'Sending...' : 'Send'}
+                          </Button>
+                          <button 
+                            onClick={() => replyFileInputRef.current?.click()}
+                            className="p-2 text-slate-600 hover:bg-slate-100 rounded transition-colors" 
+                            title="Attach file"
+                          >
+                            <Paperclip className="w-5 h-5" />
+                          </button>
+                          <button 
+                            onClick={() => replyImageInputRef.current?.click()}
+                            className="p-2 text-slate-600 hover:bg-slate-100 rounded transition-colors" 
+                            title="Insert image"
+                          >
+                            <Image className="w-5 h-5" />
+                          </button>
+                          <div className="relative">
+                            <button 
+                              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                              className={cn(
+                                "p-2 rounded transition-colors",
+                                showEmojiPicker ? "bg-slate-200 text-slate-900" : "text-slate-600 hover:bg-slate-100"
+                              )}
+                              title="Insert emoji"
+                            >
+                              <Smile className="w-5 h-5" />
+                            </button>
+                            {/* Emoji Picker Dropdown */}
+                            {showEmojiPicker && (
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-white rounded-xl shadow-xl border border-slate-200 p-2 z-[100] w-[200px]">
+                                <div className="grid grid-cols-4 gap-1">
+                                  {commonEmojis.map((emoji, index) => (
+                                    <button
+                                      key={index}
+                                      type="button"
+                                      onClick={() => {
+                                        setReplyForm(prev => ({ ...prev, body: prev.body + emoji }))
+                                        setShowEmojiPicker(false)
+                                      }}
+                                      className="w-10 h-10 flex items-center justify-center text-2xl hover:bg-slate-100 rounded-lg transition-colors"
+                                    >
+                                      <span role="img" aria-label="emoji">{emoji}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            setShowInlineReply(false)
+                            setReplyAttachments([])
+                            setShowEmojiPicker(false)
+                          }}
+                          className="p-2 text-slate-600 hover:bg-slate-100 rounded transition-colors"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             )
-          })}
-        </div>
-      )}
+          })()
+        )}
+      </div>
+
+      {/* Reply Email Modal */}
+      <Dialog open={replyModal.open} onOpenChange={(open) => !open && closeReplyModal()}>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="pb-4 border-b border-slate-200">
+            <DialogTitle className="text-2xl font-bold text-slate-800">Reply to Email</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div>
+              <Label className="block text-sm font-semibold text-slate-700 mb-2">To</Label>
+              <Input
+                value={replyForm.toEmail}
+                onChange={(e) => setReplyForm({ ...replyForm, toEmail: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg bg-blue-50 text-slate-700 font-medium"
+              />
+            </div>
+            
+            <div>
+              <Label className="block text-sm font-semibold text-slate-700 mb-2">CC (Optional)</Label>
+              <Input
+                value={replyForm.ccEmail}
+                onChange={(e) => setReplyForm({ ...replyForm, ccEmail: e.target.value })}
+                placeholder="CC email addresses"
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            
+            <div>
+              <Label className="block text-sm font-semibold text-slate-700 mb-2">Subject</Label>
+              <Input
+                value={replyForm.subject}
+                onChange={(e) => setReplyForm({ ...replyForm, subject: e.target.value })}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            
+            <div>
+              <Label className="block text-sm font-semibold text-slate-700 mb-2">Message</Label>
+              <Textarea
+                value={replyForm.body}
+                onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
+                placeholder="Type your reply here..."
+                rows={10}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              />
+            </div>
+          </div>
+          
+          <DialogFooter className="pt-4 border-t border-slate-200 bg-slate-50 -mx-6 -mb-6 px-6 py-4 rounded-b-2xl flex items-center justify-end space-x-3">
+            <Button
+              variant="outline"
+              onClick={closeReplyModal}
+              disabled={replying}
+              className="font-medium"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={sendReply}
+              disabled={replying || !replyForm.body.trim()}
+              className="gap-2 bg-blue-500 hover:bg-blue-600 text-white shadow-md font-medium"
+            >
+              {replying ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  Send Reply
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Ticket from Email Modal */}
+      <Dialog open={ticketModal.open} onOpenChange={(open) => !open && closeTicketModal()}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create Ticket from Email</DialogTitle>
+            <DialogDescription>
+              Create a support ticket from this email. All fields marked with * are required.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="ticket-name">
+                  Name <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="ticket-name"
+                  value={ticketForm.name}
+                  onChange={(e) => {
+                    setTicketForm({ ...ticketForm, name: e.target.value })
+                    if (ticketFormErrors.name) {
+                      setTicketFormErrors({ ...ticketFormErrors, name: '' })
+                    }
+                  }}
+                  placeholder="Customer name"
+                  className={ticketFormErrors.name ? 'border-red-500' : ''}
+                />
+                {ticketFormErrors.name && (
+                  <p className="text-sm text-red-500">{ticketFormErrors.name}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ticket-email">
+                  Email <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="ticket-email"
+                  type="email"
+                  value={ticketForm.email}
+                  onChange={(e) => {
+                    setTicketForm({ ...ticketForm, email: e.target.value })
+                    if (ticketFormErrors.email) {
+                      setTicketFormErrors({ ...ticketFormErrors, email: '' })
+                    }
+                  }}
+                  placeholder="customer@example.com"
+                  className={ticketFormErrors.email ? 'border-red-500' : ''}
+                />
+                {ticketFormErrors.email && (
+                  <p className="text-sm text-red-500">{ticketFormErrors.email}</p>
+                )}
+              </div>
+            </div>
+              <div className="space-y-2">
+              <Label htmlFor="ticket-phone">
+                Phone <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="ticket-phone"
+                value={ticketForm.phone}
+                onChange={(e) => {
+                  const phoneValue = e.target.value
+                  setTicketForm({ ...ticketForm, phone: phoneValue })
+                  if (ticketFormErrors.phone) {
+                    setTicketFormErrors({ ...ticketFormErrors, phone: '' })
+                  }
+
+                  // Auto-fill Order ID and Tracking ID when phone number is entered (with debounce)
+                  if (phoneValue.trim().length >= 10) {
+                    // Clear existing timeout
+                    if (lookupTimeoutRef.current) {
+                      clearTimeout(lookupTimeoutRef.current)
+                    }
+                    
+                    // Set new timeout for debounced lookup
+                    lookupTimeoutRef.current = setTimeout(() => {
+                      lookupOrderTracking(phoneValue.trim())
+                    }, 500) // Wait 500ms after user stops typing
+                  }
+                }}
+                placeholder="+1234567890"
+                className={ticketFormErrors.phone ? 'border-red-500' : ''}
+              />
+              {ticketFormErrors.phone && (
+                <p className="text-sm text-red-500">{ticketFormErrors.phone}</p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="ticket-order">
+                  Order ID <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="ticket-order"
+                  value={ticketForm.order}
+                  onChange={(e) => {
+                    setTicketForm({ ...ticketForm, order: e.target.value })
+                    if (ticketFormErrors.order) {
+                      setTicketFormErrors({ ...ticketFormErrors, order: '' })
+                    }
+                  }}
+                  placeholder="Order number"
+                  className={ticketFormErrors.order ? 'border-red-500' : ''}
+                />
+                {ticketFormErrors.order && (
+                  <p className="text-sm text-red-500">{ticketFormErrors.order}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ticket-tracking">
+                  Tracking ID <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="ticket-tracking"
+                  value={ticketForm.trackingId}
+                  onChange={(e) => {
+                    setTicketForm({ ...ticketForm, trackingId: e.target.value })
+                    if (ticketFormErrors.trackingId) {
+                      setTicketFormErrors({ ...ticketFormErrors, trackingId: '' })
+                    }
+                  }}
+                  placeholder="Tracking number"
+                  className={ticketFormErrors.trackingId ? 'border-red-500' : ''}
+                />
+                {ticketFormErrors.trackingId && (
+                  <p className="text-sm text-red-500">{ticketFormErrors.trackingId}</p>
+                )}
+              </div>
+            </div>
+            {/* Divider */}
+            <div className="border-t border-gray-200 my-4" />
+
+            {/* Issue Details Section */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+                <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(43, 185, 205, 0.1)' }}>
+                  <MessageSquare className="w-3.5 h-3.5" style={{ color: '#2bb9cd' }} />
+                </div>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Issue Details
+                </h3>
+              </div>
+
+              {/* Category Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="ticket-category" className="text-xs font-semibold text-gray-700">
+                  Category <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={ticketForm.categoryId || undefined}
+                  onValueChange={(value) => {
+                    setTicketForm({ ...ticketForm, categoryId: value || '', subject: '' })
+                    if (ticketFormErrors.categoryId) {
+                      setTicketFormErrors({ ...ticketFormErrors, categoryId: '' })
+                    }
+                  }}
+                >
+                  <SelectTrigger 
+                    id="ticket-category"
+                    className={cn(
+                      "w-full h-10 text-sm rounded-lg border-2 transition-all duration-200",
+                      "focus:outline-none focus:ring-2",
+                      ticketFormErrors.categoryId
+                        ? "border-red-300 bg-red-50 focus:border-red-500"
+                        : ticketForm.categoryId && !ticketFormErrors.categoryId
+                        ? "border-green-300 bg-green-50 focus:border-green-500"
+                        : "border-gray-200 hover:border-gray-300"
+                    )}
+                  >
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {ticketFormErrors.categoryId && (
+                  <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    {ticketFormErrors.categoryId}
+                  </p>
+                )}
+              </div>
+
+              {/* Subject */}
+              <div className="space-y-2">
+                <Label htmlFor="ticket-subject" className="text-xs font-semibold text-gray-700">
+                  Subject <span className="text-red-500">*</span>
+                </Label>
+                {ticketForm.categoryId && getAvailableSubjects().length > 0 ? (
+                  <Select
+                    value={ticketForm.subject || undefined}
+                    onValueChange={(value) => {
+                      setTicketForm({ ...ticketForm, subject: value })
+                      if (ticketFormErrors.subject) {
+                        setTicketFormErrors({ ...ticketFormErrors, subject: '' })
+                      }
+                    }}
+                  >
+                    <SelectTrigger 
+                      id="ticket-subject"
+                      className={cn(
+                        "w-full h-10 text-sm rounded-lg border-2 transition-all duration-200",
+                        "focus:outline-none focus:ring-2",
+                        ticketFormErrors.subject
+                          ? "border-red-300 bg-red-50 focus:border-red-500"
+                          : ticketForm.subject && !ticketFormErrors.subject
+                          ? "border-green-300 bg-green-50 focus:border-green-500"
+                          : "border-gray-200 hover:border-gray-300"
+                      )}
+                    >
+                      <SelectValue placeholder="Select issue type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getAvailableSubjects().map((subject, index) => (
+                        <SelectItem key={`${subject}-${index}`} value={String(subject)}>
+                          {String(subject)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="ticket-subject"
+                    value={ticketForm.subject}
+                    onChange={(e) => {
+                      setTicketForm({ ...ticketForm, subject: e.target.value })
+                      if (ticketFormErrors.subject) {
+                        setTicketFormErrors({ ...ticketFormErrors, subject: '' })
+                      }
+                    }}
+                    placeholder="Select category first"
+                    disabled={!ticketForm.categoryId}
+                    className={cn(
+                      "w-full h-10 text-sm rounded-lg border-2 transition-all duration-200",
+                      "focus:outline-none focus:ring-2",
+                      !ticketForm.categoryId ? "bg-gray-50 cursor-not-allowed" : "",
+                      ticketFormErrors.subject
+                        ? "border-red-300 bg-red-50 focus:border-red-500"
+                        : ticketForm.subject && !ticketFormErrors.subject
+                        ? "border-green-300 bg-green-50 focus:border-green-500"
+                        : "border-gray-200 hover:border-gray-300"
+                    )}
+                  />
+                )}
+                {ticketFormErrors.subject && (
+                  <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    {ticketFormErrors.subject}
+                  </p>
+                )}
+              </div>
+
+              {/* Description */}
+              <div className="space-y-2">
+                <Label htmlFor="ticket-description" className="text-xs font-semibold text-gray-700">
+                  Description <span className="text-red-500">*</span>
+                </Label>
+                <Textarea
+                  id="ticket-description"
+                  value={ticketForm.description}
+                  onChange={(e) => {
+                    setTicketForm({ ...ticketForm, description: e.target.value })
+                    if (ticketFormErrors.description) {
+                      setTicketFormErrors({ ...ticketFormErrors, description: '' })
+                    }
+                  }}
+                  placeholder="Please provide detailed information about your issue..."
+                  rows={3}
+                  className={cn(
+                    "w-full text-sm rounded-lg border-2 transition-all duration-200 resize-none",
+                    "focus:outline-none focus:ring-2",
+                    ticketFormErrors.description
+                      ? "border-red-300 bg-red-50 focus:border-red-500"
+                      : ticketForm.description && !ticketFormErrors.description
+                      ? "border-green-300 bg-green-50 focus:border-green-500"
+                      : "border-gray-200 hover:border-gray-300"
+                  )}
+                />
+                {ticketFormErrors.description && (
+                  <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    {ticketFormErrors.description}
+                  </p>
+                )}
+              </div>
+
+              {/* Priority */}
+              <div className="space-y-2">
+                <Label htmlFor="ticket-priority" className="text-xs font-semibold text-gray-700">
+                  Priority
+                </Label>
+                <Select
+                  value={ticketForm.priority}
+                  onValueChange={(value) => setTicketForm({ ...ticketForm, priority: value })}
+                >
+                  <SelectTrigger 
+                    id="ticket-priority"
+                    className="w-full h-10 text-sm rounded-lg border-2 border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LOW">Low</SelectItem>
+                    <SelectItem value="NORMAL">Normal</SelectItem>
+                    <SelectItem value="HIGH">High</SelectItem>
+                    <SelectItem value="URGENT">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* File Upload */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-gray-700">
+                  Attachments{' '}
+                  {requiresAttachments() ? (
+                    <span className="text-red-500">*</span>
+                  ) : (
+                    <span className="text-gray-400">(Optional)</span>
+                  )}
+                </Label>
+                {requiresAttachments() && (
+                  <p className="text-xs text-gray-600">
+                    Images or videos are required for this category
+                  </p>
+                )}
+                {ticketFormErrors.attachments && (
+                  <p className="text-xs text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>{ticketFormErrors.attachments}</span>
+                  </p>
+                )}
+                
+                {/* First Row: Single Video Upload Card */}
+                <div className="mb-2">
+                  <label className="cursor-pointer block">
+                    <input
+                      type="file"
+                      ref={singleFileInputRef}
+                      accept="video/*"
+                      onChange={handleSingleFileSelect}
+                      className="hidden"
+                      disabled={!!singleFile}
+                    />
+                    <div className={cn(
+                      "border-2 border-dashed rounded-lg p-3 text-center transition-all duration-200",
+                      singleFile 
+                        ? "border-green-300 bg-green-50" 
+                        : requiresAttachments() && !singleFile
+                        ? "border-red-300 bg-red-50 hover:border-red-400"
+                        : "border-gray-300 hover:border-gray-400"
+                    )}
+                    onMouseEnter={(e) => {
+                      if (!singleFile && !requiresAttachments()) {
+                        e.currentTarget.style.borderColor = '#2bb9cd'
+                        e.currentTarget.style.backgroundColor = 'rgba(43, 185, 205, 0.05)'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!singleFile && !requiresAttachments()) {
+                        e.currentTarget.style.borderColor = ''
+                        e.currentTarget.style.backgroundColor = ''
+                      }
+                    }}
+                    >
+                      {singleFile ? (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                              <FileText className="w-5 h-5 text-green-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-900 truncate">
+                                {singleFile.name}
+                              </p>
+                              <p className="text-[10px] text-gray-500">
+                                {formatFileSize(singleFile.size)}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handleRemoveSingleFile()
+                            }}
+                            className="flex-shrink-0 p-1.5 hover:bg-red-100 active:bg-red-200 rounded-lg transition-colors"
+                            aria-label="Remove video"
+                          >
+                            <X className="w-4 h-4 text-red-600" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="inline-flex items-center justify-center w-10 h-10 rounded-full mb-2" style={{ backgroundColor: 'rgba(43, 185, 205, 0.1)' }}>
+                            <Upload className="w-5 h-5" style={{ color: '#2bb9cd' }} />
+                          </div>
+                          <p className="text-xs font-medium text-gray-900 mb-1">
+                            Tap to upload video
+                          </p>
+                          <p className="text-[10px] text-gray-500 px-2">
+                            Video files only, 10MB max
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </label>
+                </div>
+
+                {/* Second Row: Three Image Upload Cards */}
+                <div className="grid grid-cols-3 gap-2">
+                  {[0, 1, 2].map((index) => (
+                    <div key={index}>
+                      <label className="cursor-pointer block">
+                        <input
+                          type="file"
+                          ref={imageFileInputRefs[index]}
+                          accept="image/*"
+                          onChange={handleImageFileSelect(index)}
+                          className="hidden"
+                          disabled={!!imageFiles[index]}
+                        />
+                        <div className={cn(
+                          "border-2 border-dashed rounded-lg p-1.5 text-center transition-all duration-200 h-20",
+                          imageFiles[index]
+                            ? "border-green-300 bg-green-50" 
+                            : requiresAttachments() && !imageFiles[index] && !singleFile && imageFiles.every(f => !f)
+                            ? "border-red-300 bg-red-50 hover:border-red-400"
+                            : "border-gray-300 hover:border-gray-400"
+                        )}
+                        onMouseEnter={(e) => {
+                          if (!imageFiles[index] && !requiresAttachments()) {
+                            e.currentTarget.style.borderColor = '#2bb9cd'
+                            e.currentTarget.style.backgroundColor = 'rgba(43, 185, 205, 0.05)'
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!imageFiles[index] && !requiresAttachments()) {
+                            e.currentTarget.style.borderColor = ''
+                            e.currentTarget.style.backgroundColor = ''
+                          }
+                        }}
+                        >
+                          {imageFiles[index] ? (
+                            <div className="h-full flex flex-col">
+                              <div className="flex-1 flex items-center justify-center mb-1">
+                                <div className="w-6 h-6 bg-green-100 rounded-lg flex items-center justify-center">
+                                  <FileText className="w-3.5 h-3.5 text-green-600" />
+                                </div>
+                              </div>
+                              <div className="flex-1 flex flex-col justify-end">
+                                <p className="text-[9px] font-medium text-gray-900 truncate mb-0.5">
+                                  {imageFiles[index]?.name}
+                                </p>
+                                <p className="text-[8px] text-gray-500 mb-1">
+                                  {imageFiles[index] && formatFileSize(imageFiles[index].size)}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    handleRemoveImageFile(index)
+                                  }}
+                                  className="mx-auto p-0.5 hover:bg-red-100 active:bg-red-200 rounded transition-colors"
+                                  aria-label="Remove image"
+                                >
+                                  <X className="w-3 h-3 text-red-600" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="h-full flex flex-col items-center justify-center">
+                              <Upload className="w-4 h-4 text-gray-400 mb-1" />
+                              <p className="text-[9px] text-gray-500">Image</p>
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={closeTicketModal}
+              disabled={creatingTicket}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={createTicketFromEmail}
+              disabled={creatingTicket}
+              className="gap-2"
+            >
+              {creatingTicket ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  Create Ticket
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}>
@@ -766,6 +2665,7 @@ export default function MailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   )
 }

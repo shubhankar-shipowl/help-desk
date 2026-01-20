@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { TicketPriority } from '@prisma/client'
+import { Ticket_priority } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
       where: {
         teamId_priority: {
           teamId: teamId || null,
-          priority: priority as TicketPriority,
+          priority: priority as Ticket_priority,
         },
       },
     })
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
       const rule = await prisma.sLARule.create({
         data: {
           teamId: teamId || null,
-          priority: priority as TicketPriority,
+          priority: priority as Ticket_priority,
           responseTime,
           resolutionTime,
           isActive: isActive !== undefined ? isActive : true,

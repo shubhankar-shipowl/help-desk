@@ -36,7 +36,7 @@ export default async function AdminSettingsPage() {
       description: true,
       subjects: true,
       _count: {
-        select: { tickets: true },
+        select: { Ticket: true },
       },
     },
   })
@@ -90,7 +90,7 @@ export default async function AdminSettingsPage() {
                       <span className="text-gray-400 cursor-move">⋮⋮</span>
                       <span className="flex-1 font-medium">{category.name}</span>
                       <span className="text-sm text-gray-500">
-                        {category._count.tickets} ticket{category._count.tickets !== 1 ? 's' : ''}
+                        {category._count.Ticket} ticket{category._count.Ticket !== 1 ? 's' : ''}
                       </span>
                       <CategoryActionsMenu category={category} />
                     </div>

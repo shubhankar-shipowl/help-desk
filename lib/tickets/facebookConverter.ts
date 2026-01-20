@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { TicketSource, TicketPriority, TicketStatus } from '@prisma/client'
+import { Ticket_source, Ticket_priority, Ticket_status } from '@prisma/client'
 import { generateTicketNumberWithSequence } from '@/lib/utils'
 
 /**
@@ -10,7 +10,7 @@ export async function convertFacebookNotificationToTicket(
   options?: {
     assignedAgentId?: string
     assignedTeamId?: string
-    priority?: TicketPriority
+    priority?: Ticket_priority
     categoryId?: string
     tags?: string[]
   }
@@ -36,19 +36,19 @@ export async function convertFacebookNotificationToTicket(
   }
 
   // Determine ticket source based on notification type
-  let source: TicketSource
+  let source: Ticket_source
   switch (fbNotification.type) {
     case 'POST':
-      source = TicketSource.FACEBOOK_POST
+      source = Ticket_source.FACEBOOK_POST
       break
     case 'COMMENT':
-      source = TicketSource.FACEBOOK_COMMENT
+      source = Ticket_source.FACEBOOK_COMMENT
       break
     case 'MESSAGE':
-      source = TicketSource.FACEBOOK_MESSAGE
+      source = Ticket_source.FACEBOOK_MESSAGE
       break
     default:
-      source = TicketSource.FACEBOOK_MESSAGE
+      source = Ticket_source.FACEBOOK_MESSAGE
   }
 
   // Extract customer information
@@ -108,7 +108,7 @@ export async function convertFacebookNotificationToTicket(
       ticketNumber,
       subject: `Facebook ${fbNotification.type}: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`,
       description: content,
-      status: TicketStatus.NEW,
+      status: Ticket_status.NEW,
       priority,
       source,
       customerId: customer.id,
@@ -190,7 +190,7 @@ export async function convertFacebookNotificationToTicket(
 /**
  * Detect priority based on content keywords
  */
-function detectPriority(content: string): TicketPriority {
+function detectPriority(content: string): Ticket_priority {
   const urgentKeywords = ['urgent', 'emergency', 'critical', 'asap', 'immediately', 'angry', 'complaint', 'refund', 'cancel']
   const highKeywords = ['important', 'issue', 'problem', 'broken', 'not working', 'error']
   const lowKeywords = ['question', 'inquiry', 'info', 'information', 'just asking']
@@ -198,18 +198,18 @@ function detectPriority(content: string): TicketPriority {
   const lowerContent = content.toLowerCase()
 
   if (urgentKeywords.some(keyword => lowerContent.includes(keyword))) {
-    return TicketPriority.URGENT
+    return Ticket_priority.URGENT
   }
 
   if (highKeywords.some(keyword => lowerContent.includes(keyword))) {
-    return TicketPriority.HIGH
+    return Ticket_priority.HIGH
   }
 
   if (lowKeywords.some(keyword => lowerContent.includes(keyword))) {
-    return TicketPriority.LOW
+    return Ticket_priority.LOW
   }
 
-  return TicketPriority.NORMAL
+  return Ticket_priority.NORMAL
 }
 
 /**
@@ -235,7 +235,7 @@ function extractFacebookProfileUrl(postUrl: string): string | null {
 /**
  * Calculate due date based on priority and team SLA
  */
-async function calculateDueDate(priority: TicketPriority, teamId?: string | null): Promise<Date | null> {
+async function calculateDueDate(priority: Ticket_priority, teamId?: string | null): Promise<Date | null> {
   let responseTimeMinutes = 1440 // Default: 24 hours (1440 minutes)
 
   // Try to get SLA rule for team
@@ -255,11 +255,11 @@ async function calculateDueDate(priority: TicketPriority, teamId?: string | null
   }
 
   // Default SLA times by priority (in minutes)
-  const defaultSLAs: Record<TicketPriority, number> = {
-    [TicketPriority.URGENT]: 60,    // 1 hour
-    [TicketPriority.HIGH]: 240,     // 4 hours
-    [TicketPriority.NORMAL]: 1440,  // 24 hours
-    [TicketPriority.LOW]: 2880,     // 48 hours
+  const defaultSLAs: Record<Ticket_priority, number> = {
+    [Ticket_priority.URGENT]: 60,    // 1 hour
+    [Ticket_priority.HIGH]: 240,     // 4 hours
+    [Ticket_priority.NORMAL]: 1440,  // 24 hours
+    [Ticket_priority.LOW]: 2880,     // 48 hours
   }
 
   if (!teamId) {

@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,30 +7,737 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  ADMIN
-  AGENT
-  CUSTOMER
+model Attachment {
+  id        String   @id
+  filename  String
+  fileUrl   String
+  fileSize  Int
+  mimeType  String
+  ticketId  String?
+  commentId String?
+  createdAt DateTime @default(now())
+  Comment   Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  Ticket    Ticket?  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([commentId])
+  @@index([ticketId])
 }
 
-enum TicketStatus {
-  NEW
-  OPEN
-  IN_PROGRESS
-  PENDING
-  RESOLVED
-  CLOSED
-  INITIATE_REFUND
+model AuditLog {
+  id        String   @id
+  action    String
+  userId    String
+  ticketId  String?
+  changes   Json?
+  createdAt DateTime @default(now())
+  Ticket    Ticket?  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  User      User     @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([ticketId])
+  @@index([userId])
 }
 
-enum TicketPriority {
-  LOW
-  NORMAL
-  HIGH
-  URGENT
+model AutoAssignmentRule {
+  id          String   @id
+  tenantId    String
+  storeId     String?
+  name        String
+  description String?
+  conditions  Json
+  actions     Json
+  priority    Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  Store       Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  Tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([isActive, priority])
+  @@index([storeId], map: "AutoAssignmentRule_storeId_fkey")
+  @@index([tenantId])
+  @@index([tenantId, isActive, priority])
 }
 
-enum NotificationType {
+model CallLog {
+  id             String         @id
+  ticketId       String?
+  agentId        String
+  customerName   String
+  customerPhone  String
+  agentPhone     String
+  status         CallLog_status @default(INITIATED)
+  duration       Int            @default(0)
+  attempts       Int            @default(1)
+  remark         String?
+  exotelCallId   String?
+  exotelResponse Json?
+  startedAt      DateTime       @default(now())
+  endedAt        DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime
+  User           User           @relation(fields: [agentId], references: [id])
+  Ticket         Ticket?        @relation(fields: [ticketId], references: [id])
+
+  @@index([agentId])
+  @@index([customerPhone])
+  @@index([startedAt])
+  @@index([ticketId])
+}
+
+model Category {
+  id             String     @id
+  tenantId       String
+  storeId        String?
+  name           String
+  description    String?
+  parentId       String?
+  color          String?
+  icon           String?
+  subjects       Json?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime
+  Category       Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
+  other_Category Category[] @relation("CategoryToCategory")
+  Store          Store?     @relation(fields: [storeId], references: [id])
+  Tenant         Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  Ticket         Ticket[]
+  User           User[]     @relation("AgentCategories")
+
+  @@index([parentId])
+  @@index([storeId], map: "Category_storeId_fkey")
+  @@index([tenantId])
+  @@index([tenantId, parentId])
+}
+
+model Comment {
+  id         String       @id
+  content    String       @db.Text
+  isInternal Boolean      @default(false)
+  ticketId   String
+  authorId   String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime
+  Attachment Attachment[]
+  User       User         @relation(fields: [authorId], references: [id])
+  Ticket     Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([authorId])
+  @@index([ticketId])
+}
+
+model Email {
+  id                                           String            @id
+  tenantId                                     String
+  storeId                                      String?
+  messageId                                    String            @unique
+  gmailId                                      String?
+  threadId                                     String?
+  fromEmail                                    String
+  fromName                                     String?
+  toEmail                                      String
+  ccEmail                                      String?
+  bccEmail                                     String?
+  subject                                      String
+  snippet                                      String?           @db.Text
+  textContent                                  String?           @db.MediumText
+  htmlContent                                  String?           @db.MediumText
+  headers                                      Json?
+  labelIds                                     Json?
+  internalDate                                 DateTime?
+  historyId                                    String?
+  direction                                    Email_direction   @default(INBOUND)
+  read                                         Boolean           @default(false)
+  readAt                                       DateTime?
+  ticketId                                     String?
+  processed                                    Boolean           @default(false)
+  processedAt                                  DateTime?
+  hasAttachments                               Boolean           @default(false)
+  createdAt                                    DateTime          @default(now())
+  updatedAt                                    DateTime
+  Store                                        Store?            @relation(fields: [storeId], references: [id])
+  Tenant                                       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  Ticket                                       Ticket?           @relation(fields: [ticketId], references: [id])
+  EmailAttachment                              EmailAttachment[]
+  EmailReply_EmailReply_originalEmailIdToEmail EmailReply[]      @relation("EmailReply_originalEmailIdToEmail")
+  EmailReply_EmailReply_replyEmailIdToEmail    EmailReply?       @relation("EmailReply_replyEmailIdToEmail")
+
+  @@index([createdAt])
+  @@index([direction])
+  @@index([fromEmail])
+  @@index([gmailId])
+  @@index([internalDate])
+  @@index([processed])
+  @@index([read])
+  @@index([storeId])
+  @@index([tenantId])
+  @@index([tenantId, storeId, processed])
+  @@index([tenantId, storeId, read])
+  @@index([tenantId, storeId, threadId])
+  @@index([threadId])
+  @@index([ticketId], map: "Email_ticketId_fkey")
+  @@index([toEmail])
+}
+
+model EmailAttachment {
+  id           String   @id
+  emailId      String
+  filename     String
+  mimeType     String
+  size         Int
+  attachmentId String?
+  fileUrl      String?
+  fileHandle   String?
+  createdAt    DateTime @default(now())
+  Email        Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@index([emailId])
+}
+
+model EmailReply {
+  id                                      String            @id
+  tenantId                                String
+  storeId                                 String?
+  originalEmailId                         String
+  replyEmailId                            String?           @unique
+  ticketId                                String?
+  sentBy                                  String
+  gmailMessageId                          String?
+  gmailThreadId                           String?
+  toEmail                                 String
+  ccEmail                                 String?
+  subject                                 String
+  bodyText                                String?           @db.Text
+  bodyHtml                                String?           @db.MediumText
+  inReplyTo                               String?
+  references                              String?           @db.Text
+  status                                  EmailReply_status @default(PENDING)
+  errorMessage                            String?           @db.Text
+  retryCount                              Int               @default(0)
+  sentAt                                  DateTime?
+  createdAt                               DateTime          @default(now())
+  updatedAt                               DateTime
+  Email_EmailReply_originalEmailIdToEmail Email             @relation("EmailReply_originalEmailIdToEmail", fields: [originalEmailId], references: [id], onDelete: Cascade)
+  Email_EmailReply_replyEmailIdToEmail    Email?            @relation("EmailReply_replyEmailIdToEmail", fields: [replyEmailId], references: [id])
+
+  @@index([createdAt])
+  @@index([originalEmailId])
+  @@index([sentBy])
+  @@index([status])
+  @@index([storeId])
+  @@index([tenantId])
+  @@index([ticketId])
+}
+
+model EmailSyncState {
+  id              String                    @id
+  tenantId        String
+  storeId         String?
+  emailAddress    String
+  historyId       String?
+  lastSyncedAt    DateTime?
+  syncStatus      EmailSyncState_syncStatus @default(IDLE)
+  syncProgress    Int                       @default(0)
+  totalEmails     Int?
+  syncedEmails    Int                       @default(0)
+  lastError       String?                   @db.Text
+  errorCount      Int                       @default(0)
+  watchExpiration DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime
+
+  @@unique([tenantId, storeId, emailAddress])
+  @@index([storeId])
+  @@index([syncStatus])
+  @@index([tenantId])
+}
+
+model FacebookIntegration {
+  id                   String   @id
+  tenantId             String
+  pageId               String
+  pageName             String
+  accessToken          String   @db.Text
+  webhookToken         String
+  isActive             Boolean  @default(true)
+  notificationSettings Json?
+  autoCreateSettings   Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime
+  Tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, pageId])
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+}
+
+model FacebookNotification {
+  id                String                    @id
+  type              FacebookNotification_type
+  facebookId        String
+  facebookPostId    String?
+  content           String                    @db.Text
+  author            String
+  authorProfilePic  String?
+  postUrl           String?
+  converted         Boolean                   @default(false)
+  convertedTicketId String?
+  notificationId    String                    @unique
+  createdAt         DateTime                  @default(now())
+  Ticket            Ticket?                   @relation(fields: [convertedTicketId], references: [id])
+  Notification      Notification              @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([convertedTicketId])
+  @@index([converted])
+  @@index([createdAt])
+}
+
+model Notification {
+  id                              String                    @id
+  type                            Notification_type
+  title                           String
+  message                         String                    @db.Text
+  userId                          String
+  ticketId                        String?
+  actorId                         String?
+  read                            Boolean                   @default(false)
+  readAt                          DateTime?
+  metadata                        Json?
+  createdAt                       DateTime                  @default(now())
+  updatedAt                       DateTime
+  FacebookNotification            FacebookNotification?
+  User_Notification_actorIdToUser User?                     @relation("Notification_actorIdToUser", fields: [actorId], references: [id])
+  Ticket                          Ticket?                   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  User_Notification_userIdToUser  User                      @relation("Notification_userIdToUser", fields: [userId], references: [id], onDelete: Cascade)
+  NotificationDeliveryLog         NotificationDeliveryLog[]
+
+  @@index([actorId], map: "Notification_actorId_fkey")
+  @@index([createdAt])
+  @@index([ticketId])
+  @@index([userId, read, createdAt])
+}
+
+model NotificationDeliveryLog {
+  id             String                          @id
+  notificationId String
+  channel        NotificationDeliveryLog_channel
+  status         NotificationDeliveryLog_status  @default(PENDING)
+  recipient      String
+  messageId      String?
+  errorMessage   String?                         @db.Text
+  attempts       Int                             @default(1)
+  sentAt         DateTime?
+  failedAt       DateTime?
+  createdAt      DateTime                        @default(now())
+  Notification   Notification                    @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([channel, status])
+  @@index([notificationId])
+  @@index([sentAt])
+}
+
+model NotificationPreference {
+  id                String                             @id
+  userId            String
+  notificationType  String
+  inAppEnabled      Boolean                            @default(true)
+  emailEnabled      Boolean                            @default(true)
+  pushEnabled       Boolean                            @default(false)
+  facebookEnabled   Boolean                            @default(false)
+  emailDigest       NotificationPreference_emailDigest @default(REALTIME)
+  quietHoursEnabled Boolean                            @default(false)
+  quietHoursStart   String?
+  quietHoursEnd     String?
+  createdAt         DateTime                           @default(now())
+  updatedAt         DateTime
+  User              User                               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notificationType])
+  @@index([userId])
+}
+
+model NotificationTemplate {
+  id           String                       @id
+  type         String                       @unique
+  channel      NotificationTemplate_channel
+  subject      String?
+  bodyTemplate String                       @db.Text
+  htmlTemplate String?                      @db.Text
+  variables    Json?
+  isActive     Boolean                      @default(true)
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime
+
+  @@index([type, channel])
+}
+
+model OrderTrackingData {
+  id                 String    @id
+  tenantId           String
+  storeId            String?
+  consigneeContact   String
+  orderId            String?
+  channelOrderNumber String?
+  waybillNumber      String
+  channelOrderDate   DateTime?
+  deliveredDate      DateTime?
+  pickupWarehouse    String
+  vendor             String?
+  uploadedBy         String?
+  uploadedAt         DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime
+  Store              Store?    @relation(fields: [storeId], references: [id])
+  Tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([channelOrderNumber])
+  @@index([consigneeContact])
+  @@index([orderId])
+  @@index([storeId])
+  @@index([tenantId, channelOrderNumber])
+  @@index([tenantId, consigneeContact])
+  @@index([tenantId])
+  @@index([tenantId, storeId])
+  @@index([waybillNumber])
+}
+
+model PushSubscription {
+  id         String    @id
+  userId     String
+  endpoint   String    @db.Text
+  p256dh     String    @db.Text
+  auth       String    @db.Text
+  userAgent  String?   @db.Text
+  deviceType String?
+  isActive   Boolean   @default(true)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  User       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([isActive])
+  @@index([userId])
+}
+
+model SLARule {
+  id             String           @id
+  teamId         String?
+  priority       SLARule_priority
+  responseTime   Int
+  resolutionTime Int
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime
+  Team           Team?            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, priority])
+  @@index([priority])
+}
+
+model SatisfactionRating {
+  id        String   @id
+  ticketId  String   @unique
+  rating    Int
+  feedback  String?  @db.Text
+  userId    String?
+  createdAt DateTime @default(now())
+  Ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  User      User?    @relation(fields: [userId], references: [id])
+
+  @@index([rating])
+  @@index([ticketId])
+  @@index([userId], map: "SatisfactionRating_userId_fkey")
+}
+
+model Store {
+  id                 String               @id
+  tenantId           String
+  name               String
+  description        String?
+  address            String?
+  phone              String?
+  email              String?
+  isActive           Boolean              @default(true)
+  settings           Json?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime
+  AutoAssignmentRule AutoAssignmentRule[]
+  Category           Category[]
+  Email              Email[]
+  OrderTrackingData  OrderTrackingData[]
+  Tenant             Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  SystemSettings     SystemSettings[]
+  Tag                Tag[]
+  Team               Team[]
+  Template           Template[]
+  Ticket             Ticket[]
+  User               User[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+}
+
+model SystemSettings {
+  id        String   @id
+  tenantId  String
+  storeId   String?
+  key       String
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+  Store     Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  Tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, storeId, key])
+  @@index([storeId])
+  @@index([tenantId])
+}
+
+model Tag {
+  id        String      @id
+  tenantId  String
+  storeId   String?
+  name      String
+  color     String?
+  createdAt DateTime    @default(now())
+  Store     Store?      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  Tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  TicketTag TicketTag[]
+
+  @@unique([tenantId, name])
+  @@index([storeId], map: "Tag_storeId_fkey")
+  @@index([tenantId])
+}
+
+model Team {
+  id          String       @id
+  tenantId    String
+  storeId     String?
+  name        String
+  description String?
+  color       String?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime
+  SLARule     SLARule[]
+  Store       Store?       @relation(fields: [storeId], references: [id])
+  Tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  TeamMember  TeamMember[]
+  Ticket      Ticket[]
+
+  @@unique([tenantId, name])
+  @@index([isActive])
+  @@index([storeId], map: "Team_storeId_fkey")
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+}
+
+model TeamMember {
+  id        String   @id
+  teamId    String
+  userId    String
+  role      String   @default("MEMBER")
+  createdAt DateTime @default(now())
+  Team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([teamId])
+  @@index([userId])
+}
+
+model Template {
+  id         String   @id
+  tenantId   String
+  storeId    String?
+  name       String
+  content    String   @db.Text
+  type       String
+  category   String?
+  variables  Json?
+  isActive   Boolean  @default(true)
+  usageCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+  Store      Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  Tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([category])
+  @@index([isActive])
+  @@index([storeId], map: "Template_storeId_fkey")
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+  @@index([tenantId, type])
+  @@index([type])
+}
+
+model Tenant {
+  id                  String                @id
+  name                String
+  slug                String                @unique
+  domain              String?               @unique
+  isActive            Boolean               @default(true)
+  settings            Json?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime
+  AutoAssignmentRule  AutoAssignmentRule[]
+  Category            Category[]
+  Email               Email[]
+  FacebookIntegration FacebookIntegration[]
+  OrderTrackingData   OrderTrackingData[]
+  Store               Store[]
+  SystemSettings      SystemSettings[]
+  Tag                 Tag[]
+  Team                Team[]
+  Template            Template[]
+  Ticket              Ticket[]
+  User                User[]
+
+  @@index([domain])
+  @@index([isActive])
+  @@index([slug])
+}
+
+model Ticket {
+  id                                String                 @id
+  tenantId                          String
+  storeId                           String?
+  ticketNumber                      String
+  subject                           String
+  description                       String                 @db.Text
+  status                            Ticket_status          @default(NEW)
+  priority                          Ticket_priority        @default(NORMAL)
+  categoryId                        String?
+  customerId                        String
+  assignedAgentId                   String?
+  assignedTeamId                    String?
+  source                            Ticket_source          @default(MANUAL)
+  facebookPostUrl                   String?
+  customerFacebookLink              String?
+  dueDate                           DateTime?
+  resolvedAt                        DateTime?
+  firstResponseAt                   DateTime?
+  isPenalized                       Boolean                @default(false)
+  penalizedAt                       DateTime?
+  penalizedBy                       String?
+  refundAmount                      Decimal?               @db.Decimal(10, 2)
+  createdAt                         DateTime               @default(now())
+  updatedAt                         DateTime
+  originalEmailMessageId            String?
+  Attachment                        Attachment[]
+  AuditLog                          AuditLog[]
+  CallLog                           CallLog[]
+  Comment                           Comment[]
+  Email                             Email[]
+  FacebookNotification              FacebookNotification[]
+  Notification                      Notification[]
+  SatisfactionRating                SatisfactionRating?
+  User_Ticket_assignedAgentIdToUser User?                  @relation("Ticket_assignedAgentIdToUser", fields: [assignedAgentId], references: [id])
+  Team                              Team?                  @relation(fields: [assignedTeamId], references: [id])
+  Category                          Category?              @relation(fields: [categoryId], references: [id])
+  User_Ticket_customerIdToUser      User                   @relation("Ticket_customerIdToUser", fields: [customerId], references: [id])
+  User_Ticket_penalizedByToUser     User?                  @relation("Ticket_penalizedByToUser", fields: [penalizedBy], references: [id])
+  Store                             Store?                 @relation(fields: [storeId], references: [id])
+  Tenant                            Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  TicketActivity                    TicketActivity[]
+  TicketTag                         TicketTag[]
+
+  @@unique([tenantId, ticketNumber])
+  @@index([assignedAgentId])
+  @@index([assignedTeamId])
+  @@index([categoryId])
+  @@index([createdAt])
+  @@index([customerId])
+  @@index([dueDate])
+  @@index([penalizedBy], map: "Ticket_penalizedBy_fkey")
+  @@index([priority])
+  @@index([source])
+  @@index([status])
+  @@index([storeId])
+  @@index([tenantId, assignedAgentId])
+  @@index([tenantId, customerId])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, storeId])
+}
+
+model TicketActivity {
+  id          String   @id
+  ticketId    String
+  userId      String?
+  action      String
+  description String   @db.Text
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  Ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  User        User?    @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([ticketId])
+  @@index([userId])
+}
+
+model TicketTag {
+  id        String   @id
+  ticketId  String
+  tagId     String
+  createdAt DateTime @default(now())
+  Tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  Ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@unique([ticketId, tagId])
+  @@index([tagId])
+  @@index([ticketId])
+}
+
+model User {
+  id                                      String                   @id
+  tenantId                                String
+  storeId                                 String?
+  email                                   String
+  name                                    String?
+  password                                String?
+  role                                    User_role                @default(CUSTOMER)
+  avatar                                  String?
+  phone                                   String?
+  company                                 String?
+  isActive                                Boolean                  @default(true)
+  createdAt                               DateTime                 @default(now())
+  updatedAt                               DateTime
+  AuditLog                                AuditLog[]
+  CallLog                                 CallLog[]
+  Comment                                 Comment[]
+  Notification_Notification_actorIdToUser Notification[]           @relation("Notification_actorIdToUser")
+  Notification_Notification_userIdToUser  Notification[]           @relation("Notification_userIdToUser")
+  NotificationPreference                  NotificationPreference[]
+  PushSubscription                        PushSubscription[]
+  SatisfactionRating                      SatisfactionRating[]
+  TeamMember                              TeamMember[]
+  Ticket_Ticket_assignedAgentIdToUser     Ticket[]                 @relation("Ticket_assignedAgentIdToUser")
+  Ticket_Ticket_customerIdToUser          Ticket[]                 @relation("Ticket_customerIdToUser")
+  Ticket_Ticket_penalizedByToUser         Ticket[]                 @relation("Ticket_penalizedByToUser")
+  TicketActivity                          TicketActivity[]
+  Store                                   Store?                   @relation(fields: [storeId], references: [id])
+  Tenant                                  Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  Category                                Category[]               @relation("AgentCategories")
+
+  @@unique([tenantId, email])
+  @@index([email])
+  @@index([role])
+  @@index([storeId])
+  @@index([tenantId, email])
+  @@index([tenantId])
+  @@index([tenantId, role])
+  @@index([tenantId, storeId])
+}
+
+enum FacebookNotification_type {
+  POST
+  COMMENT
+  MESSAGE
+}
+
+enum Notification_type {
   TICKET_ASSIGNED
   TICKET_UPDATED
   TICKET_REPLY
@@ -46,528 +750,7 @@ enum NotificationType {
   FACEBOOK_MESSAGE
 }
 
-enum FacebookNotificationType {
-  POST
-  COMMENT
-  MESSAGE
-}
-
-model Tenant {
-  id          String   @id @default(cuid())
-  name        String   // Company name
-  slug        String   @unique // URL-friendly identifier (e.g., "company-a")
-  domain      String?  @unique // Custom domain (optional)
-  isActive    Boolean  @default(true)
-  settings    Json?    // Tenant-specific settings
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  users       User[]
-  tickets     Ticket[]
-  categories  Category[]
-  teams       Team[]
-  tags        Tag[]
-  templates   Template[]
-  autoAssignmentRules AutoAssignmentRule[]
-  facebookIntegrations FacebookIntegration[]
-  systemSettings SystemSettings[]
-  orderTrackingData OrderTrackingData[]
-  emails            Email[]
-  stores      Store[]
-
-  @@index([slug])
-  @@index([domain])
-  @@index([isActive])
-}
-
-model Store {
-  id          String   @id @default(cuid())
-  tenantId    String
-  name        String
-  description String?
-  address     String?
-  phone       String?
-  email       String?
-  isActive    Boolean  @default(true)
-  settings    Json?    // Store-specific settings override
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  tenant                Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  users                 User[]
-  tickets               Ticket[]
-  systemSettings        SystemSettings[]
-  autoAssignmentRules   AutoAssignmentRule[]
-  teams                 Team[]
-  categories            Category[]
-  tags                  Tag[]
-  templates             Template[]
-  orderTrackingData     OrderTrackingData[]
-  emails                Email[]
-
-  @@unique([tenantId, name])
-  @@index([tenantId])
-  @@index([tenantId, isActive])
-}
-
-
-model User {
-  id        String   @id @default(cuid())
-  tenantId  String   // Multi-tenant: Company/Organization ID
-  storeId   String?  // Store assignment (optional, for agents)
-  email     String
-  name      String?
-  password  String?
-  role      UserRole @default(CUSTOMER)
-  avatar    String?
-  phone     String?
-  company   String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  tenant                  Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  store                   Store?                  @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  tickets                 Ticket[]
-  assignedTickets         Ticket[]                 @relation("AssignedTickets")
-  comments                Comment[]
-  notifications           Notification[]           @relation("NotificationReceiver")
-  notificationsActed      Notification[]           @relation("NotificationActor")
-  auditLogs               AuditLog[]
-  satisfactionRatings     SatisfactionRating[]
-  categories              Category[]               @relation("AgentCategories")
-  notificationPreferences NotificationPreference[]
-  pushSubscriptions       PushSubscription[]
-  teamMembers             TeamMember[]
-  ticketActivities        TicketActivity[]
-  callLogs                CallLog[]           @relation("CallLogs")
-  penalizedTickets        Ticket[]            @relation("PenalizedTickets")
-
-  @@unique([tenantId, email]) // Email unique per tenant
-  @@index([email])
-  @@index([role])
-  @@index([tenantId])
-  @@index([storeId])
-  @@index([tenantId, email])
-  @@index([tenantId, role])
-  @@index([tenantId, storeId])
-}
-
-model Category {
-  id          String   @id @default(cuid())
-  tenantId    String   // Multi-tenant: Company/Organization ID
-  storeId     String?  // Store assignment (optional)
-  name        String
-  description String?
-  parentId    String?
-  color       String?
-  icon        String?
-  subjects    Json?    // Array of subject strings
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  store     Store?    @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  parent    Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children  Category[] @relation("CategoryHierarchy")
-  tickets   Ticket[]
-  agents    User[]    @relation("AgentCategories")
-
-  @@index([parentId])
-  @@index([tenantId])
-  @@index([tenantId, parentId])
-}
-
-enum TicketSource {
-  EMAIL
-  FACEBOOK_POST
-  FACEBOOK_COMMENT
-  FACEBOOK_MESSAGE
-  MANUAL
-  API
-}
-
-model Team {
-  id          String   @id @default(cuid())
-  tenantId    String   // Multi-tenant: Company/Organization ID
-  storeId     String?  // Store assignment (optional)
-  name        String
-  description String?
-  color       String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  store     Store?      @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  tickets   Ticket[]
-  members   TeamMember[]
-  slaRules  SLARule[]
-
-  @@unique([tenantId, name]) // Team name unique per tenant
-  @@index([isActive])
-  @@index([tenantId])
-  @@index([tenantId, isActive])
-}
-
-model TeamMember {
-  id        String   @id @default(cuid())
-  teamId    String
-  userId    String
-  role      String   @default("MEMBER") // MEMBER, LEAD
-  createdAt DateTime @default(now())
-
-  // Relations
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([teamId, userId])
-  @@index([teamId])
-  @@index([userId])
-}
-
-model SLARule {
-  id             String         @id @default(cuid())
-  teamId         String?
-  priority       TicketPriority
-  responseTime   Int // Minutes
-  resolutionTime Int // Minutes
-  isActive       Boolean        @default(true)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-
-  // Relations
-  team Team? @relation(fields: [teamId], references: [id], onDelete: Cascade)
-
-  @@unique([teamId, priority])
-  @@index([priority])
-}
-
-model AutoAssignmentRule {
-  id          String   @id @default(cuid())
-  tenantId    String   // Multi-tenant: Company/Organization ID
-  storeId     String?  // Store assignment (optional)
-  name        String
-  description String?
-  conditions  Json // Conditions to match (keywords, customer history, etc.)
-  actions     Json // Actions (assign to team, agent, set priority, etc.)
-  priority    Int      @default(0) // Higher priority rules run first
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  store  Store? @relation(fields: [storeId], references: [id], onDelete: Cascade)
-
-  @@index([isActive, priority])
-  @@index([tenantId])
-  @@index([tenantId, isActive, priority])
-}
-
-model Ticket {
-  id                     String         @id @default(cuid())
-  tenantId               String         // Multi-tenant: Company/Organization ID
-  storeId                String?        // Store assignment (optional)
-  ticketNumber           String
-  subject                String
-  description            String         @db.Text
-  status                 TicketStatus   @default(NEW)
-  priority               TicketPriority @default(NORMAL)
-  categoryId             String?
-  customerId             String
-  assignedAgentId        String?
-  assignedTeamId         String?
-  source                 TicketSource   @default(MANUAL)
-  facebookPostUrl        String? // Original Facebook post/comment URL
-  customerFacebookLink   String? // Customer's Facebook profile link
-  dueDate                DateTime?
-  resolvedAt             DateTime?
-  firstResponseAt        DateTime? // Time of first agent response
-  isPenalized            Boolean        @default(false) // Whether ticket is marked as penalized
-  penalizedAt            DateTime? // When ticket was marked as penalized
-  penalizedBy            String? // User ID who marked as penalized
-  refundAmount           Decimal? @db.Decimal(10, 2) // Refund amount for penalized tickets
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
-  originalEmailMessageId String? // Store Message-ID from ticket creation email for threading
-
-  // Relations
-  tenant                 Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  store                  Store?                 @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  customer               User                   @relation(fields: [customerId], references: [id])
-  assignedAgent          User?                  @relation("AssignedTickets", fields: [assignedAgentId], references: [id])
-  category               Category?              @relation(fields: [categoryId], references: [id])
-  assignedTeam           Team?                  @relation(fields: [assignedTeamId], references: [id])
-  comments               Comment[]
-  attachments            Attachment[]
-  tags                   TicketTag[]
-  notifications          Notification[]
-  satisfactionRating     SatisfactionRating?
-  callLogs              CallLog[]
-  penalizedByUser        User?            @relation("PenalizedTickets", fields: [penalizedBy], references: [id], onDelete: SetNull)
-  auditLogs              AuditLog[]
-  activities             TicketActivity[]
-  FacebookNotification   FacebookNotification[]
-  emails                 Email[]
-
-  @@unique([tenantId, ticketNumber]) // Ticket number unique per tenant
-  @@index([customerId])
-  @@index([assignedAgentId])
-  @@index([assignedTeamId])
-  @@index([status])
-  @@index([priority])
-  @@index([categoryId])
-  @@index([source])
-  @@index([createdAt])
-  @@index([dueDate])
-  @@index([tenantId])
-  @@index([storeId])
-  @@index([tenantId, status])
-  @@index([tenantId, customerId])
-  @@index([tenantId, assignedAgentId])
-  @@index([tenantId, storeId])
-}
-
-model Comment {
-  id         String   @id @default(cuid())
-  content    String   @db.Text
-  isInternal Boolean  @default(false)
-  ticketId   String
-  authorId   String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  // Relations
-  ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  author      User         @relation(fields: [authorId], references: [id])
-  attachments Attachment[]
-
-  @@index([ticketId])
-  @@index([authorId])
-}
-
-model Attachment {
-  id        String   @id @default(cuid())
-  filename  String
-  fileUrl   String
-  fileSize  Int
-  mimeType  String
-  ticketId  String?
-  commentId String?
-  createdAt DateTime @default(now())
-
-  // Relations
-  ticket  Ticket?  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
-
-  @@index([ticketId])
-  @@index([commentId])
-}
-
-model Tag {
-  id        String   @id @default(cuid())
-  tenantId  String   // Multi-tenant: Company/Organization ID
-  storeId   String?  // Store assignment (optional)
-  name      String
-  color     String?
-  createdAt DateTime @default(now())
-
-  // Relations
-  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  store   Store?      @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  tickets TicketTag[]
-
-  @@unique([tenantId, name]) // Tag name unique per tenant
-  @@index([tenantId])
-}
-
-model TicketTag {
-  id        String   @id @default(cuid())
-  ticketId  String
-  tagId     String
-  createdAt DateTime @default(now())
-
-  // Relations
-  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@unique([ticketId, tagId])
-  @@index([ticketId])
-  @@index([tagId])
-}
-
-model Notification {
-  id        String           @id @default(cuid())
-  type      NotificationType
-  title     String
-  message   String           @db.Text
-  userId    String
-  ticketId  String?
-  actorId   String? // Who triggered the notification
-  read      Boolean          @default(false)
-  readAt    DateTime?
-  metadata  Json?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-
-  // Relations
-  user                 User                      @relation("NotificationReceiver", fields: [userId], references: [id], onDelete: Cascade)
-  ticket               Ticket?                   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  actor                User?                     @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
-  facebookNotification FacebookNotification?
-  deliveryLogs         NotificationDeliveryLog[]
-
-  @@index([userId, read, createdAt])
-  @@index([ticketId])
-  @@index([createdAt])
-}
-
-model FacebookIntegration {
-  id                  String   @id @default(cuid())
-  tenantId            String   // Multi-tenant: Company/Organization ID
-  pageId              String
-  pageName            String
-  accessToken         String   @db.Text
-  webhookToken        String
-  isActive            Boolean  @default(true)
-  notificationSettings Json?   // { posts: boolean, comments: boolean, messages: boolean, mentions: boolean }
-  autoCreateSettings  Json?    // { fromMessages: boolean, fromComments: boolean, keywords: string }
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@unique([tenantId, pageId]) // Page ID unique per tenant
-  @@index([tenantId])
-  @@index([tenantId, isActive])
-}
-
-model FacebookNotification {
-  id                String                   @id @default(cuid())
-  type              FacebookNotificationType
-  facebookId        String
-  facebookPostId    String?
-  content           String                   @db.Text
-  author            String
-  authorProfilePic  String?
-  postUrl           String?
-  converted         Boolean                  @default(false)
-  convertedTicketId String? // Link to converted ticket
-  notificationId    String                   @unique
-  createdAt         DateTime                 @default(now())
-
-  // Relations
-  notification    Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-  convertedTicket Ticket?      @relation(fields: [convertedTicketId], references: [id], onDelete: SetNull)
-
-  @@index([converted])
-  @@index([convertedTicketId])
-  @@index([createdAt])
-}
-
-model SatisfactionRating {
-  id        String   @id @default(cuid())
-  ticketId  String   @unique
-  rating    Int // 1-5
-  feedback  String?  @db.Text
-  userId    String?
-  createdAt DateTime @default(now())
-
-  // Relations
-  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  user   User?  @relation(fields: [userId], references: [id])
-
-  @@index([ticketId])
-  @@index([rating])
-}
-
-model Template {
-  id         String   @id @default(cuid())
-  tenantId   String   // Multi-tenant: Company/Organization ID
-  storeId    String?  // Store assignment (optional)
-  name       String
-  content    String   @db.Text
-  type       String // EMAIL, CANNED_RESPONSE
-  category   String? // Category for organizing templates
-  variables  Json?
-  isActive   Boolean  @default(true)
-  usageCount Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  store  Store? @relation(fields: [storeId], references: [id], onDelete: Cascade)
-
-  @@index([type])
-  @@index([category])
-  @@index([isActive])
-  @@index([tenantId])
-  @@index([tenantId, type])
-  @@index([tenantId, isActive])
-}
-
-model TicketActivity {
-  id          String   @id @default(cuid())
-  ticketId    String
-  userId      String?
-  action      String // status_changed, assigned, priority_changed, comment_added, etc.
-  description String   @db.Text
-  metadata    Json? // Additional data about the activity
-  createdAt   DateTime @default(now())
-
-  // Relations
-  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([ticketId])
-  @@index([userId])
-  @@index([createdAt])
-}
-
-model AuditLog {
-  id        String   @id @default(cuid())
-  action    String
-  userId    String
-  ticketId  String?
-  changes   Json?
-  createdAt DateTime @default(now())
-
-  // Relations
-  user   User    @relation(fields: [userId], references: [id])
-  ticket Ticket? @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([ticketId])
-  @@index([createdAt])
-}
-
-model SystemSettings {
-  id        String   @id @default(cuid())
-  tenantId  String   // Multi-tenant: Company/Organization ID
-  storeId   String?  // Store assignment (optional)
-  key       String
-  value     String   @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  store  Store? @relation(fields: [storeId], references: [id], onDelete: Cascade)
-
-  @@unique([tenantId, storeId, key]) // Setting key unique per tenant and store
-  @@index([tenantId])
-  @@index([storeId])
-}
-
-enum DeliveryChannel {
+enum NotificationDeliveryLog_channel {
   IN_APP
   EMAIL
   PUSH
@@ -575,165 +758,29 @@ enum DeliveryChannel {
   FACEBOOK
 }
 
-enum DeliveryStatus {
+enum NotificationTemplate_channel {
+  IN_APP
+  EMAIL
+  PUSH
+  SMS
+  FACEBOOK
+}
+
+enum SLARule_priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum NotificationDeliveryLog_status {
   PENDING
   SENT
   FAILED
   BOUNCED
 }
 
-enum EmailDigestFrequency {
-  REALTIME
-  HOURLY
-  DAILY
-  WEEKLY
-}
-
-model NotificationPreference {
-  id                String               @id @default(cuid())
-  userId            String
-  notificationType  String
-  inAppEnabled      Boolean              @default(true)
-  emailEnabled      Boolean              @default(true)
-  pushEnabled       Boolean              @default(false)
-  facebookEnabled   Boolean              @default(false)
-  emailDigest       EmailDigestFrequency @default(REALTIME)
-  quietHoursEnabled Boolean              @default(false)
-  quietHoursStart   String?
-  quietHoursEnd     String?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, notificationType])
-  @@index([userId])
-}
-
-model NotificationDeliveryLog {
-  id             String          @id @default(cuid())
-  notificationId String
-  channel        DeliveryChannel
-  status         DeliveryStatus  @default(PENDING)
-  recipient      String
-  messageId      String?
-  errorMessage   String?         @db.Text
-  attempts       Int             @default(1)
-  sentAt         DateTime?
-  failedAt       DateTime?
-  createdAt      DateTime        @default(now())
-
-  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-
-  @@index([notificationId])
-  @@index([channel, status])
-  @@index([sentAt])
-}
-
-model PushSubscription {
-  id         String    @id @default(cuid())
-  userId     String
-  endpoint   String    @db.Text
-  p256dh     String    @db.Text
-  auth       String    @db.Text
-  userAgent  String?   @db.Text
-  deviceType String?
-  isActive   Boolean   @default(true)
-  lastUsedAt DateTime?
-  createdAt  DateTime  @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([isActive])
-}
-
-model NotificationTemplate {
-  id           String          @id @default(cuid())
-  type         String          @unique
-  channel      DeliveryChannel
-  subject      String?
-  bodyTemplate String          @db.Text
-  htmlTemplate String?         @db.Text
-  variables    Json?
-  isActive     Boolean         @default(true)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-
-  @@index([type, channel])
-}
-
-model OrderTrackingData {
-  id                String    @id @default(cuid())
-  tenantId          String    // Multi-tenant: Company/Organization ID
-  storeId           String?   // Store assignment (optional)
-  consigneeContact  String    // Phone number
-  orderId           String?   // Order ID (deprecated, kept for migration)
-  channelOrderNumber String?  // Channel Order Number (replaces OrderId)
-  waybillNumber     String    // Tracking ID (WayBill Number)
-  channelOrderDate  DateTime? // Channel Order Date
-  deliveredDate     DateTime? // Delivered Date
-  pickupWarehouse   String    // Pickup Warehouse (required)
-  vendor            String?   // Vendor (optional)
-  uploadedBy        String?   // User ID who uploaded the sheet
-  uploadedAt        DateTime  @default(now())
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  store  Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
-
-  @@index([consigneeContact])
-  @@index([channelOrderNumber])
-  @@index([waybillNumber])
-  @@index([orderId])
-  @@index([tenantId])
-  @@index([storeId])
-  @@index([tenantId, consigneeContact])
-  @@index([tenantId, channelOrderNumber])
-  @@index([tenantId, storeId])
-  // Unique constraint: only apply when channelOrderNumber is not null
-  // For null values, we'll handle uniqueness in application logic
-}
-
-model Email {
-  id                String    @id @default(cuid())
-  tenantId          String    // Multi-tenant: Company/Organization ID
-  storeId           String?   // Store assignment (optional)
-  messageId         String    @unique // Email Message-ID header
-  fromEmail         String    // Sender email address
-  fromName          String?   // Sender name
-  toEmail           String    // Recipient email address
-  subject           String    // Email subject
-  textContent       String?   @db.Text // Plain text content
-  htmlContent       String?   @db.Text // HTML content
-  headers           Json?     // Email headers
-  read              Boolean   @default(false) // Whether email has been read
-  readAt            DateTime? // When email was read
-  ticketId          String?   // Associated ticket ID (if email is linked to a ticket)
-  processed         Boolean   @default(false) // Whether email has been processed/converted to ticket
-  processedAt       DateTime? // When email was processed
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  store  Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  ticket Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
-
-  @@index([tenantId])
-  @@index([storeId])
-  @@index([fromEmail])
-  @@index([toEmail])
-  @@index([read])
-  @@index([processed])
-  @@index([createdAt])
-  @@index([tenantId, storeId, read])
-  @@index([tenantId, storeId, processed])
-}
-
-enum CallStatus {
+enum CallLog_status {
   INITIATED
   RINGING
   ANSWERED
@@ -744,30 +791,61 @@ enum CallStatus {
   CANCELLED
 }
 
-model CallLog {
-  id            String     @id @default(cuid())
-  ticketId      String?    // Associated ticket ID
-  agentId       String      // Agent who made the call
-  customerName  String      // Customer name
-  customerPhone String      // Customer phone number
-  agentPhone    String      // Agent phone number
-  status        CallStatus  @default(INITIATED)
-  duration      Int         @default(0) // Duration in seconds
-  attempts      Int         @default(1) // Number of call attempts
-  remark        String?     // Additional remarks
-  exotelCallId  String?     // Exotel call ID for tracking
-  exotelResponse Json?      // Full Exotel API response
-  startedAt     DateTime    @default(now())
-  endedAt       DateTime?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+enum EmailSyncState_syncStatus {
+  IDLE
+  INITIAL_SYNC
+  SYNCING
+  WATCHING
+  ERROR
+}
 
-  // Relations
-  ticket Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
-  agent  User    @relation("CallLogs", fields: [agentId], references: [id])
+enum Ticket_status {
+  NEW
+  OPEN
+  IN_PROGRESS
+  PENDING
+  RESOLVED
+  CLOSED
+  INITIATE_REFUND
+}
 
-  @@index([agentId])
-  @@index([ticketId])
-  @@index([customerPhone])
-  @@index([startedAt])
+enum User_role {
+  ADMIN
+  AGENT
+  CUSTOMER
+}
+
+enum NotificationPreference_emailDigest {
+  REALTIME
+  HOURLY
+  DAILY
+  WEEKLY
+}
+
+enum Ticket_priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum Ticket_source {
+  EMAIL
+  FACEBOOK_POST
+  FACEBOOK_COMMENT
+  FACEBOOK_MESSAGE
+  MANUAL
+  API
+}
+
+enum EmailReply_status {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
+enum Email_direction {
+  INBOUND
+  OUTBOUND
 }

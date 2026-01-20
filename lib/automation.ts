@@ -1,6 +1,6 @@
 import { prisma } from './prisma'
 import { sendEmail, renderEmailTemplate } from './email'
-import { TicketStatus, TicketPriority, UserRole } from '@prisma/client'
+import { Ticket_status, Ticket_priority, User_role } from '@prisma/client'
 import { getAppUrl } from './utils'
 import fs from 'fs'
 import path from 'path'
@@ -43,7 +43,7 @@ async function getSystemSetting(key: string, tenantId?: string, storeId?: string
 export async function autoAssignTicket(ticketId: string) {
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
-    include: { category: true, customer: true },
+    include: { Category: true, User_Ticket_customerIdToUser: true },
   })
 
   if (!ticket || ticket.assignedAgentId) {
@@ -55,20 +55,20 @@ export async function autoAssignTicket(ticketId: string) {
   const agents = await prisma.user.findMany({
     where: {
       tenantId: ticket.tenantId, // Multi-tenant: Only assign to agents from same tenant
-      role: UserRole.AGENT,
+      role: User_role.AGENT,
       isActive: true,
     },
     include: {
-      assignedTickets: {
+      Ticket_Ticket_assignedAgentIdToUser: {
         where: {
           status: {
-            in: [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.PENDING],
+            in: [Ticket_status.NEW, Ticket_status.OPEN, Ticket_status.PENDING],
           },
         },
       },
     },
     orderBy: {
-      assignedTickets: {
+      Ticket_Ticket_assignedAgentIdToUser: {
         _count: 'asc',
       },
     },
@@ -81,8 +81,8 @@ export async function autoAssignTicket(ticketId: string) {
   // If category has assigned agents, prefer them
   let selectedAgent = agents[0]
   if (ticket.categoryId) {
-    const categoryAgents = agents.filter((agent) =>
-      agent.assignedTickets.some((t) => t.categoryId === ticket.categoryId)
+    const categoryAgents = agents.filter((agent: any) =>
+      agent.Ticket_Ticket_assignedAgentIdToUser.some((t: any) => t.categoryId === ticket.categoryId)
     )
     if (categoryAgents.length > 0) {
       selectedAgent = categoryAgents[0]
@@ -98,9 +98,9 @@ export async function autoAssignTicket(ticketId: string) {
   const fullTicket = await prisma.ticket.findUnique({
     where: { id: ticketId },
     include: {
-      customer: true,
-      category: true,
-      assignedAgent: true,
+      User_Ticket_customerIdToUser: true,
+      Category: true,
+      User_Ticket_assignedAgentIdToUser: true,
     },
   })
 
@@ -122,7 +122,7 @@ export async function autoAssignTicket(ticketId: string) {
           <ul>
             <li><strong>Ticket:</strong> ${ticket.ticketNumber}</li>
             <li><strong>Subject:</strong> ${ticket.subject}</li>
-            <li><strong>Customer:</strong> ${ticket.customer.name || ticket.customer.email}</li>
+            <li><strong>Customer:</strong> ${ticket.User_Ticket_customerIdToUser.name || ticket.User_Ticket_customerIdToUser.email}</li>
           </ul>
           <p><a href="${getAppUrl()}/agent/tickets/${ticketId}">View Ticket</a></p>
         `,
@@ -143,7 +143,7 @@ export async function autoResolveInactiveTickets(daysInactive: number = 7, tenan
 
   const where: any = {
     status: {
-      in: [TicketStatus.OPEN, TicketStatus.PENDING],
+      in: [Ticket_status.OPEN, Ticket_status.PENDING],
     },
     updatedAt: {
       lt: cutoffDate,
@@ -166,8 +166,8 @@ export async function autoResolveInactiveTickets(daysInactive: number = 7, tenan
   const inactiveTickets = await prisma.ticket.findMany({
     where,
     include: {
-      customer: true,
-      comments: {
+      User_Ticket_customerIdToUser: true,
+      Comment: {
         orderBy: { createdAt: 'desc' },
         take: 1,
       },
@@ -176,9 +176,9 @@ export async function autoResolveInactiveTickets(daysInactive: number = 7, tenan
 
   for (const ticket of inactiveTickets) {
     // Send warning email first
-    if (ticket.customer.email) {
+    if (ticket.User_Ticket_customerIdToUser.email) {
       await sendEmail({
-        to: ticket.customer.email,
+        to: ticket.User_Ticket_customerIdToUser.email,
         subject: `Ticket ${ticket.ticketNumber} - No Response`,
         html: `
           <h2>Ticket Update Required</h2>
@@ -196,7 +196,7 @@ export async function autoResolveInactiveTickets(daysInactive: number = 7, tenan
     await prisma.ticket.update({
       where: { id: ticket.id },
       data: {
-        status: TicketStatus.RESOLVED,
+        status: Ticket_status.RESOLVED,
         resolvedAt: new Date(),
       },
     })
@@ -215,16 +215,16 @@ export async function autoResolveInactiveTickets(daysInactive: number = 7, tenan
   return inactiveTickets.length
 }
 
-export async function sendTicketAcknowledgment(ticketId: string, tenantId?: string) {
+export async function sendTicketAcknowledgment(ticketId: string, options?: { inReplyTo?: string }) {
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
     include: { 
-      customer: true,
-      category: true,
+      User_Ticket_customerIdToUser: true,
+      Category: true,
     },
   })
 
-  if (!ticket || !ticket.customer.email) {
+  if (!ticket || !ticket.User_Ticket_customerIdToUser.email) {
     return
   }
 
@@ -238,7 +238,7 @@ export async function sendTicketAcknowledgment(ticketId: string, tenantId?: stri
     console.error('Error reading email template:', error)
     // Fallback to simple email if template not found
     await sendEmail({
-      to: ticket.customer.email,
+      to: ticket.User_Ticket_customerIdToUser.email,
       subject: `Thank you for contacting us - Ticket ${ticket.ticketNumber}`,
       html: `
         <h2>Thank you for contacting us!</h2>
@@ -282,10 +282,10 @@ export async function sendTicketAcknowledgment(ticketId: string, tenantId?: stri
 
   // Prepare template variables
   const variables: Record<string, string> = {
-    CUSTOMER_NAME: ticket.customer.name || ticket.customer.email.split('@')[0],
+    CUSTOMER_NAME: ticket.User_Ticket_customerIdToUser.name || ticket.User_Ticket_customerIdToUser.email.split('@')[0],
     TICKET_ID: ticket.ticketNumber,
     TICKET_SUBJECT: ticket.subject,
-    TICKET_CATEGORY: ticket.category?.name || 'General',
+    TICKET_CATEGORY: ticket.Category?.name || 'General',
     TICKET_PRIORITY: priorityDisplay,
     PRIORITY_CLASS: priorityClass,
     CREATED_DATE: createdDate,
@@ -296,7 +296,7 @@ export async function sendTicketAcknowledgment(ticketId: string, tenantId?: stri
     COMPANY_ADDRESS: (ticket.tenantId ? await getSystemSetting('COMPANY_ADDRESS', ticket.tenantId, ticket.storeId) : null) || process.env.COMPANY_ADDRESS || '',
     SUPPORT_EMAIL: (ticket.tenantId ? await getSystemSetting('SUPPORT_EMAIL', ticket.tenantId, ticket.storeId) : null) || process.env.SUPPORT_EMAIL || process.env.SMTP_USER || 'support@example.com',
     SUPPORT_PHONE: (ticket.tenantId ? await getSystemSetting('SUPPORT_PHONE', ticket.tenantId, ticket.storeId) : null) || process.env.SUPPORT_PHONE || '',
-    CUSTOMER_EMAIL: ticket.customer.email,
+    CUSTOMER_EMAIL: ticket.User_Ticket_customerIdToUser.email,
     FACEBOOK_URL: process.env.FACEBOOK_URL || '#',
     TWITTER_URL: process.env.TWITTER_URL || '#',
     LINKEDIN_URL: process.env.LINKEDIN_URL || '#',
@@ -309,23 +309,40 @@ export async function sendTicketAcknowledgment(ticketId: string, tenantId?: stri
   // Generate unique Message-ID for email threading
   const messageId = `<ticket-${ticket.id}-${Date.now()}@${process.env.SMTP_HOST || 'support'}>`
   
+  // Always use consistent subject format with ticket number
+  // Threading is handled by In-Reply-To and References headers, not subject
+  const emailSubject = `Ticket Created Successfully - ${ticket.ticketNumber}`
+  
   const result = await sendEmail({
-    to: ticket.customer.email,
-    subject: `Ticket Created Successfully - ${ticket.ticketNumber}`,
+    to: ticket.User_Ticket_customerIdToUser.email,
+    subject: emailSubject,
     html,
     messageId,
+    inReplyTo: options?.inReplyTo,
+    references: options?.inReplyTo,
     tenantId: ticket.tenantId,
     storeId: ticket.storeId || null,
   })
 
   // Store Message-ID in ticket for email threading
   if (result.success && result.messageId) {
+    console.log(`[sendTicketAcknowledgment] 📧 Storing Message-ID for threading:`, {
+      ticketId: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      messageId: result.messageId,
+    })
     await prisma.ticket.update({
       where: { id: ticket.id },
       data: { originalEmailMessageId: result.messageId },
     }).catch((error) => {
       console.error('Error storing email Message-ID:', error)
       // Don't fail the whole operation if storing Message-ID fails
+    })
+  } else {
+    console.warn(`[sendTicketAcknowledgment] ⚠️ Could not store Message-ID:`, {
+      ticketId: ticket.id,
+      success: result.success,
+      messageId: result.messageId,
     })
   }
 }

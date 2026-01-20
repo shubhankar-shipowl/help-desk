@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { fetchAndStoreGmailEmails, FetchOptions } from '@/lib/imap/gmail-fetcher'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 300 // 5 minutes timeout for large email fetches
 
 /**
  * Fetch emails from Gmail using IMAP
@@ -122,10 +123,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Build fetch options
-    // Default to 200 emails for both 'latest' and 'unread' modes for performance
+    // For 'unread' mode: fetch ALL unread emails (no limit)
+    // For 'latest' mode: use provided limit or default to 200
     const fetchOptions: FetchOptions = {
       mode: mode === 'latest' ? 'latest' : 'unread',
-      limit: limit || 200, // Default 200 for both modes
+      limit: mode === 'latest' ? (limit || 200) : undefined, // No limit for unread mode
     }
 
     // Fetch and store emails
@@ -144,9 +146,13 @@ export async function POST(req: NextRequest) {
 
       console.log(`[IMAP Fetch] Fetch completed:`, result)
 
+      const attachmentMsg = result.attachmentsUploaded > 0 
+        ? `, ${result.attachmentsUploaded} attachments uploaded to MEGA`
+        : ''
+      
       return NextResponse.json({
         success: true,
-        message: `Fetched ${result.fetched} emails, stored ${result.stored} new emails`,
+        message: `Fetched ${result.fetched} emails, stored ${result.stored} new emails${attachmentMsg}`,
         stats: result,
       })
     } catch (fetchError: any) {

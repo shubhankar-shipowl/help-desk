@@ -333,7 +333,7 @@ export default function AdminUsersPage() {
                           {user.role === 'CUSTOMER' ? (
                             <>
                               <p className="text-gray-900 font-medium">
-                                {user._count.tickets} total
+                                {user._count.Ticket} total
                               </p>
                               <p className="text-gray-500">
                                 {user.openTickets} open, {user.resolvedTickets} resolved
@@ -345,7 +345,7 @@ export default function AdminUsersPage() {
                                 {user._count.assignedTickets} assigned
                               </p>
                               <p className="text-gray-500">
-                                {user._count.tickets} created
+                                {user._count.Ticket} created
                               </p>
                             </>
                           ) : (

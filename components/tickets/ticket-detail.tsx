@@ -927,50 +927,44 @@ export function TicketDetail({
             </Card>
           )}
 
-          {/* Conversation Thread */}
-          <div>
-            <h3 className="text-sm font-semibold mb-4">Conversation</h3>
-            <div className="space-y-4">
-              {/* Ticket Description as First Message */}
-              {ticketData.description && (
-                <div className="p-4 rounded-xl bg-white border border-gray-200">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <User className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-sm">
-                          {ticketData.customer?.name || (ticketData.customer?.email ? maskEmail(ticketData.customer.email) : 'Customer')}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {formatDate(ticketData.createdAt)}
-                        </span>
-                      </div>
-                      <p className="text-sm whitespace-pre-wrap">{ticketData.description}</p>
-                    </div>
-                  </div>
+
+          {/* Description Section */}
+          {ticketData.description && (
+            <Card className="border border-gray-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">Description</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm whitespace-pre-wrap text-gray-700">{ticketData.description}</p>
                 </div>
-              )}
-              {(ticketData.comments || []).map((comment: any) => (
-                <div
-                  key={comment.id}
-                  className={`p-4 rounded-xl ${
-                    comment.isInternal
-                      ? 'bg-yellow-50 border border-yellow-200'
-                      : comment.author.role === 'CUSTOMER'
-                      ? 'bg-white border border-gray-200'
-                      : 'bg-primary/10 border border-primary/20'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <User className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-sm">
-                          {comment.author.name || comment.author.email}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Comments/Replies Section */}
+          {ticketData.comments && ticketData.comments.length > 0 && (
+            <Card className="border border-gray-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">Replies ({ticketData.comments.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {ticketData.comments.map((comment: any) => (
+                    <div 
+                      key={comment.id}
+                      className={`p-4 rounded-lg ${
+                        comment.isInternal 
+                          ? 'bg-yellow-50 border border-yellow-200' 
+                          : 'bg-blue-50 border border-blue-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                          <User className="h-3 w-3 text-primary" />
+                        </div>
+                        <span className="text-sm font-medium">
+                          {comment.User?.name || comment.User?.email || 'Agent'}
                         </span>
                         {comment.isInternal && (
                           <Badge variant="outline" className="text-xs">
@@ -981,44 +975,15 @@ export function TicketDetail({
                           {formatDate(comment.createdAt)}
                         </span>
                       </div>
-                      <p className="text-sm whitespace-pre-wrap">{comment.content}</p>
-                      {/* Comment Attachments */}
-                      {comment.attachments && comment.attachments.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          {comment.attachments.map((attachment: any) => (
-                            <div
-                              key={attachment.id}
-                              className="flex items-center gap-2 p-2 bg-gray-50 rounded border border-gray-200"
-                            >
-                              <Paperclip className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                              <span className="text-xs text-gray-700 truncate flex-1">
-                                {attachment.filename}
-                              </span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2 text-xs flex-shrink-0"
-                                onClick={() => {
-                                  if (attachment.fileUrl) {
-                                    window.open(attachment.fileUrl, '_blank', 'noopener,noreferrer')
-                                  }
-                                }}
-                              >
-                                <ExternalLink className="w-3 h-3 mr-1" />
-                                View
-                              </Button>
+                      <p className="text-sm whitespace-pre-wrap text-gray-700">{comment.content}</p>
                     </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </CardContent>
+            </Card>
+          )}
 
-          {/* Reply Box - Hide for Facebook tickets */}
+
           {!(ticketData.source === 'FACEBOOK_POST' || ticketData.source === 'FACEBOOK_COMMENT' || ticketData.source === 'FACEBOOK_MESSAGE') && (
             <Card className="border border-gray-200 sticky bottom-0">
               <CardContent className="p-4">
@@ -1459,7 +1424,7 @@ export function TicketDetail({
                 className={`p-4 rounded-lg ${
                   comment.isInternal
                     ? 'bg-yellow-50 border border-yellow-200'
-                    : comment.author.role === 'CUSTOMER'
+                    : comment.User?.role === 'CUSTOMER'
                     ? 'bg-blue-50'
                     : 'bg-gray-50'
                 }`}
@@ -1473,7 +1438,7 @@ export function TicketDetail({
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-semibold">
-                        {comment.author.name || comment.author.email}
+                        {comment.User?.name || comment.User?.email}
                       </span>
                       {comment.isInternal && (
                         <Badge variant="outline" className="text-xs">

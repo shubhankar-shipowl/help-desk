@@ -90,6 +90,7 @@ export async function queueEmailNotification(data: {
   type: NotificationType
   userId: string
   tenantId?: string
+  storeId?: string | null
   inReplyTo?: string
   references?: string
 }) {

@@ -3,6 +3,7 @@ import { NotificationType } from '@prisma/client'
 import { publishNotification } from './pubsub'
 import { queueEmailNotification, queuePushNotification, queueFacebookNotification } from './queues'
 import { getAppUrl } from '../utils'
+import crypto from 'crypto'
 
 export type DeliveryChannel = 'IN_APP' | 'EMAIL' | 'PUSH' | 'SMS' | 'FACEBOOK'
 
@@ -36,8 +37,10 @@ export class NotificationService {
   async createNotification(params: NotificationParams) {
     try {
       // Create notification in database
+      const now = new Date()
       const notification = await prisma.notification.create({
         data: {
+          id: crypto.randomUUID(), // Generate unique ID
           type: params.type,
           title: params.title,
           message: params.message,
@@ -46,12 +49,13 @@ export class NotificationService {
           actorId: params.actorId || null,
           metadata: params.metadata || {},
           read: false,
+          updatedAt: now, // Required field
         },
         include: {
-          user: {
+          User_Notification_userIdToUser: {
             select: { id: true, name: true, email: true },
           },
-          ticket: {
+          Ticket: {
             select: { id: true, ticketNumber: true, subject: true },
           },
         },
@@ -196,7 +200,7 @@ export class NotificationService {
     const notification = await prisma.notification.findUnique({
       where: { id: notificationId },
       include: {
-        user: {
+        User_Notification_userIdToUser: {
           select: { id: true, email: true, name: true },
         },
       },
@@ -211,34 +215,38 @@ export class NotificationService {
       channels.map(channel =>
         prisma.notificationDeliveryLog.create({
           data: {
+            id: crypto.randomUUID(),
             notificationId,
             channel,
             status: 'PENDING',
-            recipient: channel === 'EMAIL' ? notification.user.email : notification.userId,
+            recipient: channel === 'EMAIL' ? notification.User_Notification_userIdToUser.email : notification.userId,
           },
         })
       )
     )
 
-    // Get tenantId from user or ticket
+    // Get tenantId and storeId from user or ticket
     let tenantId: string | undefined
+    let storeId: string | null | undefined
     try {
       const user = await prisma.user.findUnique({
         where: { id: params.userId },
-        select: { tenantId: true },
+        select: { tenantId: true, storeId: true },
       })
       tenantId = user?.tenantId || undefined
+      storeId = user?.storeId || undefined
       
-      // If we have a ticketId, prefer tenantId from ticket
+      // If we have a ticketId, prefer tenantId and storeId from ticket
       if (params.ticketId) {
         const ticket = await prisma.ticket.findUnique({
           where: { id: params.ticketId },
-          select: { tenantId: true },
+          select: { tenantId: true, storeId: true },
         })
         tenantId = ticket?.tenantId || tenantId
+        storeId = ticket?.storeId || storeId
       }
     } catch (error) {
-      console.warn('[NotificationService] Could not fetch tenantId:', error)
+      console.warn('[NotificationService] Could not fetch tenantId/storeId:', error)
     }
 
     // Queue jobs for async processing
@@ -289,7 +297,7 @@ export class NotificationService {
                 // Get all previous email Message-IDs for this ticket from delivery logs
                 const previousEmails = await prisma.notificationDeliveryLog.findMany({
                   where: {
-                    notification: {
+                    Notification: {
                       ticketId: params.ticketId,
                       type: 'TICKET_REPLY',
                     },
@@ -325,8 +333,8 @@ export class NotificationService {
             }
 
             // Verify user has email before queuing
-            if (!notification.user.email) {
-              console.error(`[NotificationService] ❌ Cannot send email: User ${notification.user.id} has no email address`)
+            if (!notification.User_Notification_userIdToUser.email) {
+              console.error(`[NotificationService] ❌ Cannot send email: User ${notification.User_Notification_userIdToUser.id} has no email address`)
               await prisma.notificationDeliveryLog.updateMany({
                 where: {
                   notificationId,
@@ -343,7 +351,7 @@ export class NotificationService {
 
             console.log(`[NotificationService] 📧 Queuing email notification:`, {
               notificationId,
-              to: notification.user.email,
+              to: notification.User_Notification_userIdToUser.email,
               subject: emailSubject,
               type: params.type,
               ticketId: params.ticketId,
@@ -357,18 +365,19 @@ export class NotificationService {
               if (params.type === 'TICKET_REPLY' && metadata.replyContent) {
                 console.log('[NotificationService] 📧 Sending plain text reply email:', {
                   notificationId,
-                  to: notification.user.email,
+                  to: notification.User_Notification_userIdToUser.email,
                   replyContentLength: metadata.replyContent?.length || 0,
                   replyContentPreview: metadata.replyContent?.substring(0, 50) || 'missing',
                 })
                 await queueEmailNotification({
                   notificationId,
-                  to: notification.user.email,
+                  to: notification.User_Notification_userIdToUser.email,
                   subject: emailSubject,
                   text: metadata.replyContent, // Plain text reply
                   type: params.type,
                   userId: params.userId,
                   tenantId,
+                  storeId,
                   inReplyTo,
                   references,
                 })
@@ -376,25 +385,26 @@ export class NotificationService {
                 const emailHtml = await this.renderEmailTemplate(params.type, { ...params, metadata })
                 await queueEmailNotification({
                   notificationId,
-                  to: notification.user.email,
+                  to: notification.User_Notification_userIdToUser.email,
                   subject: emailSubject,
                   html: emailHtml,
                   type: params.type,
                   userId: params.userId,
                   tenantId,
+                  storeId,
                   inReplyTo,
                   references,
                 })
               }
               console.log(`[NotificationService] ✅ Email queued successfully:`, {
                 notificationId,
-                to: notification.user.email,
+                to: notification.User_Notification_userIdToUser.email,
                 subject: emailSubject.substring(0, 50),
               })
             } catch (queueError: any) {
               console.error(`[NotificationService] ❌ Failed to queue email, attempting direct send:`, {
                 notificationId,
-                to: notification.user.email,
+                to: notification.User_Notification_userIdToUser.email,
                 queueError: queueError.message,
               })
               
@@ -410,11 +420,11 @@ export class NotificationService {
                 if (params.type === 'TICKET_REPLY' && metadata.replyContent) {
                   console.log('[NotificationService] 📧 Sending plain text reply email (fallback):', {
                     notificationId,
-                    to: notification.user.email,
+                    to: notification.User_Notification_userIdToUser.email,
                     replyContentLength: metadata.replyContent?.length || 0,
                   })
                   result = await sendEmail({
-                    to: notification.user.email,
+                    to: notification.User_Notification_userIdToUser.email,
                     subject: emailSubject,
                     text: metadata.replyContent, // Plain text reply
                     inReplyTo,
@@ -424,7 +434,7 @@ export class NotificationService {
                 } else {
                   const emailHtml = await this.renderEmailTemplate(params.type, { ...params, metadata })
                   result = await sendEmail({
-                    to: notification.user.email,
+                    to: notification.User_Notification_userIdToUser.email,
                     subject: emailSubject,
                     html: emailHtml,
                     inReplyTo,
@@ -448,13 +458,13 @@ export class NotificationService {
                 
                 console.log(`[NotificationService] ✅ Email sent directly (fallback):`, {
                   notificationId,
-                  to: notification.user.email,
+                  to: notification.User_Notification_userIdToUser.email,
                   messageId: (result as any).messageId,
                 })
               } catch (directSendError: any) {
                 console.error(`[NotificationService] ❌ Direct email send also failed:`, {
                   notificationId,
-                  to: notification.user.email,
+                  to: notification.User_Notification_userIdToUser.email,
                   error: directSendError.message,
                 })
                 // Update delivery log to failed
@@ -712,7 +722,7 @@ export class NotificationService {
       // Filter by storeId through ticket relation (for ADMIN and AGENT roles)
       // Customers see all their notifications regardless of store
       if (storeId && user?.role !== 'CUSTOMER') {
-        where.ticket = {
+        where.Ticket = {
           storeId: storeId,
         }
       }
@@ -770,7 +780,7 @@ export class NotificationService {
     // Filter by storeId through ticket relation (for ADMIN and AGENT roles)
     // Customers see all their notifications regardless of store
     if (options.storeId && user?.role !== 'CUSTOMER') {
-      where.ticket = {
+      where.Ticket = {
         storeId: options.storeId,
       }
     }
@@ -779,21 +789,21 @@ export class NotificationService {
       prisma.notification.findMany({
         where,
         include: {
-          ticket: {
+          Ticket: {
             select: {
               id: true,
               ticketNumber: true,
               subject: true,
             },
           },
-          actor: {
+          User_Notification_actorIdToUser: {
             select: {
               id: true,
               name: true,
               email: true,
             },
           },
-          facebookNotification: {
+          FacebookNotification: {
             select: {
               id: true,
               postUrl: true,
@@ -801,7 +811,7 @@ export class NotificationService {
               facebookPostId: true,
               converted: true,
               convertedTicketId: true,
-              convertedTicket: {
+              Ticket: {
                 select: {
                   id: true,
                   ticketNumber: true,

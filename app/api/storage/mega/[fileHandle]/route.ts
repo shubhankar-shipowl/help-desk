@@ -41,13 +41,13 @@ export async function GET(
           },
           OR: [
             {
-              ticket: {
+              Ticket: {
                 tenantId,
               },
             },
             {
-              comment: {
-                ticket: {
+              Comment: {
+                Ticket: {
                   tenantId,
                 },
               },
@@ -55,7 +55,7 @@ export async function GET(
           ],
         },
         include: {
-          ticket: {
+          Ticket: {
             select: {
               id: true,
               tenantId: true,

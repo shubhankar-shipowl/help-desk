@@ -168,7 +168,7 @@ export function DashboardContent() {
                       </Badge>
                     </div>
                     <div className="flex items-center gap-4 text-sm text-gray-600">
-                      <span>{ticket.customer.name || ticket.customer.email}</span>
+                      <span>{ticket.customer?.name || ticket.customer?.email || 'Unknown Customer'}</span>
                       <span>{formatRelativeTime(new Date(ticket.createdAt))}</span>
                     </div>
                   </div>

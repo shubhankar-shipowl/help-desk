@@ -279,7 +279,7 @@ export default function AgentCustomersPage() {
                     <div>
                       <div className="text-gray-600 mb-1">Total Tickets</div>
                       <div className="text-2xl font-bold text-gray-900">
-                        {customer._count.tickets}
+                        {customer._count.Ticket}
                       </div>
                     </div>
                     <div>

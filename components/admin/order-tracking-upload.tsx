@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import { useStore } from '@/lib/store-context'
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, Trash2 } from 'lucide-react'
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, Trash2, Download } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +29,53 @@ export function OrderTrackingUpload() {
     updated: number
     skipped: number
   } | null>(null)
+
+  // Generate and download Excel template
+  const handleDownloadTemplate = () => {
+    // Create CSV content with headers
+    const headers = [
+      'Consignee Contact',
+      'Channel Order Number',
+      'WayBill Number',
+      'Pickup Warehouse',
+      'Channel Order Date',
+      'Delivered Date',
+      'Vendor'
+    ]
+    
+    // Add example row
+    const exampleRow = [
+      '9876543210',
+      'ORD-12345',
+      'WB-ABC123',
+      'Mumbai Warehouse',
+      '2024-01-15',
+      '2024-01-20',
+      'Delhivery'
+    ]
+    
+    // Create CSV content
+    const csvContent = [
+      headers.join(','),
+      exampleRow.join(',')
+    ].join('\n')
+    
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', 'order_tracking_template.csv')
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    toast({
+      title: 'Template Downloaded',
+      description: 'Open the CSV file in Excel and fill in your data.',
+    })
+  }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -161,9 +208,20 @@ export function OrderTrackingUpload() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <p className="text-sm text-gray-600">
-            Upload a sheet containing the following columns:
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">
+              Upload a sheet containing the following columns:
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadTemplate}
+              className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Download Template
+            </Button>
+          </div>
           <ul className="text-sm text-gray-600 list-disc list-inside space-y-1 ml-2">
             <li><strong>Consignee Contact</strong> - Phone number (required)</li>
             <li><strong>Channel Order Number</strong> - Order ID (required)</li>

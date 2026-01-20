@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { TicketStatus } from '@prisma/client'
+import { Ticket_status } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,21 +70,21 @@ export async function GET(req: NextRequest) {
       prisma.ticket.count({
         where: {
           ...baseWhere,
-          status: { in: [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.IN_PROGRESS] },
+          status: { in: [Ticket_status.NEW, Ticket_status.OPEN, Ticket_status.IN_PROGRESS] },
         },
       }),
       prisma.ticket.count({
         where: {
           ...baseWhere,
           assignedAgentId: session.user.id,
-          status: { in: [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.IN_PROGRESS] },
+          status: { in: [Ticket_status.NEW, Ticket_status.OPEN, Ticket_status.IN_PROGRESS] },
         },
       }),
       prisma.ticket.count({
         where: {
           ...baseWhere,
           assignedAgentId: session.user.id,
-          status: TicketStatus.RESOLVED,
+          status: Ticket_status.RESOLVED,
           resolvedAt: {
             gte: new Date(new Date().setHours(0, 0, 0, 0)),
           },
@@ -97,14 +97,14 @@ export async function GET(req: NextRequest) {
         where: {
           ...baseWhere,
           priority: 'URGENT',
-          status: { in: [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.IN_PROGRESS] },
+          status: { in: [Ticket_status.NEW, Ticket_status.OPEN, Ticket_status.IN_PROGRESS] },
         },
       }),
       prisma.ticket.findMany({
         where: {
           ...baseWhere,
           assignedAgentId: session.user.id,
-          status: TicketStatus.RESOLVED,
+          status: Ticket_status.RESOLVED,
           resolvedAt: { not: null },
         },
         select: {
@@ -132,15 +132,15 @@ export async function GET(req: NextRequest) {
     const recentTickets = await prisma.ticket.findMany({
       where: baseWhere,
       include: {
-        customer: {
+        User_Ticket_customerIdToUser: {
           select: { name: true, email: true },
         },
-        category: true,
-        assignedAgent: {
+        Category: true,
+        User_Ticket_assignedAgentIdToUser: {
           select: { name: true, email: true },
         },
         _count: {
-          select: { comments: true },
+          select: { Comment: true },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -212,6 +212,13 @@ export async function GET(req: NextRequest) {
       }
     })
 
+    // Transform recentTickets to use 'customer' instead of 'User_Ticket_customerIdToUser'
+    const transformedRecentTickets = recentTickets.map((ticket: any) => ({
+      ...ticket,
+      customer: ticket.User_Ticket_customerIdToUser || null,
+      assignedAgent: ticket.User_Ticket_assignedAgentIdToUser || null,
+    }))
+
     return NextResponse.json({
       openTickets: openTicketsResult,
       assignedTickets: assignedTicketsResult,
@@ -219,7 +226,7 @@ export async function GET(req: NextRequest) {
       totalTickets: totalTicketsResult,
       urgentTickets: urgentTicketsResult,
       averageResolutionTime,
-      recentTickets,
+      recentTickets: transformedRecentTickets,
       ticketVolumeData,
       categoryChartData,
     })

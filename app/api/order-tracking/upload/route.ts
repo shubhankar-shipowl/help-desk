@@ -373,6 +373,7 @@ export async function POST(req: NextRequest) {
           // Insert new record
           await prisma.orderTrackingData.create({
             data: {
+              id: crypto.randomUUID(),
               tenantId, // Always include tenantId
               storeId: storeId || null, // Include storeId if provided
               consigneeContact: record.consigneeContact,
@@ -383,6 +384,7 @@ export async function POST(req: NextRequest) {
               pickupWarehouse: record.pickupWarehouse,
               vendor: record.vendor,
               uploadedBy: session.user.id,
+              updatedAt: new Date(),
             },
           })
           inserted++

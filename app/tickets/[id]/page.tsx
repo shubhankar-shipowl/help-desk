@@ -17,23 +17,23 @@ export default async function PublicTicketViewPage({
   const ticket = await prisma.ticket.findUnique({
     where: { id: params.id },
     include: {
-      category: true,
-      customer: {
+      Category: true,
+      User_Ticket_customerIdToUser: {
         select: {
           name: true,
           email: true,
         },
       },
-      assignedAgent: {
+      User_Ticket_assignedAgentIdToUser: {
         select: {
           name: true,
           email: true,
         },
       },
-      comments: {
+      Comment: {
         where: { isInternal: false }, // Only show public comments
         include: {
-          author: {
+          User: {
             select: {
               name: true,
               email: true,
@@ -95,27 +95,27 @@ export default async function PublicTicketViewPage({
                 <CardTitle className="text-h3">Conversation</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {ticket.comments.length === 0 ? (
+                {ticket.Comment.length === 0 ? (
                   <p className="text-gray-500 text-center py-8">No replies yet</p>
                 ) : (
-                  ticket.comments.map((comment) => (
+                  ticket.Comment.map((comment: any) => (
                     <div
                       key={comment.id}
                       className={`p-4 rounded-lg ${
-                        comment.author.role === 'CUSTOMER'
+                        comment.User?.role === 'CUSTOMER'
                           ? 'bg-gray-50 border border-gray-200'
                           : 'border'
                       }`}
-                      style={comment.author.role !== 'CUSTOMER' ? { 
+                      style={comment.User?.role !== 'CUSTOMER' ? { 
                         backgroundColor: 'rgba(43, 185, 205, 0.05)', 
                         borderColor: 'rgba(43, 185, 205, 0.2)' 
                       } : undefined}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <span className="font-semibold text-sm">
-                          {comment.author.name || comment.author.email}
+                          {comment.User?.name || comment.User?.email}
                         </span>
-                        {comment.author.role !== 'CUSTOMER' && (
+                        {comment.User?.role !== 'CUSTOMER' && (
                           <Badge variant="outline" className="text-xs">
                             Support Agent
                           </Badge>
@@ -147,11 +147,11 @@ export default async function PublicTicketViewPage({
                     <div className="font-mono font-medium">#{ticket.ticketNumber}</div>
                   </div>
                 </div>
-                {ticket.category && (
+                {ticket.Category && (
                   <div className="flex items-center gap-3">
                     <div>
                       <div className="text-sm text-gray-600">Category</div>
-                      <div className="font-medium">{ticket.category.name}</div>
+                      <div className="font-medium">{ticket.Category.name}</div>
                     </div>
                   </div>
                 )}
@@ -162,13 +162,13 @@ export default async function PublicTicketViewPage({
                     <div className="font-medium">{formatDate(ticket.createdAt)}</div>
                   </div>
                 </div>
-                {ticket.assignedAgent && (
+                {ticket.User_Ticket_assignedAgentIdToUser && (
                   <div className="flex items-center gap-3">
                     <User className="h-5 w-5 text-gray-400" />
                     <div>
                       <div className="text-sm text-gray-600">Assigned To</div>
                       <div className="font-medium">
-                        {ticket.assignedAgent.name || ticket.assignedAgent.email}
+                        {ticket.User_Ticket_assignedAgentIdToUser.name || ticket.User_Ticket_assignedAgentIdToUser.email}
                       </div>
                     </div>
                   </div>
@@ -184,11 +184,11 @@ export default async function PublicTicketViewPage({
               <CardContent className="space-y-3">
                 <div>
                   <div className="text-sm text-gray-600">Name</div>
-                  <div className="font-medium">{ticket.customer.name || 'N/A'}</div>
+                  <div className="font-medium">{ticket.User_Ticket_customerIdToUser.name || 'N/A'}</div>
                 </div>
                 <div>
                   <div className="text-sm text-gray-600">Email</div>
-                  <div className="font-medium">{ticket.customer.email}</div>
+                  <div className="font-medium">{ticket.User_Ticket_customerIdToUser.email}</div>
                 </div>
               </CardContent>
             </Card>

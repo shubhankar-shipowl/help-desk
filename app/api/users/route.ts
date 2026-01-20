@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
         company: true,
         isActive: true,
         storeId: true,
-        store: {
+        Store: {
           select: {
             id: true,
             name: true,
@@ -121,7 +121,13 @@ export async function GET(req: NextRequest) {
       users = users.filter(u => customerIds.has(u.id))
     }
 
-    return NextResponse.json({ users })
+    // Transform users to use frontend-friendly field names
+    const transformedUsers = users.map((user: any) => ({
+      ...user,
+      store: user.Store || null,
+    }))
+
+    return NextResponse.json({ users: transformedUsers })
   } catch (error: any) {
     console.error('Error fetching users:', error)
     return NextResponse.json(
@@ -239,7 +245,7 @@ export async function POST(req: NextRequest) {
         company: true,
         isActive: true,
         storeId: true,
-        store: {
+        Store: {
           select: {
             id: true,
             name: true,
@@ -249,7 +255,13 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    return NextResponse.json({ user }, { status: 201 })
+    // Transform user to use frontend-friendly field names
+    const transformedUser = {
+      ...user,
+      store: user.Store || null,
+    }
+
+    return NextResponse.json({ user: transformedUser }, { status: 201 })
   } catch (error: any) {
     console.error('Error creating user:', error)
     return NextResponse.json(

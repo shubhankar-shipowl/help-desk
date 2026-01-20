@@ -37,19 +37,19 @@ export async function GET(
         tenantId, // Security: Only access tickets from same tenant
       },
       include: {
-        customer: true,
-        assignedAgent: true,
-        category: true,
-        comments: {
+        User_Ticket_customerIdToUser: true,
+        User_Ticket_assignedAgentIdToUser: true,
+        Category: true,
+        Comment: {
           include: {
-            author: true,
-            attachments: true,
+            User: true,
+            Attachment: true,
           },
           orderBy: { createdAt: 'asc' },
         },
-        attachments: true,
-        tags: {
-          include: { tag: true },
+        Attachment: true,
+        TicketTag: {
+          include: { Tag: true },
         },
       },
     })
@@ -63,10 +63,19 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Convert Decimal to number for serialization
+    // Convert Decimal to number for serialization and transform field names
     const serializedTicket = {
       ...ticket,
       refundAmount: ticket.refundAmount ? parseFloat(ticket.refundAmount.toString()) : null,
+      customer: ticket.User_Ticket_customerIdToUser || null,
+      category: ticket.Category || null,
+      assignedAgent: ticket.User_Ticket_assignedAgentIdToUser || null,
+      comments: ticket.Comment || [],
+      attachments: ticket.Attachment || [],
+      tags: (ticket.TicketTag || []).map((tt: any) => ({
+        ...tt,
+        tag: tt.Tag || null,
+      })),
     }
 
     return NextResponse.json({ ticket: serializedTicket })
@@ -189,11 +198,11 @@ export async function PATCH(
       where: { id: resolvedParams.id },
       data: updateData,
       include: {
-        customer: true,
-        assignedAgent: true,
-        assignedTeam: true,
-        category: true,
-        attachments: true, // Include attachments to prevent them from being lost
+        User_Ticket_customerIdToUser: true,
+        User_Ticket_assignedAgentIdToUser: true,
+        Team: true,
+        Category: true,
+        Attachment: true, // Include attachments to prevent them from being lost
       },
     })
 
@@ -237,15 +246,15 @@ export async function PATCH(
       const ticketForEvent = await prisma.ticket.findUnique({
         where: { id: updatedTicket.id },
         include: {
-          customer: {
+          User_Ticket_customerIdToUser: {
             select: { id: true, name: true, email: true, avatar: true },
           },
-          category: true,
-          assignedAgent: {
+          Category: true,
+          User_Ticket_assignedAgentIdToUser: {
             select: { id: true, name: true, email: true, avatar: true },
           },
           _count: {
-            select: { comments: true, attachments: true },
+            select: { Comment: true, Attachment: true },
           },
         },
       })
@@ -305,10 +314,13 @@ export async function PATCH(
       console.error('Error emitting ticket update via WebSocket:', error)
     }
 
-    // Convert Decimal to number for serialization
+    // Convert Decimal to number for serialization and transform field names
     const serializedTicket = {
       ...updatedTicket,
       refundAmount: updatedTicket.refundAmount ? parseFloat(updatedTicket.refundAmount.toString()) : null,
+      customer: (updatedTicket as any).User_Ticket_customerIdToUser || null,
+      category: (updatedTicket as any).Category || null,
+      assignedAgent: (updatedTicket as any).User_Ticket_assignedAgentIdToUser || null,
     }
 
     return NextResponse.json({ ticket: serializedTicket })
@@ -352,13 +364,13 @@ export async function DELETE(
     const ticket = await prisma.ticket.findUnique({
       where: { id: resolvedParams.id },
       include: {
-        comments: {
+        Comment: {
           include: {
-            attachments: true,
+            Attachment: true,
           },
         },
-        attachments: true,
-        tags: true,
+        Attachment: true,
+        TicketTag: true,
       },
     })
 
@@ -395,7 +407,7 @@ export async function DELETE(
     })
 
     // 5. Delete comment attachments
-    for (const comment of ticket.comments) {
+    for (const comment of ticket.Comment || []) {
       await prisma.attachment.deleteMany({
         where: { commentId: comment.id },
       })

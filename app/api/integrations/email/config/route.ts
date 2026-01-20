@@ -93,6 +93,21 @@ export async function POST(req: NextRequest) {
     imapEmail = imapEmail?.trim()
     imapAppPassword = imapAppPassword?.trim()
 
+    // Validate storeId if provided - ensure it exists in the database
+    if (storeId) {
+      const storeExists = await prisma.store.findFirst({
+        where: {
+          id: storeId,
+          tenantId,
+        },
+      })
+      if (!storeExists) {
+        // Store doesn't exist, save at tenant level instead
+        console.log(`[Email Config] Store ${storeId} not found, saving at tenant level`)
+        storeId = null
+      }
+    }
+
     // Validate required SMTP fields
     if (!smtpHost || !smtpPort || !smtpUser || !smtpPassword) {
       return NextResponse.json(

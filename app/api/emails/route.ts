@@ -82,13 +82,33 @@ export async function GET(req: NextRequest) {
       prisma.email.findMany({
         where,
         include: {
-          ticket: {
+          Ticket: {
             select: {
               id: true,
               ticketNumber: true,
               subject: true,
               status: true,
             },
+          },
+          EmailAttachment: {
+            select: {
+              id: true,
+              filename: true,
+              mimeType: true,
+              size: true,
+              fileUrl: true,
+            },
+          },
+          EmailReply_EmailReply_originalEmailIdToEmail: {
+            select: {
+              id: true,
+              subject: true,
+              bodyText: true,
+              bodyHtml: true,
+              sentAt: true,
+              sentBy: true,
+            },
+            orderBy: { sentAt: 'asc' },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -111,8 +131,16 @@ export async function GET(req: NextRequest) {
       prisma.email.count({ where: baseWhere }), // Total count of all emails (no read filter)
     ])
 
+    // Transform emails to include frontend-friendly fields
+    const transformedEmails = emails.map((email: any) => ({
+      ...email,
+      ticket: email.Ticket || null, // Map Ticket to ticket for frontend
+      hasAttachments: email.EmailAttachment && email.EmailAttachment.length > 0,
+      replies: email.EmailReply_EmailReply_originalEmailIdToEmail || [], // Map replies for frontend
+    }))
+
     return NextResponse.json({
-      emails,
+      emails: transformedEmails,
       total,
       unreadCount,
       readCount,

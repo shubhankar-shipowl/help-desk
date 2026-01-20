@@ -100,7 +100,7 @@ export function CategoryActionsMenu({ category }: CategoryActionsMenuProps) {
           <DropdownMenuItem
             onClick={() => setDeleteDialogOpen(true)}
             className="text-destructive focus:text-destructive"
-            disabled={category._count.tickets > 0}
+            disabled={category._count.Ticket > 0}
           >
             <Trash2 className="h-4 w-4 mr-2" />
             Delete Category
@@ -113,9 +113,9 @@ export function CategoryActionsMenu({ category }: CategoryActionsMenuProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Category</AlertDialogTitle>
             <AlertDialogDescription>
-              {category._count.tickets > 0 ? (
+              {category._count.Ticket > 0 ? (
                 <>
-                  This category has {category._count.tickets} ticket{category._count.tickets !== 1 ? 's' : ''} associated with it.
+                  This category has {category._count.Ticket} ticket{category._count.Ticket !== 1 ? 's' : ''} associated with it.
                   You cannot delete a category that has tickets. Please reassign or delete the tickets first.
                 </>
               ) : (
@@ -127,7 +127,7 @@ export function CategoryActionsMenu({ category }: CategoryActionsMenuProps) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            {category._count.tickets === 0 && (
+            {category._count.Ticket === 0 && (
               <AlertDialogAction
                 onClick={handleDelete}
                 disabled={loading}
