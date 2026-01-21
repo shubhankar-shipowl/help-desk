@@ -1222,65 +1222,71 @@ export default function MailPage() {
                 </>
               ) : (
                 <>
-                  <Button
-                    onClick={deleteAllEmails}
-                    disabled={deleting || emails.length === 0}
-                    className="gap-2 bg-red-500 hover:bg-red-600 text-white shadow-md"
-                  >
-                    {deleting ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4" />
-                    )}
-                    <span className="font-medium">{deleting ? 'Deleting...' : 'Delete All'}</span>
-                  </Button>
+                  {session?.user?.role === 'ADMIN' && (
+                    <Button
+                      onClick={deleteAllEmails}
+                      disabled={deleting || emails.length === 0}
+                      className="gap-2 bg-red-500 hover:bg-red-600 text-white shadow-md"
+                    >
+                      {deleting ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                      <span className="font-medium">{deleting ? 'Deleting...' : 'Delete All'}</span>
+                    </Button>
+                  )}
                   
-                  <Button
-                    variant="outline"
-                    onClick={() => fetchFromGmail('unread')}
-                    disabled={fetching || !selectedStoreId}
-                    className="gap-2"
-                  >
-                    {fetching ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4" />
-                    )}
-                    <span className="font-medium">{fetching ? 'Fetching...' : 'Fetch Unread'}</span>
-                  </Button>
-                  
-                  <Button
-                    variant="outline"
-                    onClick={() => fetchFromGmail('latest')}
-                    disabled={fetching || !selectedStoreId}
-                    className="gap-2"
-                  >
-                    {fetching ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4" />
-                    )}
-                    <span className="font-medium">{fetching ? 'Fetching...' : 'Fetch Latest'}</span>
-                  </Button>
-                  
-                  <Button
-                    variant={syncRunning ? 'default' : 'outline'}
-                    onClick={toggleSync}
-                    disabled={syncLoading || !selectedStoreId}
-                    className={cn(
-                      "gap-2",
-                      syncRunning && "bg-green-600 hover:bg-green-700 text-white"
-                    )}
-                  >
-                    {syncLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : syncRunning ? (
-                      <Wifi className="w-4 h-4" />
-                    ) : (
-                      <WifiOff className="w-4 h-4" />
-                    )}
-                    <span className="font-medium">{syncLoading ? 'Loading...' : syncRunning ? 'Sync On' : 'Sync Off'}</span>
-                  </Button>
+                  {session?.user?.role === 'ADMIN' && (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => fetchFromGmail('unread')}
+                        disabled={fetching || !selectedStoreId}
+                        className="gap-2"
+                      >
+                        {fetching ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4" />
+                        )}
+                        <span className="font-medium">{fetching ? 'Fetching...' : 'Fetch Unread'}</span>
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        onClick={() => fetchFromGmail('latest')}
+                        disabled={fetching || !selectedStoreId}
+                        className="gap-2"
+                      >
+                        {fetching ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4" />
+                        )}
+                        <span className="font-medium">{fetching ? 'Fetching...' : 'Fetch Latest'}</span>
+                      </Button>
+                      
+                      <Button
+                        variant={syncRunning ? 'default' : 'outline'}
+                        onClick={toggleSync}
+                        disabled={syncLoading || !selectedStoreId}
+                        className={cn(
+                          "gap-2",
+                          syncRunning && "bg-green-600 hover:bg-green-700 text-white"
+                        )}
+                      >
+                        {syncLoading ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : syncRunning ? (
+                          <Wifi className="w-4 h-4" />
+                        ) : (
+                          <WifiOff className="w-4 h-4" />
+                        )}
+                        <span className="font-medium">{syncLoading ? 'Loading...' : syncRunning ? 'Sync On' : 'Sync Off'}</span>
+                      </Button>
+                    </>
+                  )}
                 </>
               )}
             </div>

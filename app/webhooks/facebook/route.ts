@@ -16,19 +16,28 @@ export async function GET(req: NextRequest) {
   const challenge = searchParams.get('hub.challenge')
 
   // Log verification request
-  console.log('[Facebook Webhook Verification]', {
-    mode,
-    token: token ? '***' : null,
-    challenge: challenge ? 'received' : null,
-    userAgent: req.headers.get('user-agent'),
-    origin: req.headers.get('origin'),
-  })
+  console.log('[Facebook Webhook Verification] ========================================')
+  console.log('[Facebook Webhook Verification] 📥 Incoming verification request')
+  console.log('[Facebook Webhook Verification] Mode:', mode)
+  console.log('[Facebook Webhook Verification] Token provided:', token ? 'yes' : 'no')
+  console.log('[Facebook Webhook Verification] Challenge provided:', challenge ? 'yes' : 'no')
+  console.log('[Facebook Webhook Verification] User-Agent:', req.headers.get('user-agent'))
+  console.log('[Facebook Webhook Verification] Origin:', req.headers.get('origin'))
+  console.log('[Facebook Webhook Verification] URL:', req.url)
 
   // For webhook verification, we need to check all tenants since we don't know which tenant this is for
   // Try to find a matching verify token in SystemSettings, or fallback to environment variable
-  let verifyToken = process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || 'fb_verify_2025'
+  let verifyTokens: string[] = []
   
-  // Try to find verify token from any tenant's SystemSettings
+  // Add environment variable token if set
+  if (process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN) {
+    verifyTokens.push(process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN)
+  }
+  
+  // Add default token
+  verifyTokens.push('fb_verify_2025')
+  
+  // Try to find verify tokens from any tenant's SystemSettings
   // This is a public endpoint, so we check all tenants
   try {
     const settings = await prisma.systemSettings.findMany({
@@ -37,37 +46,59 @@ export async function GET(req: NextRequest) {
       },
     })
     
-    // If we have settings, use the first one (or we could match by checking all)
+    // Add all tokens from SystemSettings
     if (settings.length > 0) {
-      verifyToken = settings[0].value || verifyToken
+      settings.forEach(setting => {
+        if (setting.value && !verifyTokens.includes(setting.value)) {
+          verifyTokens.push(setting.value)
+        }
+      })
+      console.log('[Facebook Webhook Verification] Found', settings.length, 'verify token(s) in SystemSettings')
+    } else {
+      console.log('[Facebook Webhook Verification] No verify tokens found in SystemSettings')
     }
-  } catch (error) {
+  } catch (error: any) {
     // Fallback to environment variable if SystemSettings lookup fails
-    console.warn('[Facebook Webhook] Could not fetch verify token from SystemSettings, using env var')
+    console.warn('[Facebook Webhook Verification] ⚠️ Could not fetch verify token from SystemSettings:', error.message)
   }
 
-  // Check if mode is "subscribe" and token matches
-  if (mode === 'subscribe' && token === verifyToken) {
-    console.log('[Facebook Webhook Verification] ✅ Verified successfully')
+  console.log('[Facebook Webhook Verification] Available verify tokens:', verifyTokens.length, 'token(s)')
+  console.log('[Facebook Webhook Verification] Received token:', token || '(none)')
+
+  // Check if mode is "subscribe" and token matches any of our verify tokens
+  if (mode === 'subscribe') {
+    const tokenMatches = verifyTokens.some(vt => vt === token)
     
-    // Return challenge as plain text with HTTP 200
-    // Important: Facebook requires plain text response, not JSON
-    return new NextResponse(challenge || '', {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/plain',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-      },
-    })
+    if (tokenMatches) {
+      console.log('[Facebook Webhook Verification] ✅ Token matches!')
+      console.log('[Facebook Webhook Verification] ✅ Verified successfully')
+      console.log('[Facebook Webhook Verification] Returning challenge:', challenge || '(empty)')
+      console.log('[Facebook Webhook Verification] ========================================')
+      
+      // Return challenge as plain text with HTTP 200
+      // Important: Facebook requires plain text response, not JSON
+      return new NextResponse(challenge || '', {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/plain',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+        },
+      })
+    } else {
+      console.log('[Facebook Webhook Verification] ❌ Token does not match any available tokens')
+      console.log('[Facebook Webhook Verification] Expected one of:', verifyTokens.map(t => t.substring(0, 3) + '***'))
+      console.log('[Facebook Webhook Verification] Received:', token || '(none)')
+    }
+  } else {
+    console.log('[Facebook Webhook Verification] ❌ Mode is not "subscribe"')
+    console.log('[Facebook Webhook Verification] Received mode:', mode)
   }
 
   // Invalid verification
-  console.log('[Facebook Webhook Verification] ❌ Verification failed', {
-    modeMatch: mode === 'subscribe',
-    tokenMatch: token === verifyToken,
-    receivedMode: mode,
-    receivedToken: token ? 'provided' : 'missing',
-  })
+  console.log('[Facebook Webhook Verification] ❌ Verification failed')
+  console.log('[Facebook Webhook Verification] Mode match:', mode === 'subscribe')
+  console.log('[Facebook Webhook Verification] Token match:', verifyTokens.includes(token || ''))
+  console.log('[Facebook Webhook Verification] ========================================')
 
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 }
