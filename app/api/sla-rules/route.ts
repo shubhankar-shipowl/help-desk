@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { Ticket_priority } from '@prisma/client'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
     const rules = await prisma.sLARule.findMany({
       where,
       include: {
-        team: {
+        Team: {
           select: {
             id: true,
             name: true,
@@ -91,9 +92,10 @@ export async function POST(req: NextRequest) {
           responseTime,
           resolutionTime,
           isActive: isActive !== undefined ? isActive : true,
+          updatedAt: new Date(),
         },
         include: {
-          team: {
+          Team: {
             select: {
               id: true,
               name: true,
@@ -108,14 +110,16 @@ export async function POST(req: NextRequest) {
       // Create new rule
       const rule = await prisma.sLARule.create({
         data: {
+          id: crypto.randomUUID(),
           teamId: teamId || null,
           priority: priority as Ticket_priority,
           responseTime,
           resolutionTime,
           isActive: isActive !== undefined ? isActive : true,
+          updatedAt: new Date(),
         },
         include: {
-          team: {
+          Team: {
             select: {
               id: true,
               name: true,

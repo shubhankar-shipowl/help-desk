@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { generateTicketNumber } from '@/lib/utils'
 import { autoAssignTicket, sendTicketAcknowledgment } from '@/lib/automation'
+import crypto from 'crypto'
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,6 +35,7 @@ export async function POST(req: NextRequest) {
 
     const ticket = await prisma.ticket.create({
       data: {
+        id: crypto.randomUUID(),
         tenantId, // Multi-tenant: Always include tenantId
         storeId: storeId || null, // Assign to store if provided
         ticketNumber: generateTicketNumber(),
@@ -43,10 +45,11 @@ export async function POST(req: NextRequest) {
         priority: priority || 'NORMAL',
         customerId: session.user.id,
         status: 'NEW',
+        updatedAt: new Date(),
       },
       include: {
-        category: true,
-        customer: true,
+        Category: true,
+        User_Ticket_customerIdToUser: true,
       },
     })
 
@@ -57,9 +60,9 @@ export async function POST(req: NextRequest) {
     const fullTicket = await prisma.ticket.findUnique({
       where: { id: ticket.id },
       include: {
-        customer: true,
-        category: true,
-        assignedAgent: true,
+        User_Ticket_customerIdToUser: true,
+        Category: true,
+        User_Ticket_assignedAgentIdToUser: true,
       },
     })
 
@@ -83,15 +86,15 @@ export async function POST(req: NextRequest) {
         const ticketForEvent = await prisma.ticket.findUnique({
           where: { id: ticket.id },
           include: {
-            customer: {
+            User_Ticket_customerIdToUser: {
               select: { id: true, name: true, email: true, avatar: true },
             },
-            category: true,
-            assignedAgent: {
+            Category: true,
+            User_Ticket_assignedAgentIdToUser: {
               select: { id: true, name: true, email: true, avatar: true },
             },
             _count: {
-              select: { comments: true, attachments: true },
+              select: { Comment: true, Attachment: true },
             },
           },
         })

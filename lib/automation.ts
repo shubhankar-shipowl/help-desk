@@ -4,6 +4,7 @@ import { Ticket_status, Ticket_priority, User_role } from '@prisma/client'
 import { getAppUrl } from './utils'
 import fs from 'fs'
 import path from 'path'
+import crypto from 'crypto'
 
 // Helper function to get system setting with tenant context
 // Tries store-specific setting first, then falls back to tenant-level setting
@@ -204,10 +205,13 @@ export async function autoResolveInactiveTickets(daysInactive: number = 7, tenan
     // Add system note
     await prisma.comment.create({
       data: {
+        id: crypto.randomUUID(),
         content: `This ticket was automatically resolved due to inactivity (no customer response for ${daysInactive} days).`,
         ticketId: ticket.id,
         authorId: ticket.customerId, // System note
         isInternal: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     })
   }

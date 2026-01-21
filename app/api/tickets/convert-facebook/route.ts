@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { convertFacebookNotificationToTicket } from '@/lib/tickets/facebookConverter'
 import { prisma } from '@/lib/prisma'
 import { notificationService } from '@/lib/notifications/NotificationService'
-import { NotificationType } from '@prisma/client'
+import { Notification_type } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     const fbNotification = await prisma.facebookNotification.findUnique({
       where: { id: facebookNotificationId },
       include: {
-        notification: true,
+        Notification: true,
       },
     })
 
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
       where: { id: fbNotification.notificationId },
       data: {
         metadata: {
-          ...(fbNotification.notification.metadata as any || {}),
+          ...(fbNotification.Notification.metadata as any || {}),
           converted: true,
           convertedTicketId: ticket.id,
           convertedTicketNumber: ticket.ticketNumber,
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     // Only notify assigned agent if they weren't the one who converted it
     if (ticket.assignedAgentId && ticket.assignedAgentId !== session.user.id) {
       await notificationService.createNotification({
-        type: NotificationType.TICKET_ASSIGNED,
+        type: Notification_type.TICKET_ASSIGNED,
         title: 'New Ticket Assigned',
         message: `Ticket ${ticket.ticketNumber} has been assigned to you`,
         userId: ticket.assignedAgentId,
@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
     const fbNotification = await prisma.facebookNotification.findUnique({
       where: { id: facebookNotificationId },
       include: {
-        convertedTicket: {
+        Ticket: {
           select: {
             id: true,
             ticketNumber: true,
@@ -163,7 +163,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       converted: fbNotification.converted,
-      ticket: fbNotification.convertedTicket,
+      ticket: fbNotification.Ticket,
     })
   } catch (error: any) {
     console.error('Error checking conversion status:', error)

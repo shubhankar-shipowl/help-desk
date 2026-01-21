@@ -24,7 +24,7 @@ export const authOptions: NextAuthOptions = {
         // For now, we'll find the first user with this email (assuming one tenant per email)
         const user = await prisma.user.findFirst({
           where: { email: credentials.email },
-          include: { tenant: true }, // Include tenant for multi-tenant support
+          include: { Tenant: true }, // Include tenant for multi-tenant support
         });
 
         // Only users with passwords can login (admins and agents)
@@ -53,7 +53,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Check if tenant is active
-        if (!user.tenant?.isActive) {
+        if (!user.Tenant?.isActive) {
           return null;
         }
 

@@ -66,14 +66,14 @@ export async function GET(req: NextRequest) {
       prisma.ticket.findMany({
         where,
         include: {
-          customer: {
+          User_Ticket_customerIdToUser: {
             select: {
               id: true,
               name: true,
               email: true,
             },
           },
-          category: {
+          Category: {
             select: {
               id: true,
               name: true,
@@ -92,10 +92,10 @@ export async function GET(req: NextRequest) {
     const formattedTickets = tickets.map((ticket) => ({
       id: ticket.id,
       ticketNumber: ticket.ticketNumber,
-      customerName: ticket.customer.name || ticket.customer.email,
-      customerEmail: ticket.customer.email,
+      customerName: ticket.User_Ticket_customerIdToUser?.name || ticket.User_Ticket_customerIdToUser?.email,
+      customerEmail: ticket.User_Ticket_customerIdToUser?.email,
       issueType: ticket.subject,
-      category: ticket.category?.name || 'N/A',
+      category: ticket.Category?.name || 'N/A',
       priority: ticket.priority,
       resolvedAt: ticket.resolvedAt,
       createdAt: ticket.createdAt,

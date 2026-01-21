@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import crypto from 'crypto'
 
 /**
  * Get Exotel configuration from SystemSettings
@@ -120,10 +121,12 @@ export async function POST(req: NextRequest) {
       } else {
         await prisma.systemSettings.create({
           data: {
+            id: crypto.randomUUID(),
             tenantId,
             storeId: null, // Tenant-level setting
             key: setting.key,
             value: setting.value,
+            updatedAt: new Date(),
           },
         })
       }

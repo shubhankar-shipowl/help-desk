@@ -182,7 +182,7 @@ export async function POST(
     }
 
     // Generate ticket number
-    const ticketNumber = await generateTicketNumber(tenantId, storeId)
+    const ticketNumber = generateTicketNumber()
 
     // Create ticket
     const now = new Date()
@@ -233,16 +233,18 @@ export async function POST(
     if (email.EmailAttachment && email.EmailAttachment.length > 0) {
       for (const attachment of email.EmailAttachment) {
         try {
-          await prisma.ticketAttachment.create({
-            data: {
-              id: randomUUID(),
-              ticketId: ticket.id,
-              filename: attachment.filename,
-              fileUrl: attachment.fileUrl,
-              fileSize: attachment.size,
-              mimeType: attachment.mimeType,
-            },
-          })
+          if (attachment.fileUrl) {
+            await prisma.attachment.create({
+              data: {
+                id: randomUUID(),
+                ticketId: ticket.id,
+                filename: attachment.filename,
+                fileUrl: attachment.fileUrl,
+                fileSize: attachment.size,
+                mimeType: attachment.mimeType,
+              },
+            })
+          }
         } catch (attachError) {
           console.error('Error copying attachment to ticket:', attachError)
           // Continue with other attachments
@@ -262,9 +264,9 @@ export async function POST(
             ticket.id
           )
 
-          if (uploadResult.success && uploadResult.fileUrl) {
+          if (uploadResult.fileUrl) {
             // Create ticket attachment record
-            await prisma.ticketAttachment.create({
+            await prisma.attachment.create({
               data: {
                 id: randomUUID(),
                 ticketId: ticket.id,

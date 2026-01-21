@@ -27,9 +27,9 @@ export default async function AdminIntegrationsPage() {
     take: 10,
     orderBy: { createdAt: 'desc' },
     include: {
-      notification: {
+      Notification: {
         include: {
-          user: {
+          User_Notification_userIdToUser: {
             select: { name: true, email: true },
           },
         },

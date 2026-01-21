@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,12 +107,14 @@ export async function POST(req: NextRequest) {
 
     const template = await prisma.template.create({
       data: {
+        id: crypto.randomUUID(),
         tenantId, // Always include tenantId
         name,
         content,
         type: type || 'CANNED_RESPONSE',
         category: category || null,
         variables: variables || {},
+        updatedAt: new Date(),
       },
     })
 

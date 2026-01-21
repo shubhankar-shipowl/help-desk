@@ -226,8 +226,8 @@ export async function DELETE(
       include: {
         _count: {
           select: {
-            tickets: true,
-            assignedTickets: true,
+            Ticket_Ticket_customerIdToUser: true,
+            Ticket_Ticket_assignedAgentIdToUser: true,
           },
         },
       },
@@ -238,7 +238,7 @@ export async function DELETE(
     }
 
     // Prevent deleting users with tickets (optional - you can change this)
-    if (user._count.tickets > 0 || user._count.assignedTickets > 0) {
+    if (user._count.Ticket_Ticket_customerIdToUser > 0 || user._count.Ticket_Ticket_assignedAgentIdToUser > 0) {
       return NextResponse.json(
         { error: 'Cannot delete user with existing tickets. Deactivate instead.' },
         { status: 400 }

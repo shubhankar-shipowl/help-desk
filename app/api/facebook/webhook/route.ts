@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { NotificationType } from '@prisma/client'
+import { Notification_type } from '@prisma/client'
 
 // Facebook webhook verification
 export async function GET(req: NextRequest) {
@@ -72,7 +72,8 @@ async function handleFacebookMessage(event: any, pageId: string) {
   for (const admin of admins) {
     const notification = await prisma.notification.create({
       data: {
-        type: NotificationType.FACEBOOK_MESSAGE,
+        id: crypto.randomUUID(),
+        type: Notification_type.FACEBOOK_MESSAGE,
         title: 'New Facebook Message',
         message: `New message from ${event.sender?.id || 'Facebook user'}`,
         userId: admin.id,
@@ -82,11 +83,13 @@ async function handleFacebookMessage(event: any, pageId: string) {
           message: event.message?.text,
           timestamp: event.timestamp,
         },
+        updatedAt: new Date(),
       },
     })
 
     await prisma.facebookNotification.create({
       data: {
+        id: crypto.randomUUID(),
         type: 'MESSAGE',
         facebookId: event.sender?.id || '',
         content: event.message?.text || '',
@@ -117,7 +120,8 @@ async function handleFacebookChange(change: any, pageId: string) {
     for (const admin of admins) {
       const notification = await prisma.notification.create({
         data: {
-          type: NotificationType.FACEBOOK_POST,
+          id: crypto.randomUUID(),
+          type: Notification_type.FACEBOOK_POST,
           title: 'New Facebook Post',
           message: `New post on your Facebook page`,
           userId: admin.id,
@@ -126,11 +130,13 @@ async function handleFacebookChange(change: any, pageId: string) {
             postId: change.value.post_id,
             message: change.value.message,
           },
+          updatedAt: new Date(),
         },
       })
 
       await prisma.facebookNotification.create({
         data: {
+          id: crypto.randomUUID(),
           type: 'POST',
           facebookId: change.value.post_id,
           facebookPostId: change.value.post_id,
@@ -152,7 +158,8 @@ async function handleFacebookChange(change: any, pageId: string) {
     for (const admin of admins) {
       const notification = await prisma.notification.create({
         data: {
-          type: NotificationType.FACEBOOK_COMMENT,
+          id: crypto.randomUUID(),
+          type: Notification_type.FACEBOOK_COMMENT,
           title: 'New Facebook Comment',
           message: `New comment on your Facebook post`,
           userId: admin.id,
@@ -162,11 +169,13 @@ async function handleFacebookChange(change: any, pageId: string) {
             commentId: change.value.comment_id,
             message: change.value.message,
           },
+          updatedAt: new Date(),
         },
       })
 
       await prisma.facebookNotification.create({
         data: {
+          id: crypto.randomUUID(),
           type: 'COMMENT',
           facebookId: change.value.comment_id,
           facebookPostId: change.value.post_id,

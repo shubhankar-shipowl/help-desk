@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import crypto from 'crypto';
 
 export async function POST(
   req: NextRequest,
@@ -32,7 +33,7 @@ export async function POST(
     const ticket = await prisma.ticket.findUnique({
       where: { id: resolvedParams.id },
       include: {
-        customer: true,
+        User_Ticket_customerIdToUser: true,
       },
     });
 
@@ -41,7 +42,7 @@ export async function POST(
     }
 
     // Check if customer has a phone number
-    if (!ticket.customer.phone) {
+    if (!ticket.User_Ticket_customerIdToUser?.phone) {
       return NextResponse.json(
         { error: "Customer phone number is not available" },
         { status: 400 }
@@ -120,13 +121,13 @@ export async function POST(
     // From: Agent's saved phone number (will be called first)
     // To: Customer's phone number from ticket (will be called after agent answers)
     const agentPhone = normalizePhone(agent.phone.trim());
-    const customerPhone = normalizePhone(ticket.customer.phone.trim());
+    const customerPhone = normalizePhone(ticket.User_Ticket_customerIdToUser.phone.trim());
     
     console.log('[Exotel Call] Phone numbers:', {
       from: agentPhone, // Agent's saved number
       to: customerPhone, // Customer's number from ticket
       ticketId: ticket.id,
-      customerName: ticket.customer.name,
+      customerName: ticket.User_Ticket_customerIdToUser.name,
     });
 
     // Get webhook URL for status callbacks
@@ -291,9 +292,11 @@ export async function POST(
 
       const callLog = await prisma.callLog.create({
         data: {
+          id: crypto.randomUUID(),
           ticketId: ticket.id,
           agentId: session.user.id,
-          customerName: ticket.customer.name || ticket.customer.email || 'Unknown',
+          customerName: ticket.User_Ticket_customerIdToUser.name || ticket.User_Ticket_customerIdToUser.email || 'Unknown',
+          updatedAt: new Date(),
           customerPhone: customerPhone,
           agentPhone: agentPhone,
           status: 'INITIATED',
@@ -314,12 +317,13 @@ export async function POST(
     try {
       await prisma.ticketActivity.create({
         data: {
+          id: crypto.randomUUID(),
           ticketId: ticket.id,
           userId: session.user.id,
           action: "call_initiated",
-          description: `Call initiated to customer ${ticket.customer.phone}`,
+          description: `Call initiated to customer ${ticket.User_Ticket_customerIdToUser.phone}`,
           metadata: {
-            customerPhone: ticket.customer.phone,
+            customerPhone: ticket.User_Ticket_customerIdToUser.phone,
             callerId: callerId,
             exotelResponse: responseText,
             callLogId: callLogId,

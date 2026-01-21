@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import nodemailer from 'nodemailer'
+import crypto from 'crypto'
 
 /**
  * Get Email/SMTP configuration from SystemSettings
@@ -240,10 +241,12 @@ export async function POST(req: NextRequest) {
       } else {
         await prisma.systemSettings.create({
           data: {
+            id: crypto.randomUUID(),
             tenantId,
             storeId: storeId || null,
             key: setting.key,
             value: setting.value,
+            updatedAt: new Date(),
           },
         })
       }

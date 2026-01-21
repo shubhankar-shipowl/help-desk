@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,8 +70,10 @@ export async function POST(req: NextRequest) {
         htmlTemplate,
         variables: variables || {},
         isActive: isActive !== undefined ? isActive : true,
+        updatedAt: new Date(),
       },
       create: {
+        id: crypto.randomUUID(),
         type,
         channel,
         subject,
@@ -78,6 +81,7 @@ export async function POST(req: NextRequest) {
         htmlTemplate,
         variables: variables || {},
         isActive: isActive !== undefined ? isActive : true,
+        updatedAt: new Date(),
       },
     })
 

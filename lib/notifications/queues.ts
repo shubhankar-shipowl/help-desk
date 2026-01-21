@@ -1,5 +1,5 @@
 import Queue from 'bull'
-import { NotificationType } from '@prisma/client'
+import { Notification_type } from '@prisma/client'
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379'
 
@@ -62,8 +62,8 @@ export const facebookQueue = new Queue('facebook-notifications', redisUrl, {
 /**
  * Get priority for notification type
  */
-function getPriority(type: NotificationType): number {
-  const priorityMap: Record<NotificationType, number> = {
+function getPriority(type: Notification_type): number {
+  const priorityMap: Record<Notification_type, number> = {
     SLA_BREACH: 1,
     PRIORITY_ESCALATION: 2,
     TICKET_ASSIGNED: 3,
@@ -87,7 +87,7 @@ export async function queueEmailNotification(data: {
   subject: string
   html?: string
   text?: string
-  type: NotificationType
+  type: Notification_type
   userId: string
   tenantId?: string
   storeId?: string | null
@@ -146,7 +146,7 @@ export async function queuePushNotification(data: {
  */
 export async function queueFacebookNotification(data: {
   notificationId: string
-  type: NotificationType
+  type: Notification_type
   data: any
 }) {
   await facebookQueue.add(

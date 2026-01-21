@@ -1,5 +1,5 @@
 import { prisma } from '../prisma'
-import { NotificationType } from '@prisma/client'
+import { Notification_type } from '@prisma/client'
 import { publishNotification } from './pubsub'
 import { queueEmailNotification, queuePushNotification, queueFacebookNotification } from './queues'
 import { getAppUrl } from '../utils'
@@ -8,7 +8,7 @@ import crypto from 'crypto'
 export type DeliveryChannel = 'IN_APP' | 'EMAIL' | 'PUSH' | 'SMS' | 'FACEBOOK'
 
 export interface NotificationParams {
-  type: NotificationType
+  type: Notification_type
   title: string
   message: string
   userId: string
@@ -108,7 +108,7 @@ export class NotificationService {
   /**
    * Determine which channels to use based on user preferences
    */
-  private async determineChannels(userId: string, type: NotificationType): Promise<DeliveryChannel[]> {
+  private async determineChannels(userId: string, type: Notification_type): Promise<DeliveryChannel[]> {
     const channels: DeliveryChannel[] = ['IN_APP'] // Always include in-app
 
     // Get user preferences for this notification type
@@ -183,7 +183,7 @@ export class NotificationService {
   /**
    * Queue notification for email digest
    */
-  private async queueForDigest(userId: string, type: NotificationType, digest: string) {
+  private async queueForDigest(userId: string, type: Notification_type, digest: string) {
     // This would be implemented with a scheduled job
     // For now, we'll just log it
     console.log(`Queuing notification for ${digest} digest: userId=${userId}, type=${type}`)
@@ -538,7 +538,7 @@ export class NotificationService {
   /**
    * Render email template
    */
-  private async renderEmailTemplate(type: NotificationType, params: NotificationParams): Promise<string> {
+  private async renderEmailTemplate(type: Notification_type, params: NotificationParams): Promise<string> {
     // Try to get custom template
     try {
       const template = await prisma.notificationTemplate.findFirst({
@@ -744,7 +744,7 @@ export class NotificationService {
       page?: number
       limit?: number
       read?: boolean
-      type?: NotificationType
+      type?: Notification_type
       storeId?: string | null
     } = {}
   ) {
@@ -840,8 +840,8 @@ export class NotificationService {
       const metadata = notification.metadata as any || {}
       
       // If Facebook notification is converted, add ticket info to metadata
-      if (notification.facebookNotification?.converted && notification.facebookNotification?.convertedTicket) {
-        const ticket = notification.facebookNotification.convertedTicket
+      if (notification.FacebookNotification?.converted && notification.FacebookNotification?.Ticket) {
+        const ticket = notification.FacebookNotification.Ticket
         return {
           ...notification,
           metadata: {

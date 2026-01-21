@@ -70,14 +70,14 @@ export async function GET(req: NextRequest) {
     const tickets = await prisma.ticket.findMany({
       where,
       include: {
-        customer: {
+        User_Ticket_customerIdToUser: {
           select: {
             name: true,
             email: true,
             phone: true,
           },
         },
-        category: {
+        Category: {
           select: {
             name: true,
           },
@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
 
     // Get order tracking data to fetch vendor (pickupWarehouse) information
     const customerPhones = tickets
-      .map(t => t.customer.phone)
+      .map(t => t.User_Ticket_customerIdToUser.phone)
       .filter((phone): phone is string => phone !== null && phone !== undefined)
       .map(phone => phone.replace(/[\s\-\(\)]/g, ''))
 
@@ -142,17 +142,17 @@ export async function GET(req: NextRequest) {
       const awbNumber = extractTrackingId(ticket.description)
       
       // Get vendor (pickupWarehouse) from order tracking
-      const normalizedPhone = ticket.customer.phone?.replace(/[\s\-\(\)]/g, '') || ''
+      const normalizedPhone = ticket.User_Ticket_customerIdToUser?.phone?.replace(/[\s\-\(\)]/g, '') || ''
       const vendor = phoneToVendorMap.get(normalizedPhone) || 'N/A'
 
       return {
         'Ticket ID': ticket.ticketNumber,
-        'Customer Name': ticket.customer.name || 'N/A',
-        'Customer Email': ticket.customer.email || 'N/A',
-        'Customer Phone': ticket.customer.phone || 'N/A',
+        'Customer Name': ticket.User_Ticket_customerIdToUser?.name || 'N/A',
+        'Customer Email': ticket.User_Ticket_customerIdToUser?.email || 'N/A',
+        'Customer Phone': ticket.User_Ticket_customerIdToUser?.phone || 'N/A',
         'Vendor': vendor,
         'AWB Number': awbNumber,
-        'Ticket Category': ticket.category?.name || 'N/A',
+        'Ticket Category': ticket.Category?.name || 'N/A',
         'Issue Type': ticket.subject,
         'Raised Date': ticket.createdAt.toLocaleDateString(),
         'Resolved Date': ticket.resolvedAt?.toLocaleDateString() || 'N/A',

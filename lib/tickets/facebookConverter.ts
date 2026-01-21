@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { Ticket_source, Ticket_priority, Ticket_status } from '@prisma/client'
 import { generateTicketNumberWithSequence } from '@/lib/utils'
+import crypto from 'crypto'
 
 /**
  * Auto-convert Facebook notification to ticket
@@ -19,9 +20,9 @@ export async function convertFacebookNotificationToTicket(
   const fbNotification = await prisma.facebookNotification.findUnique({
     where: { id: facebookNotificationId },
     include: {
-      notification: {
+      Notification: {
         include: {
-          user: true,
+          User_Notification_userIdToUser: true,
         },
       },
     },
@@ -58,7 +59,7 @@ export async function convertFacebookNotificationToTicket(
   
   // Get tenantId from the notification's user (who received the notification)
   // This ensures Facebook tickets are created in the correct tenant
-  const notificationUser = fbNotification.notification?.user
+  const notificationUser = fbNotification.Notification?.User_Notification_userIdToUser
   const tenantId = notificationUser?.tenantId
 
   if (!tenantId) {
@@ -83,11 +84,13 @@ export async function convertFacebookNotificationToTicket(
   if (!customer) {
     customer = await prisma.user.create({
       data: {
+        id: crypto.randomUUID(),
         tenantId, // Multi-tenant: Always include tenantId
         email: `facebook_${fbNotification.facebookId}@facebook.local`, // Placeholder email
         name: authorName,
         role: 'CUSTOMER',
         isActive: true,
+        updatedAt: new Date(),
       },
     })
   }
@@ -104,6 +107,7 @@ export async function convertFacebookNotificationToTicket(
   // Create ticket
   const ticket = await prisma.ticket.create({
     data: {
+      id: crypto.randomUUID(),
       tenantId, // Multi-tenant: Always include tenantId
       ticketNumber,
       subject: `Facebook ${fbNotification.type}: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`,
@@ -118,12 +122,13 @@ export async function convertFacebookNotificationToTicket(
       facebookPostUrl: postUrl,
       customerFacebookLink: fbNotification.postUrl ? extractFacebookProfileUrl(postUrl) : null,
       dueDate: dueDate,
+      updatedAt: new Date(),
     },
     include: {
-      customer: true,
-      assignedAgent: true,
-      assignedTeam: true,
-      category: true,
+      User_Ticket_customerIdToUser: true,
+      User_Ticket_assignedAgentIdToUser: true,
+      Team: true,
+      Category: true,
     },
   })
 
@@ -150,6 +155,7 @@ export async function convertFacebookNotificationToTicket(
       if (!tag) {
         tag = await prisma.tag.create({
           data: {
+            id: crypto.randomUUID(),
             tenantId, // Multi-tenant: Always include tenantId
             name: tagName,
           },
@@ -159,6 +165,7 @@ export async function convertFacebookNotificationToTicket(
       // Link tag to ticket
       await prisma.ticketTag.create({
         data: {
+          id: crypto.randomUUID(),
           ticketId: ticket.id,
           tagId: tag.id,
         },
@@ -169,6 +176,7 @@ export async function convertFacebookNotificationToTicket(
   // Create activity log
   await prisma.ticketActivity.create({
     data: {
+      id: crypto.randomUUID(),
       ticketId: ticket.id,
       action: 'ticket_created',
       description: `Ticket created from Facebook ${fbNotification.type.toLowerCase()}`,
@@ -330,6 +338,7 @@ async function applyAutoAssignmentRules(ticketId: string, content: string, tenan
       // Log activity
       await prisma.ticketActivity.create({
         data: {
+          id: crypto.randomUUID(),
           ticketId,
           action: 'auto_assigned',
           description: `Auto-assigned via rule: ${rule.name}`,

@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
     const tickets = await prisma.ticket.findMany({
       where,
       include: {
-        customer: {
+        User_Ticket_customerIdToUser: {
           select: {
             id: true,
             name: true,
@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
             phone: true,
           },
         },
-        category: {
+        Category: {
           select: {
             id: true,
             name: true,
@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
 
     // Get order tracking data for tickets to filter by vendor (pickupWarehouse)
     const customerPhones = tickets
-      .map(t => t.customer.phone)
+      .map(t => t.User_Ticket_customerIdToUser.phone)
       .filter((phone): phone is string => phone !== null && phone !== undefined)
       .map(phone => phone.replace(/[\s\-\(\)]/g, ''))
 
@@ -140,8 +140,8 @@ export async function GET(req: NextRequest) {
     let filteredTickets = tickets
     if (vendor) {
       filteredTickets = tickets.filter(ticket => {
-        if (!ticket.customer.phone) return false
-        const normalizedPhone = ticket.customer.phone.replace(/[\s\-\(\)]/g, '')
+        if (!ticket.User_Ticket_customerIdToUser?.phone) return false
+        const normalizedPhone = ticket.User_Ticket_customerIdToUser.phone.replace(/[\s\-\(\)]/g, '')
         const ticketVendor = phoneToVendorMap.get(normalizedPhone)
         return ticketVendor === vendor
       })
@@ -156,7 +156,7 @@ export async function GET(req: NextRequest) {
         where,
         select: {
           id: true,
-          customer: {
+          User_Ticket_customerIdToUser: {
             select: {
               phone: true,
             },
@@ -165,8 +165,8 @@ export async function GET(req: NextRequest) {
       })
       
       // Get normalized phone numbers
-      const allCustomerPhones = allTicketsForCount
-        .map(t => t.customer.phone)
+    const allCustomerPhones = allTicketsForCount
+      .map(t => t.User_Ticket_customerIdToUser.phone)
         .filter((phone): phone is string => phone !== null && phone !== undefined)
         .map(phone => phone.replace(/[\s\-\(\)]/g, ''))
 
@@ -197,8 +197,8 @@ export async function GET(req: NextRequest) {
       
       // Count tickets that match the vendor
       total = allTicketsForCount.filter(t => {
-        if (!t.customer.phone) return false
-        const normalizedPhone = t.customer.phone.replace(/[\s\-\(\)]/g, '')
+        if (!t.User_Ticket_customerIdToUser.phone) return false
+        const normalizedPhone = t.User_Ticket_customerIdToUser.phone.replace(/[\s\-\(\)]/g, '')
         return vendorPhoneSet.has(normalizedPhone)
       }).length
     } else {
@@ -231,16 +231,16 @@ export async function GET(req: NextRequest) {
         : null
 
       // Get vendor (pickupWarehouse) from order tracking
-      const normalizedPhone = ticket.customer.phone?.replace(/[\s\-\(\)]/g, '') || ''
+      const normalizedPhone = ticket.User_Ticket_customerIdToUser?.phone?.replace(/[\s\-\(\)]/g, '') || ''
       const vendorValue = phoneToVendorMap.get(normalizedPhone) || null
 
       return {
         id: ticket.id,
         ticketNumber: ticket.ticketNumber,
-        customerName: ticket.customer.name || ticket.customer.email,
-        customerEmail: ticket.customer.email,
+        customerName: ticket.User_Ticket_customerIdToUser?.name || ticket.User_Ticket_customerIdToUser?.email,
+        customerEmail: ticket.User_Ticket_customerIdToUser?.email,
         issueType: ticket.subject,
-        category: ticket.category?.name || 'N/A',
+        category: ticket.Category?.name || 'N/A',
         resolvedAt: ticket.resolvedAt,
         penalizedAt: ticket.penalizedAt,
         isPenalized: ticket.isPenalized,

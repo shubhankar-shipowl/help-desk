@@ -152,12 +152,14 @@ export async function GET(req: NextRequest) {
           updatedAt: new Date(),
         },
         create: {
+          id: crypto.randomUUID(),
           tenantId,
           pageId: page.id,
           pageName: page.name,
           accessToken: page.access_token,
           webhookToken,
           isActive: true,
+          updatedAt: new Date(),
         },
       })
 

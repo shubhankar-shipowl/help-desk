@@ -132,7 +132,7 @@ export async function PATCH(
         id: resolvedParams.id,
         tenantId, // Security: Only access tickets from same tenant
       },
-      include: { customer: true },
+      include: { User_Ticket_customerIdToUser: true },
     })
 
     if (!ticket) {
@@ -210,6 +210,7 @@ export async function PATCH(
     for (const activity of activityLogs) {
       await prisma.ticketActivity.create({
         data: {
+          id: crypto.randomUUID(),
           ticketId: updatedTicket.id,
           userId: session.user.id,
           action: activity.action,

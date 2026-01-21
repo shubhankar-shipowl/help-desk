@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +81,7 @@ export async function POST(req: NextRequest) {
       ticketIds.map((ticketId: string) =>
         prisma.ticketActivity.create({
           data: {
+            id: crypto.randomUUID(),
             ticketId,
             userId: session.user.id,
             action: 'penalized',

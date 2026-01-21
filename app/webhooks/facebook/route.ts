@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { NotificationType } from '@prisma/client'
+import { Notification_type } from '@prisma/client'
 import { NotificationService } from '@/lib/notifications/NotificationService'
 import { getSystemSetting } from '@/lib/system-settings'
+import crypto from 'crypto'
 
 const notificationService = new NotificationService()
 
@@ -276,7 +277,8 @@ async function handleFacebookMessage(event: any, pageId: string) {
   for (const user of users) {
     const notification = await prisma.notification.create({
       data: {
-        type: NotificationType.FACEBOOK_MESSAGE,
+        id: crypto.randomUUID(),
+        type: Notification_type.FACEBOOK_MESSAGE,
         title: 'New Facebook Message',
         message: `New message from ${event.sender?.id || 'Facebook user'}`,
         userId: user.id,
@@ -286,9 +288,10 @@ async function handleFacebookMessage(event: any, pageId: string) {
           message: event.message?.text,
           timestamp: event.timestamp,
         },
+        updatedAt: new Date(),
       },
       include: {
-        user: {
+        User_Notification_userIdToUser: {
           select: { id: true, name: true, email: true },
         },
       },
@@ -296,6 +299,7 @@ async function handleFacebookMessage(event: any, pageId: string) {
 
         await prisma.facebookNotification.create({
           data: {
+            id: crypto.randomUUID(),
             type: 'MESSAGE',
             facebookId: event.sender?.id || '',
             content: event.message?.text || '',
@@ -455,7 +459,7 @@ async function handleFacebookChange(change: any, pageId: string) {
     for (const user of users) {
       try {
         const notification = await notificationService.createNotification({
-          type: NotificationType.FACEBOOK_MESSAGE, // Using MESSAGE type for mentions
+          type: Notification_type.FACEBOOK_MESSAGE, // Using MESSAGE type for mentions
           title: 'Page Mentioned',
           message: `${author} mentioned your page in a post: ${message.substring(0, 100) || 'No message'}`,
           userId: user.id,
@@ -473,6 +477,7 @@ async function handleFacebookChange(change: any, pageId: string) {
 
         await prisma.facebookNotification.create({
           data: {
+            id: crypto.randomUUID(),
             type: 'MESSAGE', // Using MESSAGE type for mentions
             facebookId: postId || authorId || '',
             facebookPostId: postId || '',
@@ -567,7 +572,7 @@ async function handleFacebookChange(change: any, pageId: string) {
       try {
         // Use NotificationService for consistency and WebSocket publishing
         const notification = await notificationService.createNotification({
-          type: NotificationType.FACEBOOK_COMMENT,
+          type: Notification_type.FACEBOOK_COMMENT,
           title: 'New Facebook Comment',
           message: `New comment by ${author} on your Facebook post: ${message.substring(0, 100) || 'No message'}`,
           userId: user.id,
@@ -586,6 +591,7 @@ async function handleFacebookChange(change: any, pageId: string) {
 
         await prisma.facebookNotification.create({
           data: {
+            id: crypto.randomUUID(),
             type: 'COMMENT',
             facebookId: commentId || '',
             facebookPostId: postId || '',
@@ -715,7 +721,7 @@ async function handleFacebookChange(change: any, pageId: string) {
           for (const user of users) {
             try {
               const notification = await notificationService.createNotification({
-                type: NotificationType.FACEBOOK_MESSAGE,
+                type: Notification_type.FACEBOOK_MESSAGE,
                 title: 'Page Mentioned',
                 message: `${author} mentioned your page in a post: ${message.substring(0, 100) || 'No message'}`,
                 userId: user.id,
@@ -734,6 +740,7 @@ async function handleFacebookChange(change: any, pageId: string) {
               
               await prisma.facebookNotification.create({
                 data: {
+                  id: crypto.randomUUID(),
                   type: 'MESSAGE',
                   facebookId: postId || authorId || '',
                   facebookPostId: postId || '',
@@ -835,7 +842,7 @@ async function handleFacebookChange(change: any, pageId: string) {
       try {
         // Use NotificationService for consistency and WebSocket publishing
         const notification = await notificationService.createNotification({
-          type: NotificationType.FACEBOOK_POST,
+          type: Notification_type.FACEBOOK_POST,
           title: 'New Facebook Post',
           message: `New post on your Facebook page: ${message.substring(0, 100) || 'No message'}`,
           userId: user.id,
@@ -853,6 +860,7 @@ async function handleFacebookChange(change: any, pageId: string) {
 
         await prisma.facebookNotification.create({
           data: {
+            id: crypto.randomUUID(),
             type: 'POST',
             facebookId: postId || '',
             facebookPostId: postId || '',

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import crypto from 'crypto'
 
 export async function POST(
   req: NextRequest,
@@ -71,13 +72,14 @@ export async function POST(
 
     const satisfactionRating = await prisma.satisfactionRating.create({
       data: {
+        id: crypto.randomUUID(),
         ticketId: params.id,
         rating,
         feedback: feedback || null,
         userId: session.user.id,
       },
       include: {
-        ticket: {
+        Ticket: {
           select: { ticketNumber: true },
         },
       },

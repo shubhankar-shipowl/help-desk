@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         exotelCallId: CallSid,
       },
       include: {
-        ticket: true,
+        Ticket: true,
       },
     });
     
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
       const ticket = await prisma.ticket.findUnique({
         where: { id: ticketId },
         include: {
-          customer: true,
+          User_Ticket_customerIdToUser: true,
         },
       });
       
@@ -96,14 +96,16 @@ export async function POST(req: NextRequest) {
         // Create call log if it doesn't exist
         await prisma.callLog.create({
           data: {
+            id: crypto.randomUUID(),
             ticketId: ticket.id,
             agentId: ticket.assignedAgentId || '', // Will need to get from custom field
-            customerName: ticket.customer?.name || 'Unknown',
+            customerName: ticket.User_Ticket_customerIdToUser?.name || 'Unknown',
             customerPhone: To || '',
             agentPhone: From || '',
             status: 'INITIATED',
             exotelCallId: CallSid,
             exotelResponse: body,
+            updatedAt: new Date(),
           },
         });
       }

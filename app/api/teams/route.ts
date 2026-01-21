@@ -106,10 +106,12 @@ export async function POST(req: NextRequest) {
 
     const team = await prisma.team.create({
       data: {
+        id: crypto.randomUUID(),
         tenantId, // Always include tenantId
         name,
         description,
         color,
+        updatedAt: new Date(),
       },
     })
 

@@ -33,7 +33,7 @@ interface CategoryActionsMenuProps {
     description: string | null
     subjects: any // JSON field from Prisma can be various types
     _count: {
-      tickets: number
+      Ticket: number
     }
   }
 }

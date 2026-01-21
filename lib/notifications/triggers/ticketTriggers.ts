@@ -1,6 +1,6 @@
 import { notificationService } from '../NotificationService'
 import { prisma } from '../../prisma'
-import { NotificationType } from '@prisma/client'
+import { Notification_type } from '@prisma/client'
 import { getAppUrl } from '../../utils'
 
 export class TicketNotificationTriggers {

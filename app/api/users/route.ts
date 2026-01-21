@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -226,6 +227,7 @@ export async function POST(req: NextRequest) {
     // Create user (agent or admin)
     const user = await prisma.user.create({
       data: {
+        id: crypto.randomUUID(),
         tenantId, // Always include tenantId
         email,
         name,
@@ -235,6 +237,7 @@ export async function POST(req: NextRequest) {
         company: company || null,
         storeId: storeId || null, // Assign to store if provided
         isActive: true,
+        updatedAt: new Date(),
       },
       select: {
         id: true,

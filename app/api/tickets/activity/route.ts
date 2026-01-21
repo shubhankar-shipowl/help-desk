@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,7 +60,7 @@ export async function GET(req: NextRequest) {
     const activities = await prisma.ticketActivity.findMany({
       where: { ticketId },
       include: {
-        user: {
+        User: {
           select: {
             id: true,
             name: true,
@@ -129,6 +130,7 @@ export async function POST(req: NextRequest) {
 
     const activity = await prisma.ticketActivity.create({
       data: {
+        id: crypto.randomUUID(),
         ticketId,
         userId: session.user.id,
         action,
@@ -136,7 +138,7 @@ export async function POST(req: NextRequest) {
         metadata: metadata || {},
       },
       include: {
-        user: {
+        User: {
           select: {
             id: true,
             name: true,

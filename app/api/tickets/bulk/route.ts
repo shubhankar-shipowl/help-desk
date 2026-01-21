@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { Ticket_status, Ticket_priority } from '@prisma/client'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -137,6 +138,7 @@ export async function PATCH(req: NextRequest) {
     if (activityLogs.length > 0) {
       await prisma.ticketActivity.createMany({
         data: activityLogs.map(log => ({
+          id: crypto.randomUUID(),
           ticketId: log.ticketId,
           userId: session.user.id,
           action: log.action,

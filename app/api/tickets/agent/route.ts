@@ -111,6 +111,7 @@ export async function POST(req: NextRequest) {
       // Customers cannot login - they can only create tickets
       customer = await prisma.user.create({
         data: {
+          id: crypto.randomUUID(),
           tenantId, // Always include tenantId
           email,
           name,
@@ -118,6 +119,7 @@ export async function POST(req: NextRequest) {
           password: null, // No password - customers cannot login
           role: 'CUSTOMER',
           isActive: true,
+          updatedAt: new Date(),
         },
       })
     } else {
@@ -143,6 +145,7 @@ export async function POST(req: NextRequest) {
     
     const ticket = await prisma.ticket.create({
       data: {
+        id: crypto.randomUUID(),
         tenantId, // Always include tenantId
         ticketNumber: generateTicketNumber(),
         subject,
@@ -151,10 +154,11 @@ export async function POST(req: NextRequest) {
         priority: (priority || 'NORMAL') as 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT',
         customerId: customer.id,
         status: 'NEW',
+        updatedAt: new Date(),
       },
       include: {
-        category: true,
-        customer: {
+        Category: true,
+        User_Ticket_customerIdToUser: {
           select: {
             id: true,
             name: true,
@@ -183,6 +187,7 @@ export async function POST(req: NextRequest) {
             // Create attachment record with MEGA file URL
             await prisma.attachment.create({
               data: {
+                id: crypto.randomUUID(),
                 filename: fileData.filename,
                 fileUrl: uploadResult.fileUrl, // Stores /api/storage/mega/{fileHandle}
                 fileSize: uploadResult.fileSize,
@@ -206,10 +211,10 @@ export async function POST(req: NextRequest) {
     const fullTicket = await prisma.ticket.findUnique({
       where: { id: ticket.id },
       include: {
-        customer: true,
-        category: true,
-        assignedAgent: true,
-        attachments: true,
+        User_Ticket_customerIdToUser: true,
+        Category: true,
+        User_Ticket_assignedAgentIdToUser: true,
+        Attachment: true,
       },
     })
 
@@ -233,15 +238,15 @@ export async function POST(req: NextRequest) {
         const ticketForEvent = await prisma.ticket.findUnique({
           where: { id: ticket.id },
           include: {
-            customer: {
+            User_Ticket_customerIdToUser: {
               select: { id: true, name: true, email: true, avatar: true },
             },
-            category: true,
-            assignedAgent: {
+            Category: true,
+            User_Ticket_assignedAgentIdToUser: {
               select: { id: true, name: true, email: true, avatar: true },
             },
             _count: {
-              select: { comments: true, attachments: true },
+              select: { Comment: true, Attachment: true },
             },
           },
         })
@@ -274,8 +279,8 @@ export async function POST(req: NextRequest) {
         subject: ticket.subject,
         status: ticket.status,
         priority: ticket.priority,
-        category: ticket.category,
-        customer: ticket.customer,
+        category: ticket.Category,
+        customer: ticket.User_Ticket_customerIdToUser,
         createdAt: ticket.createdAt,
       },
     })

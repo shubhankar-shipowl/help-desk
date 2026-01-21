@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
 
     const rule = await prisma.autoAssignmentRule.create({
       data: {
+        id: crypto.randomUUID(),
         tenantId, // Always include tenantId
         name,
         description,
@@ -84,6 +85,7 @@ export async function POST(req: NextRequest) {
         actions: actions || {},
         priority: priority || 0,
         isActive: isActive !== undefined ? isActive : true,
+        updatedAt: new Date(),
       },
     })
 

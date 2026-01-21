@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import crypto from 'crypto'
 import { createDefaultCategoriesForStore } from '@/lib/default-categories'
 
 export const dynamic = 'force-dynamic'
@@ -114,6 +115,7 @@ export async function POST(req: NextRequest) {
     // Create store
     const store = await prisma.store.create({
       data: {
+        id: crypto.randomUUID(),
         tenantId,
         name,
         description: description || null,
@@ -121,6 +123,7 @@ export async function POST(req: NextRequest) {
         phone: phone || null,
         email: email || null,
         isActive: true,
+        updatedAt: new Date(),
       },
       select: {
         id: true,

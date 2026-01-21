@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { DEFAULT_CATEGORIES, createDefaultCategoriesForStore } from '../lib/default-categories'
+import crypto from 'crypto'
 
 const prisma = new PrismaClient()
 
@@ -12,10 +13,12 @@ async function main() {
     where: { slug: 'default' },
     update: {},
     create: {
+      id: crypto.randomUUID(),
       name: 'Default Company',
       slug: 'default',
       isActive: true,
       settings: {},
+      updatedAt: new Date(),
     },
   })
   console.log(`✓ Created default tenant: ${defaultTenant.name}`)
@@ -31,12 +34,14 @@ async function main() {
     },
     update: {},
     create: {
+      id: crypto.randomUUID(),
       tenantId: defaultTenant.id,
       email: 'admin@example.com',
       name: 'Admin User',
       password: adminPassword,
       role: 'ADMIN',
       isActive: true,
+      updatedAt: new Date(),
     },
   })
   console.log(`✓ Created admin user: ${admin.email}`)

@@ -76,10 +76,10 @@ export async function GET(
         updatedAt: true,
         _count: {
           select: {
-            users: true,
-            tickets: true,
-            teams: true,
-            categories: true,
+            User: true,
+            Ticket: true,
+            Team: true,
+            Category: true,
           },
         },
       },
@@ -236,10 +236,10 @@ export async function DELETE(
       include: {
         _count: {
           select: {
-            users: true,
-            tickets: true,
-            categories: true,
-            teams: true,
+            User: true,
+            Ticket: true,
+            Category: true,
+            Team: true,
           },
         },
       },

@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
             status: 'SENT',
           },
           include: {
-            notification: {
+            Notification: {
               select: {
                 ticketId: true,
               },
@@ -168,8 +168,8 @@ export async function POST(req: NextRequest) {
           },
         })
         
-        if (deliveryLog?.notification?.ticketId) {
-          ticketId = deliveryLog.notification.ticketId
+        if (deliveryLog?.Notification?.ticketId) {
+          ticketId = deliveryLog.Notification.ticketId
           break
         }
       }
@@ -183,13 +183,13 @@ export async function POST(req: NextRequest) {
     if (ticketId) {
       ticket = await prisma.ticket.findUnique({
         where: { id: ticketId },
-        include: { customer: true },
+        include: { User_Ticket_customerIdToUser: true },
       })
     } else if (ticketNumber) {
       // Use findFirst since ticketNumber is part of compound unique with tenantId
       ticket = await prisma.ticket.findFirst({
         where: { ticketNumber },
-        include: { customer: true },
+        include: { User_Ticket_customerIdToUser: true },
       })
     }
 
@@ -216,6 +216,7 @@ export async function POST(req: NextRequest) {
         if (!existingEmail) {
           await prisma.email.create({
             data: {
+              id: crypto.randomUUID(),
               tenantId,
               storeId,
               messageId,
@@ -229,6 +230,7 @@ export async function POST(req: NextRequest) {
               ticketId: ticket?.id || null,
               processed: !!ticket,
               processedAt: ticket ? new Date() : null,
+              updatedAt: new Date(),
             },
           })
         }
@@ -252,10 +254,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify the sender is the ticket customer
-    if (ticket.customer.email.toLowerCase() !== fromEmail.toLowerCase()) {
+    const customerEmail = ticket.User_Ticket_customerIdToUser?.email
+    if (!customerEmail || customerEmail.toLowerCase() !== fromEmail.toLowerCase()) {
       console.warn('[Email Webhook] Email sender does not match ticket customer:', {
         senderEmail: fromEmail,
-        customerEmail: ticket.customer.email,
+        customerEmail: customerEmail || 'unknown',
         ticketId: ticket.id,
       })
       return NextResponse.json(
@@ -327,11 +330,13 @@ export async function POST(req: NextRequest) {
       // Create customer if doesn't exist
       customer = await prisma.user.create({
         data: {
+          id: crypto.randomUUID(),
           tenantId,
           email: fromEmail,
           name: fromEmail.split('@')[0], // Use email prefix as name
           role: 'CUSTOMER',
           isActive: true,
+          updatedAt: new Date(),
         },
       })
     }
@@ -368,6 +373,7 @@ export async function POST(req: NextRequest) {
     const commentNow = new Date()
     const comment = await prisma.comment.create({
       data: {
+        id: crypto.randomUUID(),
         content: replyContent.trim(),
         ticketId: ticket.id,
         authorId: customer.id,
@@ -376,7 +382,7 @@ export async function POST(req: NextRequest) {
         updatedAt: commentNow,
       },
       include: {
-        author: {
+        User: {
           select: {
             id: true,
             name: true,
@@ -391,9 +397,9 @@ export async function POST(req: NextRequest) {
     const fullTicket = await prisma.ticket.findUnique({
       where: { id: ticket.id },
       include: {
-        customer: true,
-        category: true,
-        assignedAgent: {
+        User_Ticket_customerIdToUser: true,
+        Category: true,
+        User_Ticket_assignedAgentIdToUser: {
           select: {
             id: true,
             name: true,

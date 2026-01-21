@@ -19,25 +19,25 @@ export default async function CustomerTicketDetailPage({
   const ticket = await prisma.ticket.findUnique({
     where: { id: params.id },
     include: {
-      customer: true,
-      assignedAgent: {
+      User_Ticket_customerIdToUser: true,
+      User_Ticket_assignedAgentIdToUser: {
         select: { id: true, name: true, email: true, avatar: true },
       },
-      category: true,
-      comments: {
+      Category: true,
+      Comment: {
         include: {
-          author: {
+          User: {
             select: { id: true, name: true, email: true, avatar: true, role: true },
           },
-          attachments: true,
+          Attachment: true,
         },
         orderBy: { createdAt: 'asc' },
       },
-      attachments: true,
-      tags: {
-        include: { tag: true },
+      Attachment: true,
+      TicketTag: {
+        include: { Tag: true },
       },
-      satisfactionRating: true,
+      SatisfactionRating: true,
     },
   })
 
