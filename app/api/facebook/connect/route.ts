@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getAppUrl } from '@/lib/utils'
 import { getSystemSetting } from '@/lib/system-settings'
+import { prisma } from '@/lib/prisma'
 
 export async function GET(req: NextRequest) {
   try {
@@ -20,9 +21,27 @@ export async function GET(req: NextRequest) {
       )
     }
 
+    // Get storeId from query parameter (optional, but needed for store-specific settings)
+    const { searchParams } = new URL(req.url)
+    const storeId = searchParams.get('storeId')
+
     // Get Facebook configuration from SystemSettings (with fallback to environment variables)
-    const appId = (await getSystemSetting('FACEBOOK_APP_ID', tenantId) || process.env.FACEBOOK_APP_ID)?.trim()
-    // For Facebook OAuth, use APP_URL/NEXTAUTH_URL if set (for ngrok), otherwise use getAppUrl()
+    // Try store-specific setting first, then tenant-level, then environment variable
+    const systemSettingAppId = await getSystemSetting('FACEBOOK_APP_ID', tenantId, storeId || null)
+    const envAppId = process.env.FACEBOOK_APP_ID
+    const appId = (systemSettingAppId || envAppId)?.trim()
+    
+    // Debug logging
+    console.log('[Facebook Connect] Configuration Check:', {
+      tenantId,
+      storeId: storeId || 'none (tenant-level)',
+      systemSettingAppId: systemSettingAppId ? `${systemSettingAppId.substring(0, 4)}...${systemSettingAppId.substring(systemSettingAppId.length - 4)}` : 'NOT SET',
+      envAppId: envAppId ? 'SET' : 'NOT SET',
+      finalAppId: appId ? `${appId.substring(0, 4)}...${appId.substring(appId.length - 4)}` : 'EMPTY',
+      appIdSource: systemSettingAppId ? (storeId ? 'SystemSettings (store-specific)' : 'SystemSettings (tenant-level)') : (envAppId ? 'Environment Variable' : 'NOT FOUND'),
+    })
+    
+    // For Facebook OAuth, use APP_URL/NEXTAUTH_URL if set, otherwise use getAppUrl()
     // Remove quotes if present (some .env files have quotes)
     let facebookBaseUrl = (process.env.APP_URL || process.env.NEXTAUTH_URL || getAppUrl()).trim()
     facebookBaseUrl = facebookBaseUrl.replace(/^["']|["']$/g, '') // Remove surrounding quotes
@@ -32,10 +51,12 @@ export async function GET(req: NextRequest) {
     const appDomain = facebookBaseUrl.replace(/^https?:\/\//, '').split('/')[0]
     
     // Detailed debugging
-    console.log('[Facebook Connect] Environment Check:', {
-      rawAppId: process.env.FACEBOOK_APP_ID ? 'SET' : 'NOT SET',
+    console.log('[Facebook Connect] Configuration Check:', {
+      systemSettingAppId: systemSettingAppId ? `${systemSettingAppId.substring(0, 4)}...${systemSettingAppId.substring(systemSettingAppId.length - 4)}` : 'NOT SET',
+      envAppId: envAppId ? 'SET' : 'NOT SET',
+      finalAppId: appId ? `${appId.substring(0, 4)}...${appId.substring(appId.length - 4)}` : 'EMPTY',
+      appIdSource: systemSettingAppId ? 'SystemSettings' : (envAppId ? 'Environment Variable' : 'NOT FOUND'),
       appIdLength: appId?.length || 0,
-      appIdValue: appId ? `${appId.substring(0, 4)}...${appId.substring(appId.length - 4)}` : 'EMPTY',
       appIdType: typeof appId,
       hasWhitespace: appId ? /\s/.test(appId) : false,
       redirectUri,
@@ -43,14 +64,22 @@ export async function GET(req: NextRequest) {
       appUrl: process.env.APP_URL || 'NOT SET',
       nextAuthUrl: process.env.NEXTAUTH_URL || 'NOT SET',
       facebookBaseUrl,
-      expectedRedirectUri: 'https://illusively-crippling-marvel.ngrok-free.dev/api/facebook/callback',
+      tenantId,
     })
     
     // Validate App ID
     if (!appId) {
-      console.error('[Facebook Connect] ❌ FACEBOOK_APP_ID is not set in environment variables')
+      console.error('[Facebook Connect] ❌ FACEBOOK_APP_ID is not configured')
+      console.error('[Facebook Connect] Checked sources:', {
+        systemSettings: systemSettingAppId ? 'Found' : 'Not found',
+        environmentVariable: envAppId ? 'Found' : 'Not found',
+        tenantId,
+      })
       return NextResponse.json(
-        { error: 'Facebook App ID not configured. Please set FACEBOOK_APP_ID in environment variables.' },
+        { 
+          error: 'Facebook App ID not configured. Please configure it in the admin panel (Facebook Configuration) or set FACEBOOK_APP_ID in environment variables.',
+          hint: 'Go to Admin → Integrations → Facebook Configuration and enter your Facebook App ID.'
+        },
         { status: 500 }
       )
     }
@@ -103,14 +132,8 @@ export async function GET(req: NextRequest) {
       state: session.user.id,
     })
     
-    // Log full redirect URI for debugging
-    const expectedRedirectUri = 'https://illusively-crippling-marvel.ngrok-free.dev/api/facebook/callback'
-    const redirectUriMatches = redirectUri === expectedRedirectUri
-    
     console.log('[Facebook Connect] 📋 IMPORTANT - Facebook Configuration:', {
       fullRedirectUri: redirectUri,
-      expectedInFacebook: expectedRedirectUri,
-      matches: redirectUriMatches ? '✅ YES' : '❌ NO',
       appUrl: process.env.APP_URL || 'NOT SET',
       nextAuthUrl: process.env.NEXTAUTH_URL || 'NOT SET',
       facebookBaseUrl,
@@ -126,7 +149,7 @@ export async function GET(req: NextRequest) {
         '  2. Select your app',
         '  3. Go to Settings → Basic',
         '  4. Find "App Domains" field',
-        `  5. Add domain: ${facebookBaseUrl.replace(/^https?:\/\//, '').split('/')[0]}`,
+        `  5. Add domain: ${appDomain}`,
         '     (Just the domain, no https:// or paths)',
         '  6. Click "Save Changes"',
         '',
@@ -140,18 +163,12 @@ export async function GET(req: NextRequest) {
         '  5. Click "Save Changes"',
         '',
         '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-        redirectUriMatches 
-          ? '✅ Redirect URI matches expected ngrok URL!' 
-          : '⚠️  WARNING: Redirect URI does NOT match expected ngrok URL!',
+        `✅ Current redirect URI: ${redirectUri}`,
+        `✅ Current app domain: ${appDomain}`,
+        '',
+        '💡 Make sure these match what you configured in Facebook Developer Console!',
       ],
     })
-    
-    if (!redirectUriMatches) {
-      console.error('[Facebook Connect] ❌ CRITICAL: Redirect URI mismatch!')
-      console.error('[Facebook Connect] Current:', redirectUri)
-      console.error('[Facebook Connect] Expected:', expectedRedirectUri)
-      console.error('[Facebook Connect] 💡 Fix: Make sure APP_URL=https://illusively-crippling-marvel.ngrok-free.dev in .env (without quotes)')
-    }
 
     // Validate App ID format one more time before sending
     if (!/^\d{15,20}$/.test(trimmedAppId)) {

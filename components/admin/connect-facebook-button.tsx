@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Facebook } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
+import { useStore } from '@/lib/store-context'
 
 export function ConnectFacebookButton() {
   const [loading, setLoading] = useState(false)
@@ -12,6 +13,7 @@ export function ConnectFacebookButton() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
+  const { selectedStoreId } = useStore()
 
   // Only run on client side
   useEffect(() => {
@@ -58,7 +60,10 @@ export function ConnectFacebookButton() {
   const handleConnect = async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/facebook/connect')
+      const url = selectedStoreId 
+        ? `/api/facebook/connect?storeId=${selectedStoreId}`
+        : '/api/facebook/connect'
+      const response = await fetch(url)
       const data = await response.json()
 
       if (!response.ok) {

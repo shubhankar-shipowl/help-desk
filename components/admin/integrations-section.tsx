@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
+import { useStore } from '@/lib/store-context'
 
 interface FacebookIntegration {
   id: string
@@ -30,6 +31,7 @@ interface FacebookIntegration {
 export function IntegrationsSection() {
   const router = useRouter()
   const { toast } = useToast()
+  const { selectedStoreId } = useStore()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [integration, setIntegration] = useState<FacebookIntegration | null>(null)
@@ -323,7 +325,10 @@ export function IntegrationsSection() {
               onClick={async () => {
                 try {
                   setSaving(true)
-                  const response = await fetch('/api/facebook/connect')
+                  const url = selectedStoreId 
+                    ? `/api/facebook/connect?storeId=${selectedStoreId}`
+                    : '/api/facebook/connect'
+                  const response = await fetch(url)
                   const data = await response.json()
                   
                   if (data.error) {
