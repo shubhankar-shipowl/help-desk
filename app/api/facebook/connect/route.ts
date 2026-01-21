@@ -46,9 +46,44 @@ export async function GET(req: NextRequest) {
     let facebookBaseUrl = (process.env.APP_URL || process.env.NEXTAUTH_URL || getAppUrl()).trim()
     facebookBaseUrl = facebookBaseUrl.replace(/^["']|["']$/g, '') // Remove surrounding quotes
     facebookBaseUrl = facebookBaseUrl.replace(/\/$/, '') // Remove trailing slash
-    const redirectUri = `${facebookBaseUrl}/api/facebook/callback`
+    
+    // CRITICAL: Force HTTPS for production and validate URL format
+    // Facebook requires HTTPS for OAuth redirects (except localhost in development)
+    const nodeEnv = process.env.NODE_ENV || 'development'
+    if (nodeEnv === 'production') {
+      // In production, always use HTTPS
+      if (facebookBaseUrl.startsWith('http://')) {
+        facebookBaseUrl = facebookBaseUrl.replace('http://', 'https://')
+        console.warn('[Facebook Connect] ⚠️ Converted HTTP to HTTPS for production:', facebookBaseUrl)
+      }
+      // Ensure we're not using internal server URLs in production
+      if (facebookBaseUrl.includes('localhost') || facebookBaseUrl.includes(':3002') || facebookBaseUrl.includes('srv512766.hstgr.cloud')) {
+        console.error('[Facebook Connect] ❌ CRITICAL: Using internal server URL in production!')
+        console.error('[Facebook Connect] Current URL:', facebookBaseUrl)
+        console.error('[Facebook Connect] Expected: https://support.shopperskart.shop')
+        // Override with correct production URL
+        facebookBaseUrl = 'https://support.shopperskart.shop'
+        console.warn('[Facebook Connect] ⚠️ Overriding with correct production URL:', facebookBaseUrl)
+      }
+    }
+    
+    const redirectUri = `${facebookBaseUrl}/facebook/callback`
     // Extract domain for App Domains field (without protocol and path)
     const appDomain = facebookBaseUrl.replace(/^https?:\/\//, '').split('/')[0]
+    
+    // Validate redirect URI format
+    if (!redirectUri.startsWith('https://') && nodeEnv === 'production') {
+      console.error('[Facebook Connect] ❌ CRITICAL: Redirect URI must use HTTPS in production!')
+      console.error('[Facebook Connect] Current redirect URI:', redirectUri)
+      return NextResponse.json(
+        { 
+          error: 'Invalid redirect URI configuration. Production requires HTTPS. Please set APP_URL=https://support.shopperskart.shop in your .env file.',
+          currentRedirectUri: redirectUri,
+          expectedRedirectUri: 'https://support.shopperskart.shop/api/facebook/callback',
+        },
+        { status: 500 }
+      )
+    }
     
     // Detailed debugging
     console.log('[Facebook Connect] Configuration Check:', {
@@ -65,6 +100,7 @@ export async function GET(req: NextRequest) {
       nextAuthUrl: process.env.NEXTAUTH_URL || 'NOT SET',
       facebookBaseUrl,
       tenantId,
+      redirectUriValid: redirectUri.startsWith('https://') || nodeEnv !== 'production',
     })
     
     // Validate App ID
