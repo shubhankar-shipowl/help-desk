@@ -67,7 +67,8 @@ export async function GET(req: NextRequest) {
       }
     }
     
-    const redirectUri = `${facebookBaseUrl}/facebook/callback`
+    // Use /privacy as redirect URI since Facebook only accepts that URL
+    const redirectUri = `${facebookBaseUrl}/privacy`
     // Extract domain for App Domains field (without protocol and path)
     const appDomain = facebookBaseUrl.replace(/^https?:\/\//, '').split('/')[0]
     
