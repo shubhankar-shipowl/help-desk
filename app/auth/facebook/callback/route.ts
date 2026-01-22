@@ -1,0 +1,246 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { getSystemSetting } from '@/lib/system-settings'
+import crypto from 'crypto'
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
+// Handle Facebook OAuth callback
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    
+    // Get OAuth callback parameters
+    const code = searchParams.get('code')
+    const state = searchParams.get('state')
+    const error = searchParams.get('error')
+    const errorReason = searchParams.get('error_reason')
+    const errorDescription = searchParams.get('error_description')
+    
+    console.log('[Facebook OAuth Callback] ========================================')
+    console.log('[Facebook OAuth Callback] 📥 Incoming OAuth callback')
+    console.log('[Facebook OAuth Callback] URL:', req.url)
+    console.log('[Facebook OAuth Callback] Code:', code ? 'present' : 'missing')
+    console.log('[Facebook OAuth Callback] State:', state || 'missing')
+    console.log('[Facebook OAuth Callback] Error:', error || 'none')
+    if (error) {
+      console.log('[Facebook OAuth Callback] Error Reason:', errorReason || 'none')
+      console.log('[Facebook OAuth Callback] Error Description:', errorDescription || 'none')
+    }
+    console.log('[Facebook OAuth Callback] ========================================')
+    
+    // Simple test: If no code parameter, return success message to verify route works
+    if (!code && !error) {
+      return new NextResponse('Facebook callback working', {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+      })
+    }
+    
+    // Handle OAuth errors
+    if (error) {
+      const url = new URL(req.url)
+      const baseUrl = `${url.protocol}//${url.host}`
+      const errorMessage = errorDescription || errorReason || error
+      console.error('[Facebook OAuth Callback] ❌ OAuth error:', errorMessage)
+      return NextResponse.redirect(
+        `${baseUrl}/admin/integrations?error=${encodeURIComponent(errorMessage)}`
+      )
+    }
+    
+    // Validate required parameters
+    if (!code) {
+      const url = new URL(req.url)
+      const baseUrl = `${url.protocol}//${url.host}`
+      console.error('[Facebook OAuth Callback] ❌ Missing authorization code')
+      return NextResponse.redirect(
+        `${baseUrl}/admin/integrations?error=no_code`
+      )
+    }
+    
+    if (!state) {
+      const url = new URL(req.url)
+      const baseUrl = `${url.protocol}//${url.host}`
+      console.error('[Facebook OAuth Callback] ❌ Missing state parameter')
+      return NextResponse.redirect(
+        `${baseUrl}/admin/integrations?error=no_state`
+      )
+    }
+    
+    // Get tenantId from state (user ID) - we stored it in the OAuth state
+    let tenantId: string | null = null
+    const user = await prisma.user.findUnique({
+      where: { id: state },
+      select: { tenantId: true },
+    })
+    tenantId = user?.tenantId || null
+    
+    if (!tenantId) {
+      const url = new URL(req.url)
+      const baseUrl = `${url.protocol}//${url.host}`
+      console.error('[Facebook OAuth Callback] ❌ Could not find tenant ID from user state')
+      return NextResponse.redirect(
+        `${baseUrl}/admin/integrations?error=tenant_not_found`
+      )
+    }
+    
+    console.log('[Facebook OAuth Callback] ✅ Found tenant ID:', tenantId)
+    
+    // Get Facebook configuration from SystemSettings (with fallback to environment variables)
+    const appId = tenantId 
+      ? (await getSystemSetting('FACEBOOK_APP_ID', tenantId) || process.env.FACEBOOK_APP_ID)
+      : process.env.FACEBOOK_APP_ID
+    const appSecret = tenantId
+      ? (await getSystemSetting('FACEBOOK_APP_SECRET', tenantId) || process.env.FACEBOOK_APP_SECRET)
+      : process.env.FACEBOOK_APP_SECRET
+    
+    if (!appId || !appSecret) {
+      const url = new URL(req.url)
+      const baseUrl = `${url.protocol}//${url.host}`
+      console.error('[Facebook OAuth Callback] ❌ Missing Facebook configuration')
+      return NextResponse.redirect(
+        `${baseUrl}/admin/integrations?error=config_missing`
+      )
+    }
+    
+    // For Facebook OAuth, always use support.shopperskart.shop for redirect URI
+    // This ensures it matches what's configured in Facebook Developer Console
+    const facebookBaseUrl = 'https://support.shopperskart.shop'
+    const redirectUri = `${facebookBaseUrl}/auth/facebook/callback`
+    
+    console.log('[Facebook OAuth Callback] 🔄 Exchanging code for access token...')
+    console.log('[Facebook OAuth Callback] Redirect URI:', redirectUri)
+    
+    // Exchange code for access token
+    const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&redirect_uri=${encodeURIComponent(redirectUri)}&code=${code}`
+    
+    const tokenResponse = await fetch(tokenUrl, { method: 'GET' })
+    
+    if (!tokenResponse.ok) {
+      const errorData = await tokenResponse.json().catch(() => ({}))
+      const url = new URL(req.url)
+      const baseUrl = `${url.protocol}//${url.host}`
+      console.error('[Facebook OAuth Callback] ❌ Token exchange failed:', errorData)
+      if (errorData.error?.message?.includes('client secret')) {
+        return NextResponse.redirect(
+          `${baseUrl}/admin/integrations?error=invalid_secret`
+        )
+      }
+      return NextResponse.redirect(
+        `${baseUrl}/admin/integrations?error=token_exchange_failed`
+      )
+    }
+    
+    const tokenData = await tokenResponse.json()
+    const accessToken = tokenData.access_token
+    
+    if (!accessToken) {
+      const url = new URL(req.url)
+      const baseUrl = `${url.protocol}//${url.host}`
+      console.error('[Facebook OAuth Callback] ❌ No access token in response')
+      return NextResponse.redirect(
+        `${baseUrl}/admin/integrations?error=no_access_token`
+      )
+    }
+    
+    console.log('[Facebook OAuth Callback] ✅ Access token received')
+    console.log('[Facebook OAuth Callback] 📋 Fetching user pages...')
+    
+    // Get user's pages
+    const pagesResponse = await fetch(
+      `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}`,
+      { method: 'GET' }
+    )
+    
+    if (!pagesResponse.ok) {
+      const url = new URL(req.url)
+      const baseUrl = `${url.protocol}//${url.host}`
+      const errorData = await pagesResponse.json().catch(() => ({}))
+      console.error('[Facebook OAuth Callback] ❌ Failed to fetch pages:', errorData)
+      return NextResponse.redirect(
+        `${baseUrl}/admin/integrations?error=pages_fetch_failed`
+      )
+    }
+    
+    const pagesData = await pagesResponse.json()
+    const pages = pagesData.data || []
+    
+    if (pages.length === 0) {
+      const url = new URL(req.url)
+      const baseUrl = `${url.protocol}//${url.host}`
+      console.warn('[Facebook OAuth Callback] ⚠️ No pages found for user')
+      return NextResponse.redirect(
+        `${baseUrl}/admin/integrations?error=no_pages`
+      )
+    }
+    
+    console.log('[Facebook OAuth Callback] ✅ Found', pages.length, 'page(s)')
+    
+    // Get webhook token
+    const webhookToken = tenantId 
+      ? (await getSystemSetting('FACEBOOK_WEBHOOK_VERIFY_TOKEN', tenantId) || process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || 'facebook_2026')
+      : (process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || 'facebook_2026')
+    
+    // Save each page as an integration
+    for (const page of pages) {
+      console.log('[Facebook OAuth Callback] 💾 Saving integration for page:', page.id, page.name)
+      
+      await prisma.facebookIntegration.upsert({
+        where: { 
+          tenantId_pageId: {
+            tenantId,
+            pageId: page.id,
+          }
+        },
+        update: {
+          pageName: page.name,
+          accessToken: page.access_token,
+          webhookToken,
+          isActive: true,
+          updatedAt: new Date(),
+        },
+        create: {
+          id: crypto.randomUUID(),
+          tenantId,
+          pageId: page.id,
+          pageName: page.name,
+          accessToken: page.access_token,
+          webhookToken,
+          isActive: true,
+          updatedAt: new Date(),
+        },
+      })
+      
+      // Subscribe to webhooks
+      try {
+        const subscribeUrl = `https://graph.facebook.com/v18.0/${page.id}/subscribed_apps?subscribed_fields=feed,messages,mention&access_token=${page.access_token}`
+        const subscribeResponse = await fetch(subscribeUrl, { method: 'POST' })
+        if (subscribeResponse.ok) {
+          console.log(`[Facebook OAuth Callback] ✅ Successfully subscribed page ${page.id} to webhooks`)
+        } else {
+          const errorData = await subscribeResponse.json().catch(() => ({}))
+          console.warn(`[Facebook OAuth Callback] ⚠️ Error subscribing page ${page.id}:`, errorData)
+        }
+      } catch (subscribeError: any) {
+        console.warn(`[Facebook OAuth Callback] ⚠️ Error subscribing page ${page.id}:`, subscribeError.message)
+      }
+    }
+    
+    const url = new URL(req.url)
+    const baseUrl = `${url.protocol}//${url.host}`
+    console.log('[Facebook OAuth Callback] ✅ Successfully connected Facebook pages')
+    return NextResponse.redirect(
+      `${baseUrl}/admin/integrations?success=connected`
+    )
+  } catch (error: any) {
+    console.error('[Facebook OAuth Callback] ❌ Unexpected error:', error)
+    const url = new URL(req.url)
+    const baseUrl = `${url.protocol}//${url.host}`
+    return NextResponse.redirect(
+      `${baseUrl}/admin/integrations?error=${encodeURIComponent(error.message || 'unexpected_error')}`
+    )
+  }
+}

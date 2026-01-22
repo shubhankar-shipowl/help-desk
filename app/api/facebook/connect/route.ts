@@ -41,46 +41,26 @@ export async function GET(req: NextRequest) {
       appIdSource: systemSettingAppId ? (storeId ? 'SystemSettings (store-specific)' : 'SystemSettings (tenant-level)') : (envAppId ? 'Environment Variable' : 'NOT FOUND'),
     })
     
-    // For Facebook OAuth, use APP_URL/NEXTAUTH_URL if set, otherwise use getAppUrl()
-    // Remove quotes if present (some .env files have quotes)
-    let facebookBaseUrl = (process.env.APP_URL || process.env.NEXTAUTH_URL || getAppUrl()).trim()
-    facebookBaseUrl = facebookBaseUrl.replace(/^["']|["']$/g, '') // Remove surrounding quotes
-    facebookBaseUrl = facebookBaseUrl.replace(/\/$/, '') // Remove trailing slash
+    // CRITICAL: ALWAYS use https://support.shopperskart.shop for Facebook OAuth
+    // This is the ONLY URL that Facebook accepts as a Valid OAuth Redirect URI
+    // We must use this exact URL regardless of environment or other settings
+    const facebookBaseUrl = 'https://support.shopperskart.shop'
+    console.log('[Facebook Connect] Using Facebook OAuth URL:', facebookBaseUrl)
     
-    // CRITICAL: Force HTTPS for production and validate URL format
-    // Facebook requires HTTPS for OAuth redirects (except localhost in development)
-    const nodeEnv = process.env.NODE_ENV || 'development'
-    if (nodeEnv === 'production') {
-      // In production, always use HTTPS
-      if (facebookBaseUrl.startsWith('http://')) {
-        facebookBaseUrl = facebookBaseUrl.replace('http://', 'https://')
-        console.warn('[Facebook Connect] ⚠️ Converted HTTP to HTTPS for production:', facebookBaseUrl)
-      }
-      // Ensure we're not using internal server URLs in production
-      if (facebookBaseUrl.includes('localhost') || facebookBaseUrl.includes(':3002') || facebookBaseUrl.includes('srv512766.hstgr.cloud')) {
-        console.error('[Facebook Connect] ❌ CRITICAL: Using internal server URL in production!')
-        console.error('[Facebook Connect] Current URL:', facebookBaseUrl)
-        console.error('[Facebook Connect] Expected: https://support.shopperskart.shop')
-        // Override with correct production URL
-        facebookBaseUrl = 'https://support.shopperskart.shop'
-        console.warn('[Facebook Connect] ⚠️ Overriding with correct production URL:', facebookBaseUrl)
-      }
-    }
-    
-    // Use /privacy as redirect URI since Facebook only accepts that URL
-    const redirectUri = `${facebookBaseUrl}/privacy`
+    // Use /auth/facebook/callback as redirect URI for OAuth
+    const redirectUri = `${facebookBaseUrl}/auth/facebook/callback`
     // Extract domain for App Domains field (without protocol and path)
     const appDomain = facebookBaseUrl.replace(/^https?:\/\//, '').split('/')[0]
     
-    // Validate redirect URI format
-    if (!redirectUri.startsWith('https://') && nodeEnv === 'production') {
-      console.error('[Facebook Connect] ❌ CRITICAL: Redirect URI must use HTTPS in production!')
+    // Validate redirect URI format (should always be HTTPS for Facebook)
+    if (!redirectUri.startsWith('https://')) {
+      console.error('[Facebook Connect] ❌ CRITICAL: Redirect URI must use HTTPS!')
       console.error('[Facebook Connect] Current redirect URI:', redirectUri)
       return NextResponse.json(
         { 
-          error: 'Invalid redirect URI configuration. Production requires HTTPS. Please set APP_URL=https://support.shopperskart.shop in your .env file.',
+          error: 'Invalid redirect URI configuration. Facebook requires HTTPS.',
           currentRedirectUri: redirectUri,
-          expectedRedirectUri: 'https://support.shopperskart.shop/api/facebook/callback',
+          expectedRedirectUri: 'https://support.shopperskart.shop/auth/facebook/callback',
         },
         { status: 500 }
       )
@@ -101,7 +81,7 @@ export async function GET(req: NextRequest) {
       nextAuthUrl: process.env.NEXTAUTH_URL || 'NOT SET',
       facebookBaseUrl,
       tenantId,
-      redirectUriValid: redirectUri.startsWith('https://') || nodeEnv !== 'production',
+      redirectUriValid: redirectUri.startsWith('https://'),
     })
     
     // Validate App ID
@@ -156,8 +136,22 @@ export async function GET(req: NextRequest) {
     // Generate Facebook OAuth URL (using trimmedAppId already defined above)
     const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${trimmedAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&response_type=code&state=${session.user.id}`
 
-    // Log full OAuth URL for debugging (first 150 chars)
-    console.log('[Facebook Connect] 🔗 Full OAuth URL:', facebookAuthUrl.substring(0, 150) + '...')
+    // Log full OAuth URL for debugging
+    console.log('[Facebook Connect] ========================================')
+    console.log('[Facebook Connect] 🔗 OAuth Configuration:')
+    console.log('[Facebook Connect]   App ID:', trimmedAppId)
+    console.log('[Facebook Connect]   Redirect URI:', redirectUri)
+    console.log('[Facebook Connect]   App Domain:', appDomain)
+    console.log('[Facebook Connect]   Full OAuth URL:', facebookAuthUrl)
+    console.log('[Facebook Connect] ========================================')
+    console.log('[Facebook Connect] ⚠️  IMPORTANT: Make sure in Facebook Developer Console:')
+    console.log('[Facebook Connect]   1. Go to Settings > Basic')
+    console.log('[Facebook Connect]   2. Add this EXACT URL to "Valid OAuth Redirect URIs":')
+    console.log('[Facebook Connect]      ', redirectUri)
+    console.log('[Facebook Connect]   3. Add this domain to "App Domains":')
+    console.log('[Facebook Connect]      ', appDomain)
+    console.log('[Facebook Connect]   4. Enable "Client OAuth Login" and "Web OAuth Login"')
+    console.log('[Facebook Connect] ========================================')
     
     console.log('[Facebook Connect] 🔗 Generated OAuth URL:', {
       url: facebookAuthUrl.substring(0, 100) + '...',

@@ -21,7 +21,7 @@ export default withAuth(
           pathname === '/tickets/new' ||
           pathname === '/privacy' || // Privacy policy page (must be public)
           pathname === '/terms' || // Terms of Service page (must be public)
-          pathname === '/facebook/callback' || // Facebook OAuth callback (must be public)
+          pathname === '/auth/facebook/callback' || // Facebook OAuth callback (must be public)
           pathname.startsWith('/webhooks/') // Facebook webhook endpoint (must be public)
         ) {
           return NextResponse.next()
@@ -81,7 +81,7 @@ export default withAuth(
               pathname === '/tickets/new' ||
               pathname === '/privacy' || // Privacy policy page (must be public)
               pathname === '/terms' || // Terms of Service page (must be public)
-              pathname === '/facebook/callback' || // Facebook OAuth callback (must be public)
+              pathname === '/auth/facebook/callback' || // Facebook OAuth callback (must be public)
               pathname.startsWith('/webhooks/') // Facebook webhook endpoint (must be public)
             ) {
               return true
