@@ -65,13 +65,172 @@ export async function GET(req: NextRequest) {
     const error = searchParams.get('error')
     
     if (code || error) {
-      // Redirect to API handler for OAuth processing
-      const params = new URLSearchParams()
-      if (code) params.set('code', code)
-      if (state) params.set('state', state)
-      if (error) params.set('error', error)
+      // Log the incoming request for debugging
+      console.log('[Privacy Route] OAuth callback received:', {
+        url: req.url,
+        host: req.headers.get('host'),
+        code: code ? 'present' : 'missing',
+        state: state || 'missing',
+        error: error || 'none',
+      })
       
-      return NextResponse.redirect(`${getAppUrl()}/api/privacy-handler?${params.toString()}`)
+      // Handle OAuth callback directly here (no redirect needed)
+      if (error) {
+        // Use current request's origin for redirect
+        const url = new URL(req.url)
+        const baseUrl = `${url.protocol}//${url.host}`
+        return NextResponse.redirect(
+          `${baseUrl}/admin/integrations?error=${encodeURIComponent(error)}`
+        )
+      }
+
+      if (!code) {
+        const url = new URL(req.url)
+        const baseUrl = `${url.protocol}//${url.host}`
+        return NextResponse.redirect(
+          `${baseUrl}/admin/integrations?error=no_code`
+        )
+      }
+
+      // Get tenantId from state (user ID) - we stored it in the OAuth state
+      let tenantId: string | null = null
+      if (state) {
+        const user = await prisma.user.findUnique({
+          where: { id: state },
+          select: { tenantId: true },
+        })
+        tenantId = user?.tenantId || null
+      }
+
+      // Get Facebook configuration from SystemSettings (with fallback to environment variables)
+      const appId = tenantId 
+        ? (await getSystemSetting('FACEBOOK_APP_ID', tenantId) || process.env.FACEBOOK_APP_ID)
+        : process.env.FACEBOOK_APP_ID
+      const appSecret = tenantId
+        ? (await getSystemSetting('FACEBOOK_APP_SECRET', tenantId) || process.env.FACEBOOK_APP_SECRET)
+        : process.env.FACEBOOK_APP_SECRET
+      
+      // For Facebook OAuth, use the current request's origin
+      const url = new URL(req.url)
+      let facebookBaseUrl = `${url.protocol}//${url.host}`
+      
+      // Force HTTPS for production
+      const nodeEnv = process.env.NODE_ENV || 'development'
+      if (nodeEnv === 'production') {
+        if (facebookBaseUrl.startsWith('http://')) {
+          facebookBaseUrl = facebookBaseUrl.replace('http://', 'https://')
+        }
+      }
+      
+      // Use /privacy as the redirect URI (this is what Facebook accepts)
+      const redirectUri = `${facebookBaseUrl}/privacy`
+
+      if (!appId || !appSecret) {
+        const baseUrl = `${url.protocol}//${url.host}`
+        return NextResponse.redirect(
+          `${baseUrl}/admin/integrations?error=config_missing`
+        )
+      }
+
+      // Exchange code for access token
+      const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&redirect_uri=${encodeURIComponent(redirectUri)}&code=${code}`
+      
+      const tokenResponse = await fetch(tokenUrl, { method: 'GET' })
+
+      if (!tokenResponse.ok) {
+        const errorData = await tokenResponse.json()
+        const baseUrl = `${url.protocol}//${url.host}`
+        if (errorData.error?.message?.includes('client secret')) {
+          return NextResponse.redirect(
+            `${baseUrl}/admin/integrations?error=invalid_secret`
+          )
+        }
+        return NextResponse.redirect(
+          `${baseUrl}/admin/integrations?error=token_exchange_failed`
+        )
+      }
+
+      const tokenData = await tokenResponse.json()
+      const accessToken = tokenData.access_token
+
+      // Get user's pages
+      const pagesResponse = await fetch(
+        `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}`,
+        { method: 'GET' }
+      )
+
+      if (!pagesResponse.ok) {
+        const baseUrl = `${url.protocol}//${url.host}`
+        return NextResponse.redirect(
+          `${baseUrl}/admin/integrations?error=pages_fetch_failed`
+        )
+      }
+
+      const pagesData = await pagesResponse.json()
+      const pages = pagesData.data || []
+
+      if (pages.length === 0) {
+        const baseUrl = `${url.protocol}//${url.host}`
+        return NextResponse.redirect(
+          `${baseUrl}/admin/integrations?error=no_pages`
+        )
+      }
+
+      // Save each page as an integration
+      for (const page of pages) {
+        const webhookToken = tenantId 
+          ? (await getSystemSetting('FACEBOOK_WEBHOOK_VERIFY_TOKEN', tenantId) || process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || 'facebook_2026')
+          : (process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || 'facebook_2026')
+
+        if (!tenantId) {
+          const baseUrl = `${url.protocol}//${url.host}`
+          return NextResponse.redirect(
+            `${baseUrl}/admin/integrations?error=tenant_id_required`
+          )
+        }
+
+        await prisma.facebookIntegration.upsert({
+          where: { 
+            tenantId_pageId: {
+              tenantId,
+              pageId: page.id,
+            }
+          },
+          update: {
+            pageName: page.name,
+            accessToken: page.access_token,
+            webhookToken,
+            isActive: true,
+            updatedAt: new Date(),
+          },
+          create: {
+            id: crypto.randomUUID(),
+            tenantId,
+            pageId: page.id,
+            pageName: page.name,
+            accessToken: page.access_token,
+            webhookToken,
+            isActive: true,
+            updatedAt: new Date(),
+          },
+        })
+
+        // Subscribe to webhooks
+        try {
+          const subscribeUrl = `https://graph.facebook.com/v18.0/${page.id}/subscribed_apps?subscribed_fields=feed,messages,mention&access_token=${page.access_token}`
+          const subscribeResponse = await fetch(subscribeUrl, { method: 'POST' })
+          if (subscribeResponse.ok) {
+            console.log(`[Facebook OAuth] ✅ Successfully subscribed page ${page.id}`)
+          }
+        } catch (subscribeError: any) {
+          console.warn(`[Facebook OAuth] ⚠️ Error subscribing page ${page.id}:`, subscribeError.message)
+        }
+      }
+
+      const baseUrl = `${url.protocol}//${url.host}`
+      return NextResponse.redirect(
+        `${baseUrl}/admin/integrations?success=connected`
+      )
     }
     
     // Normal page visit - return 404 to let Next.js handle it
