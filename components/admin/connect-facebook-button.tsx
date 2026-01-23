@@ -40,11 +40,13 @@ export function ConnectFacebookButton() {
     if (error) {
       const errorMessages: Record<string, string> = {
         no_code: 'Facebook authorization was cancelled.',
-        config_missing: 'Facebook App ID or Secret is not configured. Please set FACEBOOK_APP_ID and FACEBOOK_APP_SECRET in .env file.',
-        invalid_secret: 'Invalid Facebook App Secret. Please check FACEBOOK_APP_SECRET in .env file matches your Facebook App settings.',
-        token_exchange_failed: 'Failed to exchange authorization code for access token. Please check FACEBOOK_APP_SECRET.',
+        config_missing: 'Facebook App ID or Secret is not configured. Please configure it in Admin → Integrations → Facebook Configuration.',
+        invalid_secret: 'Invalid Facebook App Secret. Please check your Facebook App Secret in Admin → Integrations → Facebook Configuration.',
+        token_exchange_failed: 'Failed to exchange authorization code for access token. Please check your Facebook App Secret in Admin → Integrations → Facebook Configuration.',
         pages_fetch_failed: 'Failed to fetch your Facebook pages.',
         no_pages: 'No Facebook pages found. Please ensure you have admin access to at least one page.',
+        tenant_not_found: 'Tenant ID not found. Please try logging out and logging back in.',
+        no_state: 'Missing state parameter. Please try connecting again.',
       }
 
       toast({
@@ -83,7 +85,7 @@ export function ConnectFacebookButton() {
       console.error('[Facebook Connect] Error:', error)
       toast({
         title: 'Connection Error',
-        description: error.message || 'Failed to connect to Facebook. Please check your FACEBOOK_APP_ID in .env file.',
+        description: error.message || 'Failed to connect to Facebook. Please check your Facebook configuration in Admin → Integrations → Facebook Configuration.',
         variant: 'destructive',
       })
       setLoading(false)
