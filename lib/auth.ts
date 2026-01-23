@@ -95,10 +95,25 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
     async redirect({ url, baseUrl }) {
-      // Use NEXTAUTH_URL or APP_URL from environment, or fallback to baseUrl
-      // This ensures redirects work correctly on any domain/port
-      let actualBaseUrl =
-        process.env.NEXTAUTH_URL || process.env.APP_URL || baseUrl;
+      // For Facebook OAuth, always use production URL
+      // This ensures redirects work correctly after Facebook OAuth callback
+      const productionUrl = 'https://support.shopperskart.shop';
+      
+      // Check if we're on production domain or if this is a Facebook OAuth redirect
+      const isProductionDomain = baseUrl.includes('support.shopperskart.shop') || 
+                                 baseUrl.includes('shopperskart.shop');
+      
+      // Use production URL if we're on production domain or if NEXTAUTH_URL/APP_URL point to production
+      let actualBaseUrl = baseUrl;
+      if (isProductionDomain) {
+        actualBaseUrl = productionUrl;
+      } else if (process.env.NEXTAUTH_URL?.includes('shopperskart.shop') || 
+                 process.env.APP_URL?.includes('shopperskart.shop')) {
+        actualBaseUrl = productionUrl;
+      } else {
+        // For development, use NEXTAUTH_URL or APP_URL from environment, or fallback to baseUrl
+        actualBaseUrl = process.env.NEXTAUTH_URL || process.env.APP_URL || baseUrl;
+      }
 
       // Remove trailing slash
       actualBaseUrl = actualBaseUrl.replace(/\/$/, '');

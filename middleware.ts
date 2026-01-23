@@ -42,19 +42,32 @@ export default withAuth(
       pathname.startsWith(route)
     )
 
+    // Get the correct base URL for redirects
+    // Use production URL if we're on production domain, otherwise use request URL
+    const getRedirectUrl = (path: string) => {
+      const productionUrl = 'https://support.shopperskart.shop';
+      const isProduction = req.url.includes('support.shopperskart.shop') || 
+                          req.url.includes('shopperskart.shop');
+      
+      if (isProduction) {
+        return new URL(path, productionUrl);
+      }
+      return new URL(path, req.url);
+    };
+
     // Admin routes - only ADMIN can access (except for agent-accessible routes)
     if (pathname.startsWith('/admin') && role !== 'ADMIN' && !isAgentAccessibleAdminRoute) {
-      return NextResponse.redirect(new URL('/auth/signin', req.url))
+      return NextResponse.redirect(getRedirectUrl('/auth/signin'))
     }
 
     // Agent-accessible admin routes - AGENT and ADMIN can access
     if (isAgentAccessibleAdminRoute && role !== 'AGENT' && role !== 'ADMIN') {
-      return NextResponse.redirect(new URL('/auth/signin', req.url))
+      return NextResponse.redirect(getRedirectUrl('/auth/signin'))
     }
 
     // Agent routes - AGENT and ADMIN can access
     if (pathname.startsWith('/agent') && role !== 'AGENT' && role !== 'ADMIN') {
-      return NextResponse.redirect(new URL('/auth/signin', req.url))
+      return NextResponse.redirect(getRedirectUrl('/auth/signin'))
     }
 
     // Customer routes - CUSTOMER, ADMIN, and AGENT can all access
