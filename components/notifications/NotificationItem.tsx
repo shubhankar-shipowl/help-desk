@@ -90,10 +90,8 @@ export function NotificationItem({ notification, onMarkAsRead, onDelete }: Notif
       onMarkAsRead(notification.id)
     }
     
-    // For Facebook notifications (converted or not), clicking card redirects to Facebook
-    if (isFacebookNotification && notification.facebookNotification?.postUrl) {
-      // Open Facebook URL in new tab
-      window.open(notification.facebookNotification.postUrl, '_blank', 'noopener,noreferrer')
+    // For Facebook notifications, clicking card does nothing (use Create Ticket button instead)
+    if (isFacebookNotification) {
       return
     }
     
@@ -285,22 +283,28 @@ export function NotificationItem({ notification, onMarkAsRead, onDelete }: Notif
 
             {/* Action Buttons */}
             <div className="flex items-center gap-2">
+              {/* Create Ticket Button - Show for non-converted Facebook notifications */}
               {isFacebookNotification && notification.facebookNotification?.id && !isConverted && (
                 <button
                   onClick={handleConvertToTicket}
                   disabled={isConverting}
                   className={cn(
-                    'text-xs font-medium px-2 py-1 rounded transition-opacity text-blue-600 opacity-0 group-hover:opacity-100',
-                    isConverting && 'opacity-50 cursor-not-allowed'
+                    'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md transition-all',
+                    'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                    'shadow-sm hover:shadow'
                   )}
-                  title="Convert to ticket"
+                  title="Create ticket from this Facebook notification"
                 >
                   {isConverting ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Creating...
+                    </>
                   ) : (
                     <>
-                      <FileText className="w-3.5 h-3.5 inline mr-1" />
-                      Convert
+                      <FileText className="w-3.5 h-3.5" />
+                      Create Ticket
                     </>
                   )}
                 </button>
@@ -309,16 +313,11 @@ export function NotificationItem({ notification, onMarkAsRead, onDelete }: Notif
               {isConverted && ticketId && (
                 <button
                   onClick={handleViewTicket}
-                  className="text-xs font-medium text-green-600 hover:text-green-700 hover:underline cursor-pointer"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md bg-green-600 text-white hover:bg-green-700 active:bg-green-800 transition-all shadow-sm hover:shadow"
                 >
-                  View Ticket →
+                  <Ticket className="w-3.5 h-3.5" />
+                  View Ticket
                 </button>
-              )}
-              {/* For non-converted Facebook notifications, clicking card redirects to Facebook */}
-              {!isConverted && isFacebookNotification && (
-                <span className="text-xs font-medium text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                  View on Facebook →
-                </span>
               )}
               {/* For other notifications */}
               {!isConverted && !isFacebookNotification && (
