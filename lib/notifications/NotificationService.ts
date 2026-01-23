@@ -721,10 +721,22 @@ export class NotificationService {
 
       // Filter by storeId through ticket relation (for ADMIN and AGENT roles)
       // Customers see all their notifications regardless of store
+      // IMPORTANT: Facebook notifications don't have a Ticket initially (ticketId is null),
+      // so we need to include them even when filtering by storeId.
       if (storeId && user?.role !== 'CUSTOMER') {
-        where.Ticket = {
-          storeId: storeId,
-        }
+        where.OR = [
+          // Notifications with a Ticket matching the storeId
+          {
+            Ticket: {
+              storeId: storeId,
+            },
+          },
+          // Notifications without a Ticket (ticketId is null) - includes Facebook notifications
+          // These should be shown regardless of store selection since they're not store-specific
+          {
+            ticketId: null,
+          },
+        ]
       }
 
       const count = await prisma.notification.count({ where })
@@ -779,10 +791,23 @@ export class NotificationService {
 
     // Filter by storeId through ticket relation (for ADMIN and AGENT roles)
     // Customers see all their notifications regardless of store
+    // IMPORTANT: Facebook notifications don't have a Ticket initially (ticketId is null),
+    // so we need to include them even when filtering by storeId.
+    // They only get a Ticket when converted to a ticket.
     if (options.storeId && user?.role !== 'CUSTOMER') {
-      where.Ticket = {
-        storeId: options.storeId,
-      }
+      where.OR = [
+        // Notifications with a Ticket matching the storeId
+        {
+          Ticket: {
+            storeId: options.storeId,
+          },
+        },
+        // Notifications without a Ticket (ticketId is null) - includes Facebook notifications
+        // These should be shown regardless of store selection since they're not store-specific
+        {
+          ticketId: null,
+        },
+      ]
     }
 
     const [notifications, total, unreadCount] = await Promise.all([
