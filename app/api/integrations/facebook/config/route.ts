@@ -138,9 +138,28 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Clear the cache after saving settings
+    // Clear the cache after saving settings (both store-specific and tenant-level)
     clearSystemSettingsCache(tenantId, storeId || null)
-    console.log('[Facebook Config] Cleared cache after saving settings')
+    // Also clear tenant-level cache in case settings were saved at tenant level
+    if (storeId) {
+      clearSystemSettingsCache(tenantId, null)
+    }
+    console.log('[Facebook Config] Cleared cache after saving settings for tenant:', tenantId, 'store:', storeId || 'tenant-level')
+    
+    // Verify settings were saved correctly
+    const verifySettings = await prisma.systemSettings.findMany({
+      where: {
+        tenantId,
+        storeId: storeId || null,
+        key: {
+          in: ['FACEBOOK_APP_ID', 'FACEBOOK_APP_SECRET'],
+        },
+      },
+    })
+    console.log('[Facebook Config] Verified saved settings:', {
+      count: verifySettings.length,
+      keys: verifySettings.map(s => s.key),
+    })
 
     return NextResponse.json({
       success: true,

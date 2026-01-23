@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getSystemSetting } from '@/lib/system-settings'
+import { getSystemSetting, clearSystemSettingsCache } from '@/lib/system-settings'
 import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
@@ -85,18 +85,74 @@ export async function GET(req: NextRequest) {
     
     console.log('[Facebook OAuth Callback] ✅ Found tenant ID:', tenantId)
     
+    // Clear cache first to ensure we get fresh data
+    if (tenantId) {
+      clearSystemSettingsCache(tenantId, null)
+      console.log('[Facebook OAuth Callback] Cleared cache for tenant:', tenantId)
+    }
+    
     // Get Facebook configuration from SystemSettings (with fallback to environment variables)
-    const appId = tenantId 
-      ? (await getSystemSetting('FACEBOOK_APP_ID', tenantId) || process.env.FACEBOOK_APP_ID)
-      : process.env.FACEBOOK_APP_ID
-    const appSecret = tenantId
-      ? (await getSystemSetting('FACEBOOK_APP_SECRET', tenantId) || process.env.FACEBOOK_APP_SECRET)
-      : process.env.FACEBOOK_APP_SECRET
+    let systemSettingAppId = tenantId 
+      ? await getSystemSetting('FACEBOOK_APP_ID', tenantId, null)
+      : null
+    let systemSettingAppSecret = tenantId
+      ? await getSystemSetting('FACEBOOK_APP_SECRET', tenantId, null)
+      : null
+    
+    // If not found, try direct database query as fallback
+    if (!systemSettingAppId && tenantId) {
+      console.log('[Facebook OAuth Callback] System setting not found, trying direct database query...')
+      const directSettings = await prisma.systemSettings.findMany({
+        where: {
+          tenantId,
+          key: {
+            in: ['FACEBOOK_APP_ID', 'FACEBOOK_APP_SECRET'],
+          },
+        },
+        orderBy: [
+          { storeId: 'desc' }, // Prefer store-specific, then tenant-level
+        ],
+      })
+      
+      const settingsMap: Record<string, string> = {}
+      directSettings.forEach((s) => {
+        if (!settingsMap[s.key]) {
+          settingsMap[s.key] = s.value
+        }
+      })
+      
+      if (settingsMap.FACEBOOK_APP_ID) {
+        systemSettingAppId = settingsMap.FACEBOOK_APP_ID
+        console.log('[Facebook OAuth Callback] Found App ID via direct database query')
+      }
+      if (settingsMap.FACEBOOK_APP_SECRET) {
+        systemSettingAppSecret = settingsMap.FACEBOOK_APP_SECRET
+        console.log('[Facebook OAuth Callback] Found App Secret via direct database query')
+      }
+    }
+    
+    const appId = (systemSettingAppId || process.env.FACEBOOK_APP_ID)?.trim()
+    const appSecret = (systemSettingAppSecret || process.env.FACEBOOK_APP_SECRET)?.trim()
+    
+    // Detailed logging for debugging
+    console.log('[Facebook OAuth Callback] Configuration Check:', {
+      tenantId,
+      systemSettingAppId: systemSettingAppId ? `${systemSettingAppId.substring(0, 4)}...${systemSettingAppId.substring(systemSettingAppId.length - 4)}` : 'NOT SET',
+      systemSettingAppSecret: systemSettingAppSecret ? 'SET (hidden)' : 'NOT SET',
+      envAppId: process.env.FACEBOOK_APP_ID ? 'SET' : 'NOT SET',
+      envAppSecret: process.env.FACEBOOK_APP_SECRET ? 'SET' : 'NOT SET',
+      finalAppId: appId ? `${appId.substring(0, 4)}...${appId.substring(appId.length - 4)}` : 'EMPTY',
+      finalAppSecret: appSecret ? 'SET (hidden)' : 'EMPTY',
+    })
     
     if (!appId || !appSecret) {
-      const url = new URL(req.url)
-      const baseUrl = `${url.protocol}//${url.host}`
+      // Always use production domain for Facebook OAuth callback redirects
+      const baseUrl = 'https://support.shopperskart.shop'
       console.error('[Facebook OAuth Callback] ❌ Missing Facebook configuration')
+      console.error('[Facebook OAuth Callback] App ID:', appId ? 'present' : 'missing')
+      console.error('[Facebook OAuth Callback] App Secret:', appSecret ? 'present' : 'missing')
+      console.error('[Facebook OAuth Callback] System Setting App ID:', systemSettingAppId ? 'found' : 'not found')
+      console.error('[Facebook OAuth Callback] System Setting App Secret:', systemSettingAppSecret ? 'found' : 'not found')
       return NextResponse.redirect(
         `${baseUrl}/admin/integrations?error=config_missing`
       )

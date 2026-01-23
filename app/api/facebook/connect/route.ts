@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getAppUrl } from '@/lib/utils'
-import { getSystemSetting } from '@/lib/system-settings'
+import { getSystemSetting, clearSystemSettingsCache } from '@/lib/system-settings'
 import { prisma } from '@/lib/prisma'
 
 export async function GET(req: NextRequest) {
@@ -25,21 +25,72 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const storeId = searchParams.get('storeId')
 
+    // Clear cache first to ensure we get fresh data
+    clearSystemSettingsCache(tenantId, storeId || null)
+    console.log('[Facebook Connect] Cleared cache for tenant:', tenantId, 'store:', storeId || 'tenant-level')
+
     // Get Facebook configuration from SystemSettings (with fallback to environment variables)
     // Try store-specific setting first, then tenant-level, then environment variable
-    const systemSettingAppId = await getSystemSetting('FACEBOOK_APP_ID', tenantId, storeId || null)
+    let systemSettingAppId = await getSystemSetting('FACEBOOK_APP_ID', tenantId, storeId || null)
+    let systemSettingAppSecret = await getSystemSetting('FACEBOOK_APP_SECRET', tenantId, storeId || null)
+    
+    // If not found with storeId, try tenant-level (storeId = null)
+    if (!systemSettingAppId && storeId) {
+      console.log('[Facebook Connect] Store-specific setting not found, trying tenant-level...')
+      systemSettingAppId = await getSystemSetting('FACEBOOK_APP_ID', tenantId, null)
+      systemSettingAppSecret = await getSystemSetting('FACEBOOK_APP_SECRET', tenantId, null)
+    }
+    
+    // If still not found, try direct database query as fallback
+    if (!systemSettingAppId) {
+      console.log('[Facebook Connect] System setting not found, trying direct database query...')
+      const directSettings = await prisma.systemSettings.findMany({
+        where: {
+          tenantId,
+          key: {
+            in: ['FACEBOOK_APP_ID', 'FACEBOOK_APP_SECRET'],
+          },
+        },
+        orderBy: [
+          { storeId: 'desc' }, // Prefer store-specific, then tenant-level
+        ],
+      })
+      
+      const settingsMap: Record<string, string> = {}
+      directSettings.forEach((s) => {
+        if (!settingsMap[s.key]) {
+          settingsMap[s.key] = s.value
+        }
+      })
+      
+      if (settingsMap.FACEBOOK_APP_ID) {
+        systemSettingAppId = settingsMap.FACEBOOK_APP_ID
+        console.log('[Facebook Connect] Found App ID via direct database query')
+      }
+      if (settingsMap.FACEBOOK_APP_SECRET) {
+        systemSettingAppSecret = settingsMap.FACEBOOK_APP_SECRET
+        console.log('[Facebook Connect] Found App Secret via direct database query')
+      }
+    }
+    
     const envAppId = process.env.FACEBOOK_APP_ID
+    const envAppSecret = process.env.FACEBOOK_APP_SECRET
     const appId = (systemSettingAppId || envAppId)?.trim()
+    const appSecret = (systemSettingAppSecret || envAppSecret)?.trim()
     
     // Debug logging
-    console.log('[Facebook Connect] Configuration Check:', {
-      tenantId,
-      storeId: storeId || 'none (tenant-level)',
-      systemSettingAppId: systemSettingAppId ? `${systemSettingAppId.substring(0, 4)}...${systemSettingAppId.substring(systemSettingAppId.length - 4)}` : 'NOT SET',
-      envAppId: envAppId ? 'SET' : 'NOT SET',
-      finalAppId: appId ? `${appId.substring(0, 4)}...${appId.substring(appId.length - 4)}` : 'EMPTY',
-      appIdSource: systemSettingAppId ? (storeId ? 'SystemSettings (store-specific)' : 'SystemSettings (tenant-level)') : (envAppId ? 'Environment Variable' : 'NOT FOUND'),
-    })
+    console.log('[Facebook Connect] ========================================')
+    console.log('[Facebook Connect] Configuration Check:')
+    console.log('[Facebook Connect]   Tenant ID:', tenantId)
+    console.log('[Facebook Connect]   Store ID:', storeId || 'none (tenant-level)')
+    console.log('[Facebook Connect]   System Setting App ID:', systemSettingAppId ? `${systemSettingAppId.substring(0, 4)}...${systemSettingAppId.substring(systemSettingAppId.length - 4)}` : 'NOT SET')
+    console.log('[Facebook Connect]   System Setting App Secret:', systemSettingAppSecret ? 'SET (hidden)' : 'NOT SET')
+    console.log('[Facebook Connect]   Environment App ID:', envAppId ? 'SET' : 'NOT SET')
+    console.log('[Facebook Connect]   Environment App Secret:', envAppSecret ? 'SET' : 'NOT SET')
+    console.log('[Facebook Connect]   Final App ID:', appId ? `${appId.substring(0, 4)}...${appId.substring(appId.length - 4)}` : 'EMPTY')
+    console.log('[Facebook Connect]   Final App Secret:', appSecret ? 'SET (hidden)' : 'EMPTY')
+    console.log('[Facebook Connect]   App ID Source:', systemSettingAppId ? (storeId ? 'SystemSettings (store-specific)' : 'SystemSettings (tenant-level)') : (envAppId ? 'Environment Variable' : 'NOT FOUND'))
+    console.log('[Facebook Connect] ========================================')
     
     // CRITICAL: ALWAYS use https://support.shopperskart.shop for Facebook OAuth
     // This is the ONLY URL that Facebook accepts as a Valid OAuth Redirect URI
@@ -84,18 +135,44 @@ export async function GET(req: NextRequest) {
       redirectUriValid: redirectUri.startsWith('https://'),
     })
     
-    // Validate App ID
-    if (!appId) {
-      console.error('[Facebook Connect] ❌ FACEBOOK_APP_ID is not configured')
-      console.error('[Facebook Connect] Checked sources:', {
-        systemSettings: systemSettingAppId ? 'Found' : 'Not found',
-        environmentVariable: envAppId ? 'Found' : 'Not found',
-        tenantId,
+    // Validate App ID and App Secret
+    if (!appId || !appSecret) {
+      console.error('[Facebook Connect] ❌ Facebook configuration is incomplete')
+      console.error('[Facebook Connect] Missing:', {
+        appId: !appId ? 'YES' : 'NO',
+        appSecret: !appSecret ? 'YES' : 'NO',
       })
+      console.error('[Facebook Connect] Checked sources:', {
+        systemSettingsAppId: systemSettingAppId ? 'Found' : 'Not found',
+        systemSettingsAppSecret: systemSettingAppSecret ? 'Found' : 'Not found',
+        environmentAppId: envAppId ? 'Found' : 'Not found',
+        environmentAppSecret: envAppSecret ? 'Found' : 'Not found',
+        tenantId,
+        storeId: storeId || 'tenant-level',
+      })
+      
+      // Provide helpful error message
+      let errorMessage = 'Facebook App ID or App Secret is not configured. '
+      if (!systemSettingAppId && !envAppId) {
+        errorMessage += 'Please configure it in Admin → Settings → Facebook Configuration and save the settings.'
+      } else if (!systemSettingAppSecret && !envAppSecret) {
+        errorMessage += 'App Secret is missing. Please add it in Admin → Settings → Facebook Configuration.'
+      } else {
+        errorMessage += 'Please check your configuration in Admin → Settings → Facebook Configuration.'
+      }
+      
       return NextResponse.json(
         { 
-          error: 'Facebook App ID not configured. Please configure it in the admin panel (Facebook Configuration) or set FACEBOOK_APP_ID in environment variables.',
-          hint: 'Go to Admin → Integrations → Facebook Configuration and enter your Facebook App ID.'
+          error: errorMessage,
+          hint: 'Go to Admin → Settings → Facebook Configuration, enter your Facebook App ID and App Secret, then click "Save Configuration".',
+          debug: {
+            hasSystemAppId: !!systemSettingAppId,
+            hasSystemAppSecret: !!systemSettingAppSecret,
+            hasEnvAppId: !!envAppId,
+            hasEnvAppSecret: !!envAppSecret,
+            tenantId,
+            storeId: storeId || null,
+          }
         },
         { status: 500 }
       )
