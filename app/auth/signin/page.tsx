@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { 
   Mail, Lock, Eye, EyeOff, ArrowRight, Shield, Zap, Users,
   AlertCircle
@@ -13,6 +13,7 @@ import Link from 'next/link'
 
 export default function SignInPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -26,6 +27,21 @@ export default function SignInPage() {
     password: '',
     general: '',
   })
+
+  // Get returnUrl and message from query params
+  const returnUrl = searchParams.get('returnUrl')
+  const message = searchParams.get('message')
+
+  // Show success message if present
+  useEffect(() => {
+    if (message) {
+      toast({
+        title: 'Success',
+        description: message,
+        variant: 'default',
+      })
+    }
+  }, [message, toast])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,8 +86,12 @@ export default function SignInPage() {
           variant: 'destructive',
         })
       } else {
-        // Redirect based on role (handled by middleware)
-        router.push('/')
+        // Redirect to returnUrl if provided, otherwise to home
+        if (returnUrl) {
+          router.push(returnUrl)
+        } else {
+          router.push('/')
+        }
         router.refresh()
       }
     } catch (error: any) {

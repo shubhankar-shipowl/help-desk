@@ -42,8 +42,7 @@ export async function GET(req: NextRequest) {
     
     // Handle OAuth errors
     if (error) {
-      const url = new URL(req.url)
-      const baseUrl = `${url.protocol}//${url.host}`
+      const baseUrl = 'https://support.shopperskart.shop'
       const errorMessage = errorDescription || errorReason || error
       console.error('[Facebook OAuth Callback] ❌ OAuth error:', errorMessage)
       return NextResponse.redirect(
@@ -53,8 +52,7 @@ export async function GET(req: NextRequest) {
     
     // Validate required parameters
     if (!code) {
-      const url = new URL(req.url)
-      const baseUrl = `${url.protocol}//${url.host}`
+      const baseUrl = 'https://support.shopperskart.shop'
       console.error('[Facebook OAuth Callback] ❌ Missing authorization code')
       return NextResponse.redirect(
         `${baseUrl}/admin/integrations?error=no_code`
@@ -62,8 +60,7 @@ export async function GET(req: NextRequest) {
     }
     
     if (!state) {
-      const url = new URL(req.url)
-      const baseUrl = `${url.protocol}//${url.host}`
+      const baseUrl = 'https://support.shopperskart.shop'
       console.error('[Facebook OAuth Callback] ❌ Missing state parameter')
       return NextResponse.redirect(
         `${baseUrl}/admin/integrations?error=no_state`
@@ -79,8 +76,7 @@ export async function GET(req: NextRequest) {
     tenantId = user?.tenantId || null
     
     if (!tenantId) {
-      const url = new URL(req.url)
-      const baseUrl = `${url.protocol}//${url.host}`
+      const baseUrl = 'https://support.shopperskart.shop'
       console.error('[Facebook OAuth Callback] ❌ Could not find tenant ID from user state')
       return NextResponse.redirect(
         `${baseUrl}/admin/integrations?error=tenant_not_found`
@@ -121,8 +117,7 @@ export async function GET(req: NextRequest) {
     
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.json().catch(() => ({}))
-      const url = new URL(req.url)
-      const baseUrl = `${url.protocol}//${url.host}`
+      const baseUrl = 'https://support.shopperskart.shop'
       console.error('[Facebook OAuth Callback] ❌ Token exchange failed:', errorData)
       if (errorData.error?.message?.includes('client secret')) {
         return NextResponse.redirect(
@@ -138,8 +133,7 @@ export async function GET(req: NextRequest) {
     const accessToken = tokenData.access_token
     
     if (!accessToken) {
-      const url = new URL(req.url)
-      const baseUrl = `${url.protocol}//${url.host}`
+      const baseUrl = 'https://support.shopperskart.shop'
       console.error('[Facebook OAuth Callback] ❌ No access token in response')
       return NextResponse.redirect(
         `${baseUrl}/admin/integrations?error=no_access_token`
@@ -156,8 +150,7 @@ export async function GET(req: NextRequest) {
     )
     
     if (!pagesResponse.ok) {
-      const url = new URL(req.url)
-      const baseUrl = `${url.protocol}//${url.host}`
+      const baseUrl = 'https://support.shopperskart.shop'
       const errorData = await pagesResponse.json().catch(() => ({}))
       console.error('[Facebook OAuth Callback] ❌ Failed to fetch pages:', errorData)
       return NextResponse.redirect(
@@ -169,8 +162,7 @@ export async function GET(req: NextRequest) {
     const pages = pagesData.data || []
     
     if (pages.length === 0) {
-      const url = new URL(req.url)
-      const baseUrl = `${url.protocol}//${url.host}`
+      const baseUrl = 'https://support.shopperskart.shop'
       console.warn('[Facebook OAuth Callback] ⚠️ No pages found for user')
       return NextResponse.redirect(
         `${baseUrl}/admin/integrations?error=no_pages`
@@ -229,16 +221,32 @@ export async function GET(req: NextRequest) {
       }
     }
     
-    const url = new URL(req.url)
-    const baseUrl = `${url.protocol}//${url.host}`
+    // Get the correct base URL from the incoming request
+    // Since Facebook OAuth always redirects to the production URL (support.shopperskart.shop),
+    // we should always redirect back to the production URL to maintain session consistency.
+    // The user will need to login on the production site if they don't have a session there.
+    const requestUrl = new URL(req.url)
+    
+    // Always use the production domain for Facebook OAuth callback redirects
+    // This ensures the user stays on the same domain where Facebook redirected them
+    const baseUrl = 'https://support.shopperskart.shop'
+    
     console.log('[Facebook OAuth Callback] ✅ Successfully connected Facebook pages')
+    console.log('[Facebook OAuth Callback] Request URL:', req.url)
+    console.log('[Facebook OAuth Callback] Base URL:', baseUrl)
+    console.log('[Facebook OAuth Callback] Redirecting to:', `${baseUrl}/admin/integrations?success=connected`)
+    
+    // Redirect directly to admin/integrations on production
+    // The user will need to have a session on support.shopperskart.shop
     return NextResponse.redirect(
       `${baseUrl}/admin/integrations?success=connected`
     )
   } catch (error: any) {
     console.error('[Facebook OAuth Callback] ❌ Unexpected error:', error)
-    const url = new URL(req.url)
-    const baseUrl = `${url.protocol}//${url.host}`
+    
+    // Always use production domain for Facebook OAuth callback redirects
+    const baseUrl = 'https://support.shopperskart.shop'
+    
     return NextResponse.redirect(
       `${baseUrl}/admin/integrations?error=${encodeURIComponent(error.message || 'unexpected_error')}`
     )
