@@ -158,75 +158,83 @@ export async function POST(
         let processedHtml = email.htmlContent
         let replacedCount = 0
         
-        // Find all CID references in HTML
-        const cidRegex = /<(img|video)[^>]+src=["']cid:([^"']+)["'][^>]*>/gi
-        const cidMatches = Array.from(processedHtml.matchAll(cidRegex))
-        
-        console.log('   - Found CID references in HTML:', cidMatches.length)
-        cidMatches.forEach((match, idx) => {
-          console.log(`     ${idx + 1}. ${match[1]} tag with CID: ${match[2]}`)
-        })
-        
-        // Replace CID references with attachment URLs
-        // If we have the same number of CID refs as attachments, match by order
-        // Otherwise, try to match by filename patterns
-        cidMatches.forEach((match, index) => {
-          const fullMatch = match[0]
-          const tagType = match[1] // 'img' or 'video'
-          const cid = match[2].replace(/^<|>$/g, '').trim()
+        // Check if HTML content exists
+        if (!processedHtml) {
+          console.log('   - No HTML content to process for CID references')
+        } else {
+          // Find all CID references in HTML
+          const cidRegex = /<(img|video)[^>]+src=["']cid:([^"']+)["'][^>]*>/gi
+          const cidMatches = Array.from(processedHtml.matchAll(cidRegex))
           
-          // Try to find matching attachment
-          // First, try by index if counts match
-          let attachment = imageAttachments[index]
-          
-          // If not found or if it's not the right type, try to find by filename
-          if (!attachment || (tagType === 'video' && !attachment.mimeType?.startsWith('video/')) || 
-              (tagType === 'img' && !attachment.mimeType?.startsWith('image/'))) {
-            attachment = imageAttachments.find(att => {
-              const isRightType = tagType === 'video' 
-                ? att.mimeType?.startsWith('video/')
-                : att.mimeType?.startsWith('image/')
-              return isRightType && att.fileUrl
-            })
-          }
-          
-          if (attachment && attachment.fileUrl) {
-            // Replace the CID reference with the file URL
-            const replacement = fullMatch.replace(/src=["']cid:[^"']+["']/, `src="${attachment.fileUrl}"`)
-            processedHtml = processedHtml.replace(fullMatch, replacement)
-            replacedCount++
-            console.log(`   ✅ [Process Images API] Replaced CID "${cid}" with ${attachment.fileUrl}`)
-          } else {
-            console.warn(`   ⚠️  [Process Images API] Could not find matching attachment for CID: ${cid}`)
-          }
-        })
-        
-        if (replacedCount > 0) {
-          console.log(`\n💾 [Process Images API] Updating email HTML with ${replacedCount} resolved CID references...`)
-          // Update email HTML content
-          try {
-            await prisma.email.update({
-              where: { id: email.id },
-              data: {
-                htmlContent: processedHtml,
-              },
-            })
-            console.log('✅ [Process Images API] Email HTML updated successfully')
-          } catch (updateError: any) {
-            console.error('❌ [Process Images API] Error updating email HTML:', updateError)
-            console.error('   Error message:', updateError.message)
-          }
-          
-          const duration = Date.now() - startTime
-          console.log(`✅ [Process Images API] Successfully resolved ${replacedCount} CID reference(s) in ${duration}ms`)
-          console.log('='.repeat(80) + '\n')
-          
-          return NextResponse.json({
-            success: true,
-            message: `Resolved ${replacedCount} CID reference(s) using existing attachments`,
-            processedHtml,
-            uploadedImages: [],
+          console.log('   - Found CID references in HTML:', cidMatches.length)
+          cidMatches.forEach((match, idx) => {
+            console.log(`     ${idx + 1}. ${match[1]} tag with CID: ${match[2]}`)
           })
+          
+          // Replace CID references with attachment URLs
+          // If we have the same number of CID refs as attachments, match by order
+          // Otherwise, try to match by filename patterns
+          cidMatches.forEach((match, index) => {
+            const fullMatch = match[0]
+            const tagType = match[1] // 'img' or 'video'
+            const cid = match[2].replace(/^<|>$/g, '').trim()
+            
+            // Try to find matching attachment
+            // First, try by index if counts match
+            let attachment: typeof imageAttachments[0] | undefined = imageAttachments[index]
+            
+            // If not found or if it's not the right type, try to find by filename
+            if (!attachment || (tagType === 'video' && !attachment.mimeType?.startsWith('video/')) || 
+                (tagType === 'img' && !attachment.mimeType?.startsWith('image/'))) {
+              const foundAttachment = imageAttachments.find(att => {
+                const isRightType = tagType === 'video' 
+                  ? att.mimeType?.startsWith('video/')
+                  : att.mimeType?.startsWith('image/')
+                return isRightType && att.fileUrl
+              })
+              if (foundAttachment) {
+                attachment = foundAttachment
+              }
+            }
+            
+            if (attachment && attachment.fileUrl) {
+              // Replace the CID reference with the file URL
+              const replacement = fullMatch.replace(/src=["']cid:[^"']+["']/, `src="${attachment.fileUrl}"`)
+              processedHtml = processedHtml!.replace(fullMatch, replacement)
+              replacedCount++
+              console.log(`   ✅ [Process Images API] Replaced CID "${cid}" with ${attachment.fileUrl}`)
+            } else {
+              console.warn(`   ⚠️  [Process Images API] Could not find matching attachment for CID: ${cid}`)
+            }
+          })
+          
+          if (replacedCount > 0) {
+            console.log(`\n💾 [Process Images API] Updating email HTML with ${replacedCount} resolved CID references...`)
+            // Update email HTML content
+            try {
+              await prisma.email.update({
+                where: { id: email.id },
+                data: {
+                  htmlContent: processedHtml,
+                },
+              })
+              console.log('✅ [Process Images API] Email HTML updated successfully')
+            } catch (updateError: any) {
+              console.error('❌ [Process Images API] Error updating email HTML:', updateError)
+              console.error('   Error message:', updateError.message)
+            }
+            
+            const duration = Date.now() - startTime
+            console.log(`✅ [Process Images API] Successfully resolved ${replacedCount} CID reference(s) in ${duration}ms`)
+            console.log('='.repeat(80) + '\n')
+            
+            return NextResponse.json({
+              success: true,
+              message: `Resolved ${replacedCount} CID reference(s) using existing attachments`,
+              processedHtml,
+              uploadedImages: [],
+            })
+          }
         }
       }
       

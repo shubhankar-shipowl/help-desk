@@ -288,13 +288,13 @@ export async function updateEmailThreadId(
           // Check if headers contain this messageId
           {
             headers: {
-              path: ['in-reply-to'],
+              path: 'in-reply-to',
               string_contains: normalizedMessageId,
             },
           },
           {
             headers: {
-              path: ['references'],
+              path: 'references',
               string_contains: normalizedMessageId,
             },
           },
