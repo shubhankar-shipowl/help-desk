@@ -212,20 +212,71 @@ export async function uploadFileToMega(
       : `${timestamp}_${randomId}_${sanitizedName}`
     
     // Upload file to MEGA using megajs API
+    // Handle megajs internal callback errors gracefully
     const fileNode = await new Promise<any>((resolve, reject) => {
-      const uploadStream = storage.upload({
-        name: uniqueFileName,
-        size: fileBuffer.length,
-        target: targetFolder,
-      }, fileBuffer)
-      
-      uploadStream.on('complete', (file: any) => {
-        resolve(file)
-      })
-      
-      uploadStream.on('error', (error: Error) => {
-        reject(error)
-      })
+      try {
+        const uploadStream = storage.upload({
+          name: uniqueFileName,
+          size: fileBuffer.length,
+          target: targetFolder,
+        }, fileBuffer)
+        
+        uploadStream.on('complete', (file: any) => {
+          resolve(file)
+        })
+        
+        uploadStream.on('error', (error: Error) => {
+          // Ignore known megajs internal callback errors (uploads still succeed)
+          if (error.message && error.message.includes('originalCb')) {
+            // Wait a bit and check if file was actually uploaded
+            setTimeout(() => {
+              // Try to find the uploaded file
+              const uploadedFile = targetFolder.children?.find(
+                (child: any) => child.name === uniqueFileName && !child.directory
+              )
+              if (uploadedFile) {
+                resolve(uploadedFile)
+              } else {
+                reject(error)
+              }
+            }, 1000)
+          } else {
+            reject(error)
+          }
+        })
+        
+        // Fallback: Check if file was uploaded after a delay (handles megajs quirks)
+        setTimeout(() => {
+          const uploadedFile = targetFolder.children?.find(
+            (child: any) => child.name === uniqueFileName && !child.directory
+          )
+          if (uploadedFile) {
+            resolve(uploadedFile)
+          }
+        }, 2000)
+      } catch (error: any) {
+        // Catch synchronous errors
+        if (error.message && error.message.includes('originalCb')) {
+          // Known megajs internal error - check if file was uploaded anyway
+          setTimeout(async () => {
+            try {
+              await new Promise(resolve => setTimeout(resolve, 1000))
+              const uploadedFile = targetFolder.children?.find(
+                (child: any) => child.name === uniqueFileName && !child.directory
+              )
+              if (uploadedFile) {
+                resolve(uploadedFile)
+              } else {
+                reject(error)
+              }
+            } catch {
+              reject(error)
+            }
+          }, 1000)
+        } else {
+          reject(error)
+        }
+      }
     })
     
     // Get file handle (node handle)
@@ -289,20 +340,72 @@ export async function uploadEmailAttachmentToMega(
     const uniqueFileName = `${emailId}_${timestamp}_${randomId}_${sanitizedName}`
     
     // Upload file to MEGA
+    // Wrap in try-catch to handle megajs internal callback errors gracefully
     const fileNode = await new Promise<any>((resolve, reject) => {
-      const uploadStream = storage.upload({
-        name: uniqueFileName,
-        size: fileBuffer.length,
-        target: targetFolder,
-      }, fileBuffer)
-      
-      uploadStream.on('complete', (file: any) => {
-        resolve(file)
-      })
-      
-      uploadStream.on('error', (error: Error) => {
-        reject(error)
-      })
+      try {
+        const uploadStream = storage.upload({
+          name: uniqueFileName,
+          size: fileBuffer.length,
+          target: targetFolder,
+        }, fileBuffer)
+        
+        uploadStream.on('complete', (file: any) => {
+          resolve(file)
+        })
+        
+        uploadStream.on('error', (error: Error) => {
+          // Ignore known megajs internal callback errors (uploads still succeed)
+          if (error.message && error.message.includes('originalCb')) {
+            // Wait a bit and check if file was actually uploaded
+            setTimeout(() => {
+              // Try to find the uploaded file
+              const uploadedFile = targetFolder.children?.find(
+                (child: any) => child.name === uniqueFileName && !child.directory
+              )
+              if (uploadedFile) {
+                resolve(uploadedFile)
+              } else {
+                reject(error)
+              }
+            }, 1000)
+          } else {
+            reject(error)
+          }
+        })
+        
+        // Handle case where upload completes but 'complete' event doesn't fire
+        // (known megajs quirk)
+        setTimeout(() => {
+          const uploadedFile = targetFolder.children?.find(
+            (child: any) => child.name === uniqueFileName && !child.directory
+          )
+          if (uploadedFile) {
+            resolve(uploadedFile)
+          }
+        }, 2000)
+      } catch (error: any) {
+        // Catch synchronous errors
+        if (error.message && error.message.includes('originalCb')) {
+          // Known megajs internal error - check if file was uploaded anyway
+          setTimeout(async () => {
+            try {
+              await new Promise(resolve => setTimeout(resolve, 1000))
+              const uploadedFile = targetFolder.children?.find(
+                (child: any) => child.name === uniqueFileName && !child.directory
+              )
+              if (uploadedFile) {
+                resolve(uploadedFile)
+              } else {
+                reject(error)
+              }
+            } catch {
+              reject(error)
+            }
+          }, 1000)
+        } else {
+          reject(error)
+        }
+      }
     })
     
     // Get file handle

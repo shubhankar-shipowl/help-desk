@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { ticketNotificationTriggers } from '@/lib/notifications/triggers/ticketTriggers'
+import { findOrCreateThreadId } from '@/lib/email-threading'
 
 export const dynamic = 'force-dynamic'
 
@@ -214,22 +215,85 @@ export async function POST(req: NextRequest) {
         })
 
         if (!existingEmail) {
+          const emailId = crypto.randomUUID()
+          
+          // Compute threadId for this email
+          const threadId = await findOrCreateThreadId(
+            {
+              messageId,
+              subject,
+              fromEmail,
+              toEmail,
+              headers: parsedHeaders,
+              inReplyTo: parsedHeaders['in-reply-to'] || parsedHeaders['In-Reply-To'],
+              references: parsedHeaders['references'] || parsedHeaders['References'],
+            },
+            tenantId,
+            storeId
+          )
+
+          // Process inline images from HTML content
+          let processedHtmlContent = htmlContent
+          let hasInlineImages = false
+          
+          if (htmlContent) {
+            try {
+              // Import inline image processor
+              const { processInlineImages } = await import('@/lib/email-inline-images')
+              
+              const { processedHtml, uploadedImages } = await processInlineImages(
+                htmlContent,
+                emailId,
+                undefined // Webhook doesn't have parsed attachments, so inline images must be data URIs
+              )
+              
+              if (processedHtml) {
+                processedHtmlContent = processedHtml
+              }
+              
+              // Store inline images as EmailAttachment records
+              for (const image of uploadedImages) {
+                try {
+                  await prisma.emailAttachment.create({
+                    data: {
+                      id: crypto.randomUUID(),
+                      emailId: emailId,
+                      filename: image.filename,
+                      mimeType: image.mimeType,
+                      size: image.size,
+                      fileUrl: image.fileUrl,
+                      fileHandle: image.fileHandle,
+                    },
+                  })
+                  hasInlineImages = true
+                } catch (error) {
+                  console.error('[Email Webhook] Error storing inline image:', error)
+                }
+              }
+            } catch (error) {
+              console.error('[Email Webhook] Error processing inline images:', error)
+              // Continue with original HTML if processing fails
+            }
+          }
+
           await prisma.email.create({
             data: {
-              id: crypto.randomUUID(),
+              id: emailId,
               tenantId,
               storeId,
               messageId,
+              threadId,
               fromEmail,
               fromName,
               toEmail,
               subject,
               textContent,
-              htmlContent,
+              htmlContent: processedHtmlContent,
               headers: parsedHeaders,
               ticketId: ticket?.id || null,
               processed: !!ticket,
               processedAt: ticket ? new Date() : null,
+              hasAttachments: hasInlineImages,
               updatedAt: new Date(),
             },
           })

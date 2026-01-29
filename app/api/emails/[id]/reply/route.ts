@@ -39,9 +39,19 @@ export async function POST(
       )
     }
 
-    // Get the original email
+    // Get the original email with its thread information
     const originalEmail = await prisma.email.findUnique({
       where: { id: params.id },
+      include: {
+        EmailReply_EmailReply_originalEmailIdToEmail: {
+          select: {
+            inReplyTo: true,
+            references: true,
+            sentAt: true,
+          },
+          orderBy: { sentAt: 'asc' },
+        },
+      },
     })
 
     if (!originalEmail) {
@@ -54,14 +64,80 @@ export async function POST(
     // Get storeId from original email or session
     const storeId = originalEmail.storeId || (session.user as any).storeId || null
 
+    // Build proper References header for threading
+    // References should include: original email + all previous replies in the thread
+    const referencesMessageIds: string[] = []
+    
+    // Add original email's messageId (if exists)
+    if (originalEmail.messageId) {
+      // Normalize messageId (remove angle brackets if present, then add them back)
+      const normalizedMsgId = originalEmail.messageId.replace(/^<|>$/g, '').trim()
+      referencesMessageIds.push(`<${normalizedMsgId}>`)
+    }
+    
+    // Add original email's References header if it exists (to maintain full thread chain)
+    if (originalEmail.headers) {
+      const headers = originalEmail.headers as Record<string, any>
+      const refsHeader = headers['references'] || headers['References'] || headers['reference']
+      if (refsHeader) {
+        // Parse existing References header and add to our list
+        const existingRefs = String(refsHeader).split(/\s+/).filter(Boolean)
+        existingRefs.forEach(ref => {
+          const normalized = ref.replace(/^<|>$/g, '').trim()
+          if (normalized && !referencesMessageIds.includes(`<${normalized}>`)) {
+            referencesMessageIds.push(`<${normalized}>`)
+          }
+        })
+      }
+    }
+    
+    // Add messageIds from previous EmailReply records' References headers
+    // Extract messageIds from previous replies' References headers to build complete thread chain
+    originalEmail.EmailReply_EmailReply_originalEmailIdToEmail.forEach(reply => {
+      if (reply.references) {
+        // Parse References header from previous reply
+        const refs = String(reply.references).split(/\s+/).filter(Boolean)
+        refs.forEach(ref => {
+          const normalized = ref.replace(/^<|>$/g, '').trim()
+          if (normalized && !referencesMessageIds.includes(`<${normalized}>`)) {
+            referencesMessageIds.push(`<${normalized}>`)
+          }
+        })
+      }
+      // Also add In-Reply-To from previous replies
+      if (reply.inReplyTo) {
+        const normalized = reply.inReplyTo.replace(/^<|>$/g, '').trim()
+        if (normalized && !referencesMessageIds.includes(`<${normalized}>`)) {
+          referencesMessageIds.push(`<${normalized}>`)
+        }
+      }
+    })
+    
+    // Build References header string (space-separated)
+    const referencesHeader = referencesMessageIds.length > 0 
+      ? referencesMessageIds.join(' ') 
+      : (originalEmail.messageId ? `<${originalEmail.messageId.replace(/^<|>$/g, '').trim()}>` : undefined)
+    
+    // In-Reply-To should be the most recent message in the thread (last reply or original email)
+    const inReplyTo = referencesMessageIds.length > 0 
+      ? referencesMessageIds[referencesMessageIds.length - 1] 
+      : (originalEmail.messageId ? `<${originalEmail.messageId.replace(/^<|>$/g, '').trim()}>` : undefined)
+
+    console.log(`[Email Reply] 📧 Threading headers:`, {
+      originalMessageId: originalEmail.messageId,
+      inReplyTo,
+      references: referencesHeader?.substring(0, 200) + (referencesHeader && referencesHeader.length > 200 ? '...' : ''),
+      previousReplies: originalEmail.EmailReply_EmailReply_originalEmailIdToEmail.length,
+    })
+
     // Send the reply email
     const emailResult = await sendEmail({
       to: toEmail,
       subject: subject.startsWith('Re:') ? subject : `Re: ${subject}`,
       html: replyBody.replace(/\n/g, '<br>'),
       text: replyBody,
-      inReplyTo: originalEmail.messageId ? `<${originalEmail.messageId}>` : undefined,
-      references: originalEmail.messageId ? `<${originalEmail.messageId}>` : undefined,
+      inReplyTo,
+      references: referencesHeader,
       tenantId,
       storeId,
     })
@@ -79,7 +155,7 @@ export async function POST(
       data: { read: true },
     })
 
-    // Create EmailReply record
+    // Create EmailReply record with proper threading headers
     const now = new Date()
     const emailReply = await prisma.emailReply.create({
       data: {
@@ -93,8 +169,8 @@ export async function POST(
         subject: subject.startsWith('Re:') ? subject : `Re: ${subject}`,
         bodyText: replyBody,
         bodyHtml: replyBody.replace(/\n/g, '<br>'),
-        inReplyTo: originalEmail.messageId ? `<${originalEmail.messageId}>` : null,
-        references: originalEmail.messageId ? `<${originalEmail.messageId}>` : null,
+        inReplyTo: inReplyTo || null,
+        references: referencesHeader || null,
         status: 'SENT',
         sentAt: now,
         updatedAt: now,

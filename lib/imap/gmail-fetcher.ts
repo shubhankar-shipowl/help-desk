@@ -1,7 +1,9 @@
 import Imap from 'imap'
 import { simpleParser, ParsedMail } from 'mailparser'
 import { prisma } from '@/lib/prisma'
+import { findOrCreateThreadId, extractThreadHeaders } from '@/lib/email-threading'
 import { uploadEmailAttachmentToMega } from '@/lib/storage/mega'
+import { processInlineImages } from '@/lib/email-inline-images'
 import { randomUUID } from 'crypto'
 
 export interface GmailImapConfig {
@@ -35,6 +37,7 @@ export interface FetchedEmail {
   headers: Record<string, any>
   hasAttachments: boolean
   attachments: EmailAttachmentData[]
+  inlineAttachments?: Array<{ cid?: string; contentType?: string; content?: Buffer; filename?: string }>
 }
 
 // Batch size - fetch this many emails per connection
@@ -385,18 +388,28 @@ function parseEmailData(parsed: ParsedMail, seqno: number): FetchedEmail | null 
       }
     }
 
-    // Extract attachments - filter out inline images
+    // Extract attachments - filter out inline images (they'll be processed separately)
     const attachments: EmailAttachmentData[] = []
+    const inlineAttachments: Array<{ cid?: string; contentType?: string; content?: Buffer; filename?: string }> = []
+    
     if (parsed.attachments && parsed.attachments.length > 0) {
       for (const att of parsed.attachments) {
-        if (att.contentDisposition === 'inline') continue
-        
-        attachments.push({
-          filename: att.filename || `attachment_${Date.now()}`,
-          mimeType: att.contentType || 'application/octet-stream',
-          size: att.size || att.content.length,
-          content: att.content,
-        })
+        if (att.contentDisposition === 'inline') {
+          // Store inline attachments for processing with HTML
+          inlineAttachments.push({
+            cid: att.cid,
+            contentType: att.contentType,
+            content: att.content,
+            filename: att.filename,
+          })
+        } else {
+          attachments.push({
+            filename: att.filename || `attachment_${Date.now()}`,
+            mimeType: att.contentType || 'application/octet-stream',
+            size: att.size || att.content.length,
+            content: att.content,
+          })
+        }
       }
     }
 
@@ -410,8 +423,9 @@ function parseEmailData(parsed: ParsedMail, seqno: number): FetchedEmail | null 
       textContent: parsed.text || null,
       htmlContent: parsed.html || null,
       headers: parsed.headers as any,
-      hasAttachments: attachments.length > 0,
+      hasAttachments: attachments.length > 0 || inlineAttachments.length > 0,
       attachments,
+      inlineAttachments, // Include inline attachments for processing
     }
   } catch {
     return null
@@ -484,19 +498,46 @@ export async function fetchAndStoreGmailEmails(
 
     console.log(`[IMAP] Processing ${fetchedEmails.length} emails for storage...`)
 
-    // Check existing emails
+    // Check existing emails - also check if they need reprocessing (have data URIs)
     const messageIds = fetchedEmails.map(e => e.messageId)
     const existingEmails = await prisma.email.findMany({
       where: { messageId: { in: messageIds } },
-      select: { messageId: true },
+      select: { 
+        messageId: true,
+        id: true,
+        htmlContent: true,
+        EmailAttachment: {
+          select: {
+            mimeType: true,
+            fileUrl: true,
+          },
+        },
+      },
     })
 
     const existingSet = new Set(existingEmails.map(e => e.messageId))
     const newEmails = fetchedEmails.filter(email => !existingSet.has(email.messageId))
     
+    // Check existing emails for unprocessed data URIs
+    const emailsNeedingReprocessing: Array<{ email: typeof fetchedEmails[0]; dbEmail: typeof existingEmails[0] }> = []
+    for (const fetchedEmail of fetchedEmails) {
+      const dbEmail = existingEmails.find(e => e.messageId === fetchedEmail.messageId)
+      if (dbEmail) {
+        const hasDataUris = dbEmail.htmlContent?.includes('data:image/') || dbEmail.htmlContent?.includes('data:video/')
+        const hasMegaUrls = dbEmail.htmlContent?.includes('/api/storage/mega/')
+        // If email has data URIs but no Mega URLs, it needs reprocessing
+        if (hasDataUris && !hasMegaUrls) {
+          emailsNeedingReprocessing.push({ email: fetchedEmail, dbEmail })
+        }
+      }
+    }
+    
     console.log(`[IMAP] ${existingSet.size} already exist, ${newEmails.length} new`)
+    if (emailsNeedingReprocessing.length > 0) {
+      console.log(`[IMAP] 🔄 ${emailsNeedingReprocessing.length} existing email(s) need reprocessing (have data URIs but no Mega URLs)`)
+    }
 
-    if (newEmails.length === 0) {
+    if (newEmails.length === 0 && emailsNeedingReprocessing.length === 0) {
       return { fetched: fetchedEmails.length, stored: 0, errors: 0, attachmentsUploaded: 0 }
     }
 
@@ -508,48 +549,116 @@ export async function fetchAndStoreGmailEmails(
     let errors = 0
     let attachmentsUploaded = 0
 
-    // Batch insert emails WITHOUT attachments
+    // Process emails WITHOUT regular attachments (but may have inline images)
     if (emailsWithoutAttachments.length > 0) {
-      const emailsToInsert = emailsWithoutAttachments.map(email => ({
-        id: randomUUID(),
-        tenantId: config.tenantId,
-        storeId: config.storeId || null,
-        messageId: email.messageId,
-        fromEmail: email.fromEmail,
-        fromName: email.fromName,
-        toEmail: email.toEmail,
-        subject: email.subject,
-        textContent: truncateContent(email.textContent, MAX_CONTENT_SIZE),
-        htmlContent: truncateContent(email.htmlContent, MAX_CONTENT_SIZE),
-        headers: email.headers,
-        read: false,
-        processed: false,
-        hasAttachments: false,
-        createdAt: email.date,
-        updatedAt: email.date,
-      }))
-
-      const DB_BATCH_SIZE = 25
-      for (let i = 0; i < emailsToInsert.length; i += DB_BATCH_SIZE) {
-        const batch = emailsToInsert.slice(i, i + DB_BATCH_SIZE)
+      // Process each email individually to handle inline images
+      for (const email of emailsWithoutAttachments) {
         try {
-          const result = await prisma.email.createMany({
-            data: batch,
-            skipDuplicates: true,
-          })
-          stored += result.count
-        } catch (error: any) {
-          for (const emailData of batch) {
+          const emailId = randomUUID()
+          
+          // Compute threadId
+          const threadId = await findOrCreateThreadId(
+            {
+              messageId: email.messageId,
+              subject: email.subject,
+              fromEmail: email.fromEmail,
+              toEmail: email.toEmail,
+              headers: email.headers,
+            },
+            config.tenantId,
+            config.storeId || null
+          )
+
+          // Process inline images from HTML content BEFORE truncating
+          // IMPORTANT: Process images first, then truncate, to avoid cutting off data URIs
+          let processedHtmlContent = email.htmlContent
+          let hasInlineImages = false
+          
+          // Check if HTML has images (data URIs or CID references)
+          const hasDataUris = email.htmlContent?.includes('data:image/') || email.htmlContent?.includes('data:video/')
+          const hasCidRefs = email.htmlContent?.includes('cid:')
+          
+          if (email.htmlContent && (hasDataUris || (hasCidRefs && email.inlineAttachments && email.inlineAttachments.length > 0))) {
             try {
-              await prisma.email.create({ data: emailData })
-              stored++
-            } catch (individualError: any) {
-              if (individualError.code !== 'P2002') errors++
+              console.log(`[IMAP] 🖼️  Processing inline images for email ${email.messageId.substring(0, 20)}...`)
+              console.log(`[IMAP]    - Data URIs: ${hasDataUris}, CID refs: ${hasCidRefs}, inline attachments: ${email.inlineAttachments?.length || 0}`)
+              console.log(`[IMAP]    - HTML length: ${email.htmlContent.length} chars`)
+              
+              const { processedHtml, uploadedImages } = await processInlineImages(
+                email.htmlContent,
+                emailId,
+                email.inlineAttachments // Pass inline attachments for CID resolution
+              )
+              
+              if (processedHtml && processedHtml !== email.htmlContent) {
+                processedHtmlContent = processedHtml // Keep full processed HTML
+                console.log(`[IMAP] ✅ Processed ${uploadedImages.length} inline image(s) for email ${email.messageId.substring(0, 20)}`)
+                console.log(`[IMAP]    - Processed HTML length: ${processedHtml.length} chars`)
+              } else {
+                console.log(`[IMAP] ⚠️  No changes after processing inline images`)
+              }
+              
+              // Store inline images as EmailAttachment records
+              for (const image of uploadedImages) {
+                try {
+                  await prisma.emailAttachment.create({
+                    data: {
+                      id: randomUUID(),
+                      emailId: emailId,
+                      filename: image.filename,
+                      mimeType: image.mimeType,
+                      size: image.size,
+                      fileUrl: image.fileUrl,
+                      fileHandle: image.fileHandle,
+                    },
+                  })
+                  hasInlineImages = true
+                  attachmentsUploaded++
+                } catch (error) {
+                  console.error('[IMAP] Error storing inline image:', error)
+                }
+              }
+            } catch (error) {
+              console.error('[IMAP] Error processing inline images:', error)
+              // Continue with original HTML if processing fails
             }
+          } else if (hasCidRefs && (!email.inlineAttachments || email.inlineAttachments.length === 0)) {
+            console.warn(`[IMAP] ⚠️ Email ${email.messageId.substring(0, 20)} has CID references but no inline attachments parsed`)
           }
+
+          // Truncate HTML AFTER processing images (to preserve Mega URLs)
+          const finalHtmlContent = truncateContent(processedHtmlContent, MAX_CONTENT_SIZE)
+
+          // Create email record
+          await prisma.email.create({
+            data: {
+              id: emailId,
+              tenantId: config.tenantId,
+              storeId: config.storeId || null,
+              messageId: email.messageId,
+              threadId,
+              fromEmail: email.fromEmail,
+              fromName: email.fromName,
+              toEmail: email.toEmail,
+              subject: email.subject,
+              textContent: truncateContent(email.textContent, MAX_CONTENT_SIZE),
+              htmlContent: finalHtmlContent, // Use truncated HTML after processing
+              headers: email.headers,
+              read: false,
+              processed: false,
+              hasAttachments: hasInlineImages,
+              createdAt: email.date,
+              updatedAt: email.date,
+            },
+          })
+          
+          stored++
+        } catch (error: any) {
+          if (error.code !== 'P2002') errors++
         }
       }
-      console.log(`[IMAP] Stored ${stored} emails without attachments`)
+      
+      console.log(`[IMAP] Stored ${stored} emails (some may have inline images)`)
     }
 
     // Process emails WITH attachments
@@ -560,24 +669,102 @@ export async function fetchAndStoreGmailEmails(
         try {
           const emailId = randomUUID()
           
+          // Compute threadId before inserting
+          const threadId = await findOrCreateThreadId(
+            {
+              messageId: email.messageId,
+              subject: email.subject,
+              fromEmail: email.fromEmail,
+              toEmail: email.toEmail,
+              headers: email.headers,
+            },
+            config.tenantId,
+            config.storeId || null
+          )
+          
+          // Process inline images from HTML content BEFORE truncating
+          // IMPORTANT: Process images first, then truncate, to avoid cutting off data URIs
+          let processedHtmlContent = email.htmlContent
+          let inlineImagesUploaded = 0
+          
+          // Check if HTML has images (data URIs or CID references)
+          const hasDataUris = email.htmlContent?.includes('data:image/') || email.htmlContent?.includes('data:video/')
+          const hasCidRefs = email.htmlContent?.includes('cid:')
+          
+          if (email.htmlContent && (hasDataUris || (hasCidRefs && email.inlineAttachments && email.inlineAttachments.length > 0))) {
+            try {
+              console.log(`[IMAP] 🖼️  Processing inline images for email ${email.messageId.substring(0, 20)}...`)
+              console.log(`[IMAP]    - Data URIs: ${hasDataUris}, CID refs: ${hasCidRefs}, inline attachments: ${email.inlineAttachments?.length || 0}`)
+              console.log(`[IMAP]    - HTML length: ${email.htmlContent.length} chars`)
+              
+              const { processedHtml, uploadedImages } = await processInlineImages(
+                email.htmlContent,
+                emailId,
+                email.inlineAttachments // Pass inline attachments for CID resolution
+              )
+              
+              if (processedHtml && processedHtml !== email.htmlContent) {
+                processedHtmlContent = processedHtml // Keep full processed HTML
+                console.log(`[IMAP] ✅ Processed ${uploadedImages.length} inline image(s) for email ${email.messageId.substring(0, 20)}`)
+                console.log(`[IMAP]    - Processed HTML length: ${processedHtml.length} chars`)
+              } else {
+                console.log(`[IMAP] ⚠️  No changes after processing inline images`)
+              }
+              
+              // Store inline images as EmailAttachment records
+              for (const image of uploadedImages) {
+                try {
+                  await prisma.emailAttachment.create({
+                    data: {
+                      id: randomUUID(),
+                      emailId: emailId,
+                      filename: image.filename,
+                      mimeType: image.mimeType,
+                      size: image.size,
+                      fileUrl: image.fileUrl,
+                      fileHandle: image.fileHandle,
+                    },
+                  })
+                  inlineImagesUploaded++
+                  attachmentsUploaded++
+                } catch (error) {
+                  console.error('[IMAP] Error storing inline image:', error)
+                }
+              }
+            } catch (error) {
+              console.error('[IMAP] Error processing inline images:', error)
+              // Continue with original HTML if processing fails
+            }
+          } else if (hasCidRefs && (!email.inlineAttachments || email.inlineAttachments.length === 0)) {
+            console.warn(`[IMAP] ⚠️ Email ${email.messageId.substring(0, 20)} has CID references but no inline attachments parsed`)
+          }
+
+          // Truncate HTML AFTER processing images (to preserve Mega URLs)
+          const finalHtmlContent = truncateContent(processedHtmlContent, MAX_CONTENT_SIZE)
+          
           const upsertedEmail = await prisma.email.upsert({
             where: { messageId: email.messageId },
-            update: { updatedAt: new Date() },
+            update: { 
+              updatedAt: new Date(),
+              threadId, // Update threadId if email already exists
+              htmlContent: finalHtmlContent, // Update with processed and truncated HTML
+            },
             create: {
               id: emailId,
               tenantId: config.tenantId,
               storeId: config.storeId || null,
               messageId: email.messageId,
+              threadId,
               fromEmail: email.fromEmail,
               fromName: email.fromName,
               toEmail: email.toEmail,
               subject: email.subject,
               textContent: truncateContent(email.textContent, MAX_CONTENT_SIZE),
-              htmlContent: truncateContent(email.htmlContent, MAX_CONTENT_SIZE),
+              htmlContent: finalHtmlContent, // Use processed and truncated HTML with Mega URLs
               headers: email.headers,
               read: false,
               processed: false,
-              hasAttachments: true,
+              hasAttachments: email.attachments.length > 0 || inlineImagesUploaded > 0,
               createdAt: email.date,
               updatedAt: email.date,
             },
@@ -585,6 +772,7 @@ export async function fetchAndStoreGmailEmails(
           
           stored++
           
+          // Upload regular attachments
           const uploadedAttachments = await uploadAttachmentsToMega(email.attachments, upsertedEmail.id)
           
           for (const att of uploadedAttachments) {
@@ -607,6 +795,72 @@ export async function fetchAndStoreGmailEmails(
           console.log(`[IMAP] ✅ Stored: ${email.subject.substring(0, 50)}...`)
         } catch (error: any) {
           if (error.code !== 'P2002') errors++
+        }
+      }
+    }
+
+    // Reprocess existing emails that have data URIs but no Mega URLs
+    if (emailsNeedingReprocessing.length > 0) {
+      console.log(`[IMAP] 🔄 Reprocessing ${emailsNeedingReprocessing.length} existing email(s) with unprocessed images...`)
+      
+      for (const { email: fetchedEmail, dbEmail } of emailsNeedingReprocessing) {
+        try {
+          console.log(`[IMAP] 🔄 Reprocessing email ${fetchedEmail.messageId.substring(0, 20)}...`)
+          
+          // Process inline images from the fetched email's HTML
+          const hasDataUris = fetchedEmail.htmlContent?.includes('data:image/') || fetchedEmail.htmlContent?.includes('data:video/')
+          const hasCidRefs = fetchedEmail.htmlContent?.includes('cid:')
+          
+          if (fetchedEmail.htmlContent && (hasDataUris || (hasCidRefs && fetchedEmail.inlineAttachments && fetchedEmail.inlineAttachments.length > 0))) {
+            try {
+              const { processedHtml, uploadedImages } = await processInlineImages(
+                fetchedEmail.htmlContent,
+                dbEmail.id,
+                fetchedEmail.inlineAttachments
+              )
+              
+              if (processedHtml && processedHtml !== fetchedEmail.htmlContent) {
+                const finalHtmlContent = truncateContent(processedHtml, MAX_CONTENT_SIZE)
+                
+                // Update email with processed HTML
+                await prisma.email.update({
+                  where: { id: dbEmail.id },
+                  data: {
+                    htmlContent: finalHtmlContent,
+                    hasAttachments: (dbEmail.EmailAttachment?.length || 0) + uploadedImages.length > 0,
+                    updatedAt: new Date(),
+                  },
+                })
+                
+                // Store uploaded images as EmailAttachment records
+                for (const image of uploadedImages) {
+                  try {
+                    await prisma.emailAttachment.create({
+                      data: {
+                        id: randomUUID(),
+                        emailId: dbEmail.id,
+                        filename: image.filename,
+                        mimeType: image.mimeType,
+                        size: image.size,
+                        fileUrl: image.fileUrl,
+                        fileHandle: image.fileHandle,
+                      },
+                    })
+                    attachmentsUploaded++
+                  } catch (error) {
+                    console.error('[IMAP] Error storing reprocessed inline image:', error)
+                  }
+                }
+                
+                console.log(`[IMAP] ✅ Reprocessed ${uploadedImages.length} inline image(s) for email ${fetchedEmail.messageId.substring(0, 20)}`)
+              }
+            } catch (error) {
+              console.error(`[IMAP] ❌ Error reprocessing inline images for email ${fetchedEmail.messageId.substring(0, 20)}:`, error)
+            }
+          }
+        } catch (error: any) {
+          console.error(`[IMAP] ❌ Error reprocessing email ${fetchedEmail.messageId.substring(0, 20)}:`, error.message)
+          errors++
         }
       }
     }

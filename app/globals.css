@@ -17,6 +17,37 @@
   max-width: 100%;
   height: auto;
   border-radius: 4px;
+  cursor: pointer;
+  display: block;
+  margin: 12px 0;
+  transition: opacity 0.2s ease;
+}
+
+.email-content img:hover {
+  opacity: 0.9;
+}
+
+.email-content video {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  cursor: pointer;
+  display: block;
+  margin: 12px 0;
+  transition: opacity 0.2s ease;
+}
+
+.email-content video:hover {
+  opacity: 0.9;
+}
+
+/* Ensure images and videos in email content are displayed as block elements (text above/below) */
+.email-content-wrapper img,
+.email-content-wrapper video {
+  display: block !important;
+  max-width: 100% !important;
+  height: auto !important;
+  margin: 12px 0 !important;
 }
 
 .email-content a {

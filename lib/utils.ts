@@ -214,3 +214,75 @@ export function maskEmail(email: string | null | undefined): string {
   return `${maskedLocal}@${maskedDomain}`
 }
 
+/**
+ * Mask phone numbers in text content (descriptions, messages, etc.)
+ * Finds phone numbers in various formats and masks them
+ * Formats: 9553207206, 955-320-7206, (955) 320-7206, +91 9553207206, etc.
+ */
+export function maskPhoneNumbersInText(text: string | null | undefined): string {
+  if (!text) return ''
+  
+  // Regex patterns for various phone number formats
+  // Matches: 10-digit numbers, numbers with dashes/spaces/parentheses, numbers with country codes
+  const phonePatterns = [
+    // 10-digit numbers: 9553207206
+    /\b(\d{10})\b/g,
+    // With dashes: 955-320-7206, 955-3207-206
+    /\b(\d{3})-(\d{3,4})-(\d{3,4})\b/g,
+    // With spaces: 955 320 7206, 955 3207 206
+    /\b(\d{3})\s+(\d{3,4})\s+(\d{3,4})\b/g,
+    // With parentheses: (955) 320-7206, (955) 320 7206
+    /\((\d{3})\)\s*(\d{3,4})[- ]?(\d{3,4})\b/g,
+    // With country code: +91 9553207206, +1 9553207206
+    /\+\d{1,3}[\s-]?(\d{10})\b/g,
+    // Contact number: Contact number :9553207206, Contact: 9553207206
+    /[Cc]ontact\s+[Nn]umber\s*:?\s*(\d{10})\b/gi,
+    // Phone/Phone number: Phone: 9553207206, Phone number: 9553207206
+    /[Pp]hone\s*([Nn]umber)?\s*:?\s*(\d{10})\b/gi,
+  ]
+  
+  let maskedText = text
+  
+  phonePatterns.forEach((pattern) => {
+    maskedText = maskedText.replace(pattern, (match, ...groups) => {
+      // Extract all digits from the match
+      const allDigits = match.replace(/\D/g, '')
+      
+      // If it's a 10-digit number or longer, mask it
+      if (allDigits.length >= 10) {
+        const last4 = allDigits.slice(-4)
+        // Preserve the format structure if possible
+        if (match.includes('-')) {
+          if (allDigits.length === 10) {
+            return `XXX-XXX-${last4}`
+          } else {
+            return `XXX-${last4}`
+          }
+        } else if (match.includes(' ')) {
+          if (allDigits.length === 10) {
+            return `XXX XXX ${last4}`
+          } else {
+            return `XXX ${last4}`
+          }
+        } else if (match.includes('(')) {
+          return `(XXX) XXX-${last4}`
+        } else if (match.startsWith('+')) {
+          // Preserve country code format
+          const countryCode = match.match(/^\+(\d{1,3})/)?.[1] || ''
+          return `+${countryCode} XXX-XXX-${last4}`
+        } else {
+          // Simple 10-digit format
+          if (allDigits.length === 10) {
+            return `XXX-XXX-${last4}`
+          } else {
+            return `XXX-${last4}`
+          }
+        }
+      }
+      
+      return match // Return original if doesn't match criteria
+    })
+  })
+  
+  return maskedText
+}

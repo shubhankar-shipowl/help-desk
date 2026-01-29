@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { formatDate, maskPhoneNumber, maskEmail } from '@/lib/utils'
+import { formatDate, maskPhoneNumber, maskEmail, maskPhoneNumbersInText } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
 import {
   Select,
@@ -1413,7 +1413,7 @@ export function TicketDetail({
                         {formatDate(ticketData.createdAt)}
                       </span>
                     </div>
-                    <p className="text-sm whitespace-pre-wrap">{ticketData.description}</p>
+                    <p className="text-sm whitespace-pre-wrap">{maskPhoneNumbersInText(ticketData.description)}</p>
                   </div>
                 </div>
               </div>

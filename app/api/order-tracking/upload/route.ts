@@ -124,6 +124,10 @@ export async function POST(req: NextRequest) {
     }
 
     const phoneColumn = findColumn([
+      'Phone Number',
+      'phone number',
+      'PhoneNumber',
+      'phonenumber',
       'Consignee Contact',
       'consignee contact',
       'ConsigneeContact',
@@ -134,6 +138,10 @@ export async function POST(req: NextRequest) {
     ])
 
     const channelOrderNumberColumn = findColumn([
+      'Customer Name',
+      'customer name',
+      'CustomerName',
+      'customername',
       'Channel Order Number',
       'channel order number',
       'ChannelOrderNumber',
@@ -146,7 +154,10 @@ export async function POST(req: NextRequest) {
     ])
 
     const trackingIdColumn = findColumn([
-      'WayBill Number',
+      'AWB Number',
+      'awb number',
+      'AWBNumber',
+      'awbnumber',
       'WayBill Number',
       'waybill number',
       'WayBillNumber',
@@ -158,28 +169,32 @@ export async function POST(req: NextRequest) {
 
     // Optional columns
     const channelOrderDateColumn = findColumn([
-      'Channel Order Date',
-      'channel order date',
-      'ChannelOrderDate',
-      'channelorderdate',
       'Order Date',
       'order date',
       'OrderDate',
-      'orderdate'
+      'orderdate',
+      'Channel Order Date',
+      'channel order date',
+      'ChannelOrderDate',
+      'channelorderdate'
     ])
 
     const deliveredDateColumn = findColumn([
-      'Delivered Date',
-      'delivered date',
-      'DeliveredDate',
-      'delivereddate',
       'Delivery Date',
       'delivery date',
       'DeliveryDate',
-      'deliverydate'
+      'deliverydate',
+      'Delivered Date',
+      'delivered date',
+      'DeliveredDate',
+      'delivereddate'
     ])
 
     const pickupWarehouseColumn = findColumn([
+      'Warehouse Name',
+      'warehouse name',
+      'WarehouseName',
+      'warehousename',
       'Pickup Warehouse',
       'pickup warehouse',
       'PickupWarehouse',
@@ -208,7 +223,7 @@ export async function POST(req: NextRequest) {
     if (!phoneColumn || !channelOrderNumberColumn || !trackingIdColumn || !pickupWarehouseColumn) {
       return NextResponse.json(
         { 
-          error: 'Required columns not found. Please ensure your sheet contains: Consignee Contact, Channel Order Number, WayBill Number, and Pickup Warehouse',
+          error: 'Required columns not found. Please ensure your sheet contains: Phone Number (or Consignee Contact), Customer Name (or Channel Order Number), AWB Number (or WayBill Number), and Warehouse Name (or Pickup Warehouse)',
           foundColumns: columns,
           missing: {
             phone: !phoneColumn,

@@ -81,7 +81,35 @@ export async function GET(req: NextRequest) {
     const [emails, total, unreadCount, readCount, totalAll] = await Promise.all([
       prisma.email.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          tenantId: true,
+          storeId: true,
+          messageId: true,
+          threadId: true,
+          gmailId: true,
+          fromEmail: true,
+          fromName: true,
+          toEmail: true,
+          ccEmail: true,
+          bccEmail: true,
+          subject: true,
+          snippet: true,
+          textContent: true,
+          htmlContent: true,
+          headers: true,
+          labelIds: true,
+          internalDate: true,
+          historyId: true,
+          direction: true,
+          read: true,
+          readAt: true,
+          ticketId: true,
+          processed: true,
+          processedAt: true,
+          hasAttachments: true,
+          createdAt: true,
+          updatedAt: true,
           Ticket: {
             select: {
               id: true,
