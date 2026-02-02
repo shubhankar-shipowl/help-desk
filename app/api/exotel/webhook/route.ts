@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
  * Exotel Webhook Handler
  * 
  * This endpoint is called by Exotel when the agent answers the call.
- * It returns Exotel XML/TwiML that tells Exotel to dial the customer and connect them.
+ * It returns Exotel XML that tells Exotel to dial the customer and connect them.
  * 
  * IMPORTANT: This endpoint must be publicly accessible (no authentication required)
  * as Exotel needs to call it directly.
@@ -18,10 +18,6 @@ import { NextRequest, NextResponse } from "next/server";
  * Environment Variables Required:
  * - EXOTEL_SID: Your Exotel Subscriber ID
  * - CALLER_ID: Your Exotel number (appears on customer's phone)
- * 
- * Configuration:
- * Set FLOW_URL environment variable to: https://yourdomain.com/api/exotel/webhook
- * Or leave it empty to use this endpoint automatically
  */
 export async function POST(req: NextRequest) {
   try {
@@ -44,14 +40,16 @@ export async function POST(req: NextRequest) {
     }
     
     // Get call parameters from Exotel
-    const callSid = formData.get("CallSid")?.toString() || formData.get("CallSid")?.toString() || "";
-    const from = formData.get("From")?.toString() || ""; // Agent's number
-    const to = formData.get("To")?.toString() || ""; // Customer's number (if provided)
+    const callSid = formData.get("CallSid")?.toString() || "";
+    const from = formData.get("From")?.toString() || ""; // Agent's number (who was called first)
+    const to = formData.get("To")?.toString() || ""; // Customer's number (from original API call)
     const callerId = formData.get("CallerId")?.toString() || process.env.CALLER_ID || "";
     
     // Get customer phone from query parameter (passed in flow URL)
     const searchParams = req.nextUrl.searchParams;
     const customerPhoneFromQuery = searchParams.get("customer_phone");
+    
+    // Priority: query parameter > To field from Exotel
     const customerPhone = customerPhoneFromQuery || to;
     
     // Log all received data for debugging
@@ -88,9 +86,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get caller ID from SystemSettings or environment if not provided
-    // Note: This is a public endpoint, so we can't use session. We'll use environment variable as fallback.
-    // For tenant-specific caller ID, you may need to pass it via query parameter or use a default tenant lookup.
+    // Get caller ID from environment
     const exotelCallerId = callerId || process.env.CALLER_ID || "";
     
     if (!exotelCallerId) {
@@ -118,14 +114,14 @@ export async function POST(req: NextRequest) {
       normalized: normalizedPhone,
     });
 
-    // Return Exotel XML/TwiML that dials the customer
+    // Return Exotel XML that dials the customer
     // This tells Exotel to:
     // 1. Dial the customer number
     // 2. Use the callerId (your Exotel number) as the caller ID
     // 3. Connect the customer to the agent when they answer
     const xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial callerId="${exotelCallerId}" timeout="30" record="false">
+  <Dial callerId="${exotelCallerId}" timeout="30">
     <Number>${normalizedPhone}</Number>
   </Dial>
 </Response>`;
@@ -168,4 +164,3 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   return POST(req);
 }
-
