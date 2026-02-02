@@ -97,6 +97,27 @@ export async function POST(req: NextRequest) {
       console.error('[Exotel Webhook] CallerId not configured');
     }
 
+    // Normalize phone number for Exotel
+    // Exotel expects 10-digit numbers for Indian numbers (without +91 prefix)
+    let normalizedPhone = customerPhone.trim();
+    // Remove any + prefix
+    if (normalizedPhone.startsWith('+')) {
+      normalizedPhone = normalizedPhone.substring(1);
+    }
+    // Remove 91 prefix if present (Indian country code)
+    if (normalizedPhone.startsWith('91') && normalizedPhone.length > 10) {
+      normalizedPhone = normalizedPhone.substring(2);
+    }
+    // Remove leading 0 if present
+    if (normalizedPhone.startsWith('0') && normalizedPhone.length > 10) {
+      normalizedPhone = normalizedPhone.substring(1);
+    }
+    
+    console.log('[Exotel Webhook] Phone normalization:', {
+      original: customerPhone,
+      normalized: normalizedPhone,
+    });
+
     // Return Exotel XML/TwiML that dials the customer
     // This tells Exotel to:
     // 1. Dial the customer number
@@ -105,12 +126,13 @@ export async function POST(req: NextRequest) {
     const xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Dial callerId="${exotelCallerId}" timeout="30" record="false">
-    <Number>${customerPhone}</Number>
+    <Number>${normalizedPhone}</Number>
   </Dial>
 </Response>`;
 
     console.log('[Exotel Webhook] Returning dial XML:', {
-      customerPhone,
+      originalPhone: customerPhone,
+      normalizedPhone,
       callerId: exotelCallerId,
       xml: xmlResponse,
     });
