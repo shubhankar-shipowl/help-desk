@@ -176,26 +176,28 @@ export async function POST(
     formData.append("CallerId", callerId); // Your Exotel number
     
     // Url parameter is REQUIRED - Exotel calls this when agent answers
-    // This webhook returns XML that tells Exotel to dial the customer
-    // NOTE: Exotel internal flow URLs (my.exotel.com/exoml) don't support query parameters
-    // So we ALWAYS use our custom webhook which handles the customer phone correctly
+    // This webhook/flow returns XML that tells Exotel to dial the customer
     let urlToUse: string;
-    if (flowUrl && flowUrl.trim() !== '' && !flowUrl.includes('my.exotel.com/exoml')) {
-      // Custom webhook URL (for call flow control via XML) - NOT an Exotel internal flow
-      urlToUse = flowUrl.includes('?') 
-        ? `${flowUrl}&customer_phone=${encodeURIComponent(customerPhone)}`
-        : `${flowUrl}?customer_phone=${encodeURIComponent(customerPhone)}`;
-      console.log('[Exotel Call] Using custom flow URL:', urlToUse);
+    if (flowUrl && flowUrl.trim() !== '') {
+      const isExotelFlow = flowUrl.includes('my.exotel.com/exoml');
+      if (isExotelFlow) {
+        // Use Exotel flow URL DIRECTLY - don't add query parameters
+        // The flow should use %To% variable which gets the customer phone from API call
+        urlToUse = flowUrl;
+        console.log('[Exotel Call] Using Exotel flow URL directly:', urlToUse);
+        console.log('[Exotel Call] Flow will use %To% variable to dial:', customerPhone);
+      } else {
+        // Custom webhook URL (for call flow control via XML)
+        urlToUse = flowUrl.includes('?') 
+          ? `${flowUrl}&customer_phone=${encodeURIComponent(customerPhone)}`
+          : `${flowUrl}?customer_phone=${encodeURIComponent(customerPhone)}`;
+        console.log('[Exotel Call] Using custom flow URL:', urlToUse);
+      }
     } else {
-      // Use our webhook endpoint (default, or when FLOW_URL is an Exotel internal flow)
-      // Our webhook returns XML that dials the customer phone
+      // Default to our webhook endpoint
       const webhookUrl = `${cleanServerUrl}/api/exotel/webhook?customer_phone=${encodeURIComponent(customerPhone)}`;
       urlToUse = webhookUrl;
-      if (flowUrl && flowUrl.includes('my.exotel.com/exoml')) {
-        console.log('[Exotel Call] Ignoring Exotel flow URL (not supported with query params), using webhook:', urlToUse);
-      } else {
-        console.log('[Exotel Call] Using default webhook URL:', urlToUse);
-      }
+      console.log('[Exotel Call] Using default webhook URL:', urlToUse);
     }
     formData.append("Url", urlToUse);
     
