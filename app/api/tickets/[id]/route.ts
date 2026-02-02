@@ -379,6 +379,43 @@ export async function DELETE(
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
     }
 
+    // Unlink Facebook notifications and clean up their metadata
+    // This allows the user to re-convert the notification if needed
+    const linkedFacebookNotifications = await prisma.facebookNotification.findMany({
+      where: { convertedTicketId: ticket.id },
+    include: { Notification: true }
+    })
+
+    for (const fbNotif of linkedFacebookNotifications) {
+      // 1. Clean up the parent Notification metadata
+      if (fbNotif.Notification && fbNotif.Notification.metadata) {
+        const metadata = fbNotif.Notification.metadata as any
+        
+        // Remove conversion details
+        const { 
+          converted, 
+          convertedTicketId, 
+          convertedTicketNumber, 
+          convertedTicketStatus, 
+          ...cleanedMetadata 
+        } = metadata
+
+        await prisma.notification.update({
+          where: { id: fbNotif.notificationId },
+          data: { metadata: cleanedMetadata },
+        })
+      }
+
+      // 2. Reset the FacebookNotification status
+      await prisma.facebookNotification.update({
+        where: { id: fbNotif.id },
+        data: {
+          converted: false,
+          convertedTicketId: null,
+        },
+      })
+    }
+
     // Delete in order to respect foreign key constraints
     // 1. Delete notification delivery logs for ticket-related notifications
     const ticketNotifications = await prisma.notification.findMany({

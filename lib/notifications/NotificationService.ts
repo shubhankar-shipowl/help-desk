@@ -865,21 +865,33 @@ export class NotificationService {
       const metadata = notification.metadata as any || {}
       
       // If Facebook notification is converted, add ticket info to metadata
-      if (notification.FacebookNotification?.converted && notification.FacebookNotification?.Ticket) {
-        const ticket = notification.FacebookNotification.Ticket
-        return {
-          ...notification,
-          metadata: {
-            ...metadata,
-            converted: true,
-            convertedTicketId: ticket.id,
-            convertedTicketNumber: ticket.ticketNumber,
-            convertedTicketStatus: ticket.status,
-          },
+      // Also map FacebookNotification (PascalCase) to facebookNotification (camelCase) for frontend
+      const facebookNotification = notification.FacebookNotification
+      
+      let updatedMetadata = { ...metadata }
+      
+      if (facebookNotification?.converted && facebookNotification?.Ticket) {
+        const ticket = facebookNotification.Ticket
+        updatedMetadata = {
+          ...updatedMetadata,
+          converted: true,
+          convertedTicketId: ticket.id,
+          convertedTicketNumber: ticket.ticketNumber,
+          convertedTicketStatus: ticket.status,
         }
       }
       
-      return notification
+      // Return notification with mapped fields
+      return {
+        ...notification,
+        metadata: updatedMetadata,
+        facebookNotification: facebookNotification ? {
+          id: facebookNotification.id,
+          postUrl: facebookNotification.postUrl,
+          type: facebookNotification.type,
+          facebookPostId: facebookNotification.facebookPostId,
+        } : null
+      }
     })
 
     return {

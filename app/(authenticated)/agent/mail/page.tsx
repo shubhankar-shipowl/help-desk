@@ -2318,10 +2318,7 @@ export default function MailPage() {
                   {conversationEmails.map((email, index) => {
                     const isSelectedEmail = email.id === selectedEmail.id
                     return (
-                      <div key={email.id} className={cn(
-                        "p-6",
-                        isSelectedEmail && "bg-blue-50/30"
-                      )}>
+                      <div key={email.id} className="p-6">
                         {/* Email Header */}
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-start space-x-4">

@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
       assignedTeamId, 
       priority, 
       categoryId,
-      tags 
+      tags,
+      storeId // Get storeId from request
     } = body
 
     if (!facebookNotificationId) {
@@ -59,12 +60,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Convert to ticket
+    // Default assignment to the current user (agent) if not specified
+    // This ensures the ticket appears in their inbox/my tickets immediately
     const ticket = await convertFacebookNotificationToTicket(facebookNotificationId, {
-      assignedAgentId,
+      assignedAgentId: assignedAgentId || session.user.id,
       assignedTeamId,
       priority,
       categoryId,
       tags,
+      storeId, // Pass storeId
     })
 
     // Update the original Facebook notification's metadata to include ticket info

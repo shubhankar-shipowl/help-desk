@@ -47,11 +47,17 @@ interface NotificationItemProps {
   onDelete: (id: string) => void
 }
 
+import { useStore } from '@/lib/store-context'
+
+// ... existing imports
+
 export function NotificationItem({ notification, onMarkAsRead, onDelete }: NotificationItemProps) {
   const { data: session } = useSession()
   const router = useRouter()
+  const { selectedStoreId } = useStore() // Get selected store
   const [isConverting, setIsConverting] = useState(false)
   const [convertedTicketStatus, setConvertedTicketStatus] = useState<string | null>(null)
+  
   const Icon = getNotificationIcon(notification.type)
   const iconColor = getIconColor(notification.type)
   const priorityColor = getPriorityColor(notification.metadata?.priority)
@@ -142,8 +148,10 @@ export function NotificationItem({ notification, onMarkAsRead, onDelete }: Notif
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           facebookNotificationId: notification.facebookNotification.id,
+          storeId: selectedStoreId, // Pass selected store ID
         }),
       })
+      // ... existing code
 
       const data = await response.json()
 

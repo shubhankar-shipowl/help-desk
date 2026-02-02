@@ -14,6 +14,7 @@ export async function convertFacebookNotificationToTicket(
     priority?: Ticket_priority
     categoryId?: string
     tags?: string[]
+    storeId?: string | null // Add storeId option
   }
 ) {
   // Fetch Facebook notification with related data
@@ -109,6 +110,7 @@ export async function convertFacebookNotificationToTicket(
     data: {
       id: crypto.randomUUID(),
       tenantId, // Multi-tenant: Always include tenantId
+      storeId: options?.storeId || null, // Assign to store if provided
       ticketNumber,
       subject: `Facebook ${fbNotification.type}: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`,
       description: content,
