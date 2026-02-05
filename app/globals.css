@@ -21,6 +21,9 @@
   display: block;
   margin: 12px 0;
   transition: opacity 0.2s ease;
+  min-height: 50px;
+  background: #f3f4f6;
+  padding: 8px;
 }
 
 .email-content img:hover {
@@ -50,6 +53,40 @@
   margin: 12px 0 !important;
 }
 
+/* Override prose styles for email content images */
+.prose.email-content-wrapper img,
+.email-content-wrapper .email-content img {
+  max-width: 100% !important;
+  width: auto !important;
+  height: auto !important;
+  max-height: none !important;
+  display: block !important;
+  margin: 12px 0 !important;
+}
+
+/* Ensure email body containers don't clip images */
+.email-content-wrapper div,
+.email-content-wrapper table,
+.email-content-wrapper td,
+.email-content-wrapper tbody,
+.email-content-wrapper tr {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/* Override any inline height constraints on image containers */
+.email-content-wrapper [style*="height"] img {
+  height: auto !important;
+  max-height: none !important;
+}
+
+/* Ensure images in dark/light backgrounds display properly */
+.email-content-wrapper img[src] {
+  max-width: 100% !important;
+  height: auto !important;
+  object-fit: contain !important;
+}
+
 .email-content a {
   color: #6366f1;
   text-decoration: underline;
@@ -65,13 +102,13 @@
     --color-primary: 99 102 241; /* #6366F1 - Vibrant Indigo */
     --color-primary-dark: 79 70 229; /* #4F46E5 - Dark Indigo */
     --color-primary-light: 224 231 255; /* #E0E7FF - Light Indigo */
-    
+
     /* Colors - Status */
     --color-success: 16 185 129; /* #10B981 */
     --color-warning: 245 158 11; /* #F59E0B */
     --color-danger: 239 68 68; /* #EF4444 */
     --color-info: 6 182 212; /* #06B6D4 */
-    
+
     /* Colors - Neutral */
     --color-gray-50: 249 250 251; /* #F9FAFB */
     --color-gray-100: 243 244 246; /* #F3F4F6 */
@@ -80,13 +117,13 @@
     --color-gray-400: 156 163 175; /* #9CA3AF */
     --color-gray-600: 75 85 99; /* #4B5563 */
     --color-gray-900: 17 24 39; /* #111827 */
-    
+
     /* Colors - Priority */
     --color-priority-urgent: 220 38 38; /* #DC2626 */
     --color-priority-high: 249 115 22; /* #F97316 */
     --color-priority-normal: 59 130 246; /* #3B82F6 */
     --color-priority-low: 107 114 128; /* #6B7280 */
-    
+
     /* Spacing */
     --spacing-xs: 4px;
     --spacing-sm: 8px;
@@ -94,7 +131,7 @@
     --spacing-lg: 24px;
     --spacing-xl: 32px;
     --spacing-2xl: 48px;
-    
+
     /* Typography */
     --font-family: 'Inter', -apple-system, system-ui, sans-serif;
     --font-size-xs: 10px;
@@ -104,25 +141,25 @@
     --font-size-xl: 20px;
     --font-size-2xl: 24px;
     --font-size-3xl: 32px;
-    
+
     /* Border Radius */
     --radius-sm: 6px;
     --radius-md: 8px;
     --radius-lg: 12px;
     --radius-xl: 16px;
     --radius-full: 9999px;
-    
+
     /* Shadows */
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
     --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.1);
     --shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.1);
     --shadow-xl: 0 10px 15px rgba(0, 0, 0, 0.1);
-    
+
     /* Transitions */
     --transition-fast: 150ms ease-in-out;
     --transition-base: 200ms ease-in-out;
     --transition-slow: 300ms ease-in-out;
-    
+
     /* Legacy variables for compatibility */
     --background: 249 250 251; /* Gray 50 */
     --foreground: 17 24 39; /* Gray 900 */
@@ -212,7 +249,7 @@
     line-height: 14px;
     font-weight: 500;
   }
-  
+
   .shadow-sm-custom {
     box-shadow: var(--shadow-sm);
   }
@@ -225,7 +262,7 @@
   .shadow-xl-custom {
     box-shadow: var(--shadow-xl);
   }
-  
+
   .transition-fast {
     transition: all var(--transition-fast);
   }
@@ -238,13 +275,19 @@
 }
 
 @keyframes wave {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(20deg); }
-  75% { transform: rotate(-20deg); }
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(20deg);
+  }
+  75% {
+    transform: rotate(-20deg);
+  }
 }
 
 .animate-wave {
   display: inline-block;
   animation: wave 1s ease-in-out infinite;
 }
-

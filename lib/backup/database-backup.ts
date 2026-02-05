@@ -232,14 +232,16 @@ async function cleanupFiles(filePaths: string[]): Promise<void> {
  * Main backup function
  */
 export async function backupDatabase(): Promise<void> {
-  const databaseUrl = process.env.DATABASE_URL
+  // Use getDatabaseUrl() to support both DATABASE_URL and individual DB_* variables
+  const { getDatabaseUrl } = await import('@/lib/prisma')
+  const databaseUrl = getDatabaseUrl()
   const megaEmail = process.env.MEGA_EMAIL
   const megaPassword = process.env.MEGA_PASSWORD
   // Remove leading slash if present for MEGA folder path
   const backupFolder = 'app-backups/help-desk'
   
   if (!databaseUrl) {
-    throw new Error('DATABASE_URL environment variable is not set')
+    throw new Error('Database configuration is missing. Please set either DATABASE_URL or DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME')
   }
   
   if (!megaEmail || !megaPassword) {

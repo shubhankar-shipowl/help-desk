@@ -32,6 +32,54 @@ if (process.env.NODE_ENV === "development") {
   globalForPrisma.prismaVersion = currentSchemaVersion;
 }
 
+/**
+ * Construct DATABASE_URL from individual DB_* environment variables if available
+ * Falls back to DATABASE_URL if individual variables are not set
+ * 
+ * Environment variables used (if DATABASE_URL is not set):
+ * - DB_HOST (default: localhost)
+ * - DB_PORT (default: 3306)
+ * - DB_USER (required)
+ * - DB_PASSWORD (required)
+ * - DB_NAME (required)
+ */
+export function getDatabaseUrl(): string {
+  // If DATABASE_URL is explicitly set, use it
+  if (process.env.DATABASE_URL) {
+    return process.env.DATABASE_URL;
+  }
+
+  // Otherwise, construct from individual DB_* variables
+  const dbHost = process.env.DB_HOST || 'localhost';
+  const dbPort = process.env.DB_PORT || '3306';
+  const dbUser = process.env.DB_USER;
+  const dbPassword = process.env.DB_PASSWORD;
+  const dbName = process.env.DB_NAME;
+
+  // Validate required variables
+  if (!dbUser || !dbPassword || !dbName) {
+    throw new Error(
+      'Database configuration missing. Please set either DATABASE_URL or all of: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME'
+    );
+  }
+
+  // URL encode password to handle special characters
+  const encodedPassword = encodeURIComponent(dbPassword);
+  
+  // Construct MySQL connection URL
+  const databaseUrl = `mysql://${dbUser}:${encodedPassword}@${dbHost}:${dbPort}/${dbName}`;
+  
+  // Add connection timeout and pool parameters
+  // - connect_timeout: time to establish connection (seconds)
+  // - pool_timeout: time to wait for a connection from the pool (seconds)
+  // - socket_timeout: time for socket operations (seconds)
+  // - connection_limit: max connections in the pool
+  const connectionParams = 'connect_timeout=10&pool_timeout=10&socket_timeout=30&connection_limit=10';
+  return databaseUrl.includes('?')
+    ? `${databaseUrl}&${connectionParams}`
+    : `${databaseUrl}?${connectionParams}`;
+}
+
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
@@ -39,7 +87,7 @@ export const prisma =
     errorFormat: "pretty",
     datasources: {
       db: {
-        url: process.env.DATABASE_URL,
+        url: getDatabaseUrl(),
       },
     },
     // Optimize connection pool settings

@@ -72,6 +72,7 @@ model CallLog {
   remark         String?
   exotelCallId   String?
   exotelResponse Json?
+  recordingUrl   String?
   startedAt      DateTime       @default(now())
   endedAt        DateTime?
   createdAt      DateTime       @default(now())

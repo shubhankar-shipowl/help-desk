@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 /**
  * Get call logs
@@ -11,83 +11,70 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getServerSession(authOptions);
 
-    if (!session || (session.user.role !== 'AGENT' && session.user.role !== 'ADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (
+      !session ||
+      (session.user.role !== 'AGENT' && session.user.role !== 'ADMIN')
+    ) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Get tenantId from session (multi-tenant support)
-    const tenantId = (session.user as any).tenantId
+    const tenantId = (session.user as any).tenantId;
     if (!tenantId) {
       return NextResponse.json(
         { error: 'Tenant ID is required' },
-        { status: 400 }
-      )
+        { status: 400 },
+      );
     }
 
-    const { searchParams } = new URL(req.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const ticketId = searchParams.get('ticketId')
-    const agentId = searchParams.get('agentId')
-    const customerPhone = searchParams.get('customerPhone')
-    const status = searchParams.get('status')
-    const remark = searchParams.get('remark')
-    const startDate = searchParams.get('startDate')
-    const endDate = searchParams.get('endDate')
-    const storeId = searchParams.get('storeId')
+    const { searchParams } = new URL(req.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '50');
+    const ticketId = searchParams.get('ticketId');
+    const agentId = searchParams.get('agentId');
+    const customerPhone = searchParams.get('customerPhone');
+    const status = searchParams.get('status');
+    const remark = searchParams.get('remark');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    // Note: storeId is accepted but not used for call logs filtering
+    // Admins see all call logs across all stores
 
-    const skip = (page - 1) * limit
+    const skip = (page - 1) * limit;
 
     // Build where clause - filter by tenant through agent (User relation)
     const where: any = {
       User: {
         tenantId, // Filter by tenant through User relation
       },
-    }
+    };
 
-    // For admins, storeId is required to filter data by store
+    // Handle filtering based on role
     if (session.user.role === 'ADMIN') {
-      if (!storeId) {
-        return NextResponse.json(
-          { error: 'Store ID is required for admin users' },
-          { status: 400 }
-        )
+      // Admins can see all call logs across all stores (no store filtering)
+      // Admin can filter by agent if provided
+      if (agentId) {
+        where.agentId = agentId;
       }
-      // Filter by store through User's storeId
-      where.User = {
-        ...where.User,
-        storeId: storeId,
-      }
-    } else if (storeId) {
-      // For agents, storeId is optional
-      where.User = {
-        ...where.User,
-        storeId: storeId,
-      }
-    }
-
-    // If agent, only show their own calls (unless admin)
-    if (session.user.role === 'AGENT') {
-      where.agentId = session.user.id
-    } else if (agentId) {
-      // Admin can filter by agent
-      where.agentId = agentId
+    } else if (session.user.role === 'AGENT') {
+      // For agents, only show their own calls
+      where.agentId = session.user.id;
     }
 
     if (ticketId) {
-      where.ticketId = ticketId
+      where.ticketId = ticketId;
     }
 
     if (customerPhone) {
       where.customerPhone = {
         contains: customerPhone,
-      }
+      };
     }
 
     if (status) {
-      where.status = status
+      where.status = status;
     }
 
     // Remark filter
@@ -97,28 +84,24 @@ export async function GET(req: NextRequest) {
           { remark: { not: null } },
           { remark: { not: '' } },
           { remark: { not: '-' } },
-        ]
+        ];
       } else if (remark === 'NO_REMARK') {
-        where.OR = [
-          { remark: null },
-          { remark: '' },
-          { remark: '-' },
-        ]
+        where.OR = [{ remark: null }, { remark: '' }, { remark: '-' }];
       }
     }
 
     // Date range filter
     if (startDate || endDate) {
-      where.startedAt = {}
+      where.startedAt = {};
       if (startDate) {
-        const start = new Date(startDate)
-        start.setHours(0, 0, 0, 0)
-        where.startedAt.gte = start
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        where.startedAt.gte = start;
       }
       if (endDate) {
-        const end = new Date(endDate)
-        end.setHours(23, 59, 59, 999)
-        where.startedAt.lte = end
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.startedAt.lte = end;
       }
     }
 
@@ -127,9 +110,9 @@ export async function GET(req: NextRequest) {
       User: {
         tenantId, // Filter by tenant through User relation
       },
-    }
+    };
     if (session.user.role === 'AGENT') {
-      datesWhere.agentId = session.user.id
+      datesWhere.agentId = session.user.id;
     }
 
     // Fetch call logs with related data
@@ -166,13 +149,13 @@ export async function GET(req: NextRequest) {
           startedAt: true,
         },
       }),
-    ])
+    ]);
 
     // Format duration for display
     const formattedLogs = callLogs.map((log) => {
-      const minutes = Math.floor(log.duration / 60)
-      const seconds = log.duration % 60
-      const durationFormatted = `${minutes}:${seconds.toString().padStart(2, '0')}`
+      const minutes = Math.floor(log.duration / 60);
+      const seconds = log.duration % 60;
+      const durationFormatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
       return {
         id: log.id,
@@ -191,20 +174,21 @@ export async function GET(req: NextRequest) {
         attempts: log.attempts,
         remark: log.remark || '-',
         exotelCallId: log.exotelCallId,
+        recordingUrl: (log as any).recordingUrl || null,
         startedAt: log.startedAt,
         endedAt: log.endedAt,
         createdAt: log.createdAt,
-      }
-    })
+      };
+    });
 
     // Extract unique dates with call logs
-    const datesWithData = new Set<string>()
+    const datesWithData = new Set<string>();
     allCallLogs.forEach((log) => {
       if (log.startedAt) {
-        const dateStr = log.startedAt.toISOString().split('T')[0]
-        datesWithData.add(dateStr)
+        const dateStr = log.startedAt.toISOString().split('T')[0];
+        datesWithData.add(dateStr);
       }
-    })
+    });
 
     return NextResponse.json({
       callLogs: formattedLogs,
@@ -215,13 +199,12 @@ export async function GET(req: NextRequest) {
         totalPages: Math.ceil(total / limit),
       },
       datesWithData: Array.from(datesWithData),
-    })
+    });
   } catch (error: any) {
-    console.error('Error fetching call logs:', error)
+    console.error('Error fetching call logs:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to fetch call logs' },
-      { status: 500 }
-    )
+      { status: 500 },
+    );
   }
 }
-

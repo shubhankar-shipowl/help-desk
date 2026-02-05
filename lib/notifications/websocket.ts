@@ -4,6 +4,46 @@ import { subscribeToNotifications } from './pubsub'
 import { prisma } from '../prisma'
 import { getAppUrl } from '../utils'
 
+/**
+ * Retry a database operation with exponential backoff
+ */
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelayMs: number = 500
+): Promise<T> {
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await operation()
+    } catch (error) {
+      lastError = error as Error
+      const errorMessage = (error as Error).message || ''
+
+      // Only retry on connection errors
+      if (
+        errorMessage.includes("Can't reach database server") ||
+        errorMessage.includes('Connection refused') ||
+        errorMessage.includes('ECONNRESET') ||
+        errorMessage.includes('ETIMEDOUT')
+      ) {
+        if (attempt < maxRetries - 1) {
+          const delay = baseDelayMs * Math.pow(2, attempt)
+          console.warn(`[WebSocket] Database connection failed, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          continue
+        }
+      }
+
+      // For non-connection errors, throw immediately
+      throw error
+    }
+  }
+
+  throw lastError
+}
+
 let io: SocketIOServer | null = null
 let isInitialized = false
 
@@ -73,11 +113,13 @@ export function initializeWebSocket(httpServer: HTTPServer) {
         return next(new Error('User ID required'))
       }
 
-      // Get user from database
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { id: true, role: true, email: true, name: true },
-      })
+      // Get user from database with retry logic for transient connection issues
+      const user = await withRetry(() =>
+        prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true, role: true, email: true, name: true },
+        })
+      )
 
       if (!user) {
         return next(new Error('User not found'))
@@ -113,9 +155,11 @@ export function initializeWebSocket(httpServer: HTTPServer) {
     }
 
     // Send current unread count on connection
-    prisma.notification.count({
-      where: { userId, read: false },
-    }).then(count => {
+    withRetry(() =>
+      prisma.notification.count({
+        where: { userId, read: false },
+      })
+    ).then(count => {
       socket.emit('notification:unread-count', count)
     }).catch(error => {
       console.error(`[WebSocket] Error getting unread count for user ${userId}:`, error)
@@ -124,21 +168,25 @@ export function initializeWebSocket(httpServer: HTTPServer) {
     // Handle mark as read
     socket.on('notification:read', async (notificationId: string) => {
       try {
-        await prisma.notification.updateMany({
-          where: {
-            id: notificationId,
-            userId,
-          },
-          data: {
-            read: true,
-            readAt: new Date(),
-          },
-        })
+        await withRetry(() =>
+          prisma.notification.updateMany({
+            where: {
+              id: notificationId,
+              userId,
+            },
+            data: {
+              read: true,
+              readAt: new Date(),
+            },
+          })
+        )
 
         // Update unread count
-        const count = await prisma.notification.count({
-          where: { userId, read: false },
-        })
+        const count = await withRetry(() =>
+          prisma.notification.count({
+            where: { userId, read: false },
+          })
+        )
 
         socket.emit('notification:marked-read', notificationId)
         socket.emit('notification:unread-count', count)
@@ -151,16 +199,18 @@ export function initializeWebSocket(httpServer: HTTPServer) {
     // Handle mark all as read
     socket.on('notification:mark-all-read', async () => {
       try {
-        await prisma.notification.updateMany({
-          where: {
-            userId,
-            read: false,
-          },
-          data: {
-            read: true,
-            readAt: new Date(),
-          },
-        })
+        await withRetry(() =>
+          prisma.notification.updateMany({
+            where: {
+              userId,
+              read: false,
+            },
+            data: {
+              read: true,
+              readAt: new Date(),
+            },
+          })
+        )
 
         socket.emit('notification:all-marked-read')
         socket.emit('notification:unread-count', 0)
@@ -183,12 +233,14 @@ export function initializeWebSocket(httpServer: HTTPServer) {
       io.to(`user:${notification.userId}`).emit('notification:new', notification)
 
       // Update unread count for that user
-      prisma.notification.count({
-        where: {
-          userId: notification.userId,
-          read: false,
-        },
-      }).then(count => {
+      withRetry(() =>
+        prisma.notification.count({
+          where: {
+            userId: notification.userId,
+            read: false,
+          },
+        })
+      ).then(count => {
         io?.to(`user:${notification.userId}`).emit('notification:unread-count', count)
       }).catch(error => {
         console.error('[WebSocket] ❌ Error getting unread count:', error)

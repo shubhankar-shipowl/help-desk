@@ -499,6 +499,176 @@ export async function getFileMetadata(fileHandle: string): Promise<{
 }
 
 /**
+ * Upload call recording to MEGA storage
+ * Downloads from Exotel with authentication and stores in MEGA
+ * @param recordingUrl - Exotel recording URL
+ * @param callSid - Exotel call SID for naming
+ * @param exotelConfig - Exotel API credentials
+ * @returns Upload result with file handle and internal URL
+ */
+export async function uploadCallRecordingToMega(
+  recordingUrl: string,
+  callSid: string,
+  exotelConfig: {
+    apiKey: string;
+    apiToken: string;
+  }
+): Promise<UploadResult | null> {
+  try {
+    const { apiKey, apiToken } = exotelConfig;
+
+    if (!recordingUrl) {
+      console.log('[MEGA] No recording URL provided');
+      return null;
+    }
+
+    console.log(`[MEGA] Downloading recording from Exotel: ${callSid}`);
+
+    // Download recording from Exotel with authentication
+    // Exotel recordings require API auth, so we add credentials to the URL
+    let authenticatedUrl = recordingUrl;
+
+    // Check if URL already has auth
+    if (!recordingUrl.includes('@')) {
+      // Add authentication to URL
+      // Format: https://apiKey:apiToken@recordings.exotel.com/...
+      const urlObj = new URL(recordingUrl);
+      authenticatedUrl = `${urlObj.protocol}//${apiKey}:${apiToken}@${urlObj.host}${urlObj.pathname}${urlObj.search}`;
+    }
+
+    // Import axios dynamically to avoid circular dependencies
+    const axios = (await import('axios')).default;
+
+    const response = await axios.get(authenticatedUrl, {
+      responseType: 'arraybuffer',
+      timeout: 60000, // 60 second timeout for large recordings
+      headers: {
+        'Accept': 'audio/mpeg, audio/wav, audio/mp3, */*',
+      },
+    });
+
+    if (!response.data || response.data.length === 0) {
+      console.error('[MEGA] Empty recording data received');
+      return null;
+    }
+
+    const fileBuffer = Buffer.from(response.data);
+    const contentType = response.headers['content-type'] || 'audio/mpeg';
+
+    // Determine file extension
+    let extension = '.mp3';
+    if (contentType.includes('wav')) {
+      extension = '.wav';
+    } else if (contentType.includes('ogg')) {
+      extension = '.ogg';
+    }
+
+    const fileName = `recording_${callSid}${extension}`;
+
+    console.log(`[MEGA] Recording downloaded: ${(fileBuffer.length / 1024).toFixed(2)} KB`);
+
+    // Upload to MEGA
+    const storage = await initializeMega();
+
+    // Use dedicated folder for call recordings
+    const folderPath = 'help-desk/call-recordings';
+    const targetFolder = await getOrCreateFolder(folderPath);
+
+    // Generate unique filename
+    const timestamp = Date.now();
+    const uniqueFileName = `${callSid}_${timestamp}${extension}`;
+
+    // Upload file to MEGA
+    const fileNode = await new Promise<any>((resolve, reject) => {
+      try {
+        const uploadStream = storage.upload({
+          name: uniqueFileName,
+          size: fileBuffer.length,
+          target: targetFolder,
+        }, fileBuffer);
+
+        uploadStream.on('complete', (file: any) => {
+          resolve(file);
+        });
+
+        uploadStream.on('error', (error: Error) => {
+          if (error.message && error.message.includes('originalCb')) {
+            setTimeout(() => {
+              const uploadedFile = targetFolder.children?.find(
+                (child: any) => child.name === uniqueFileName && !child.directory
+              );
+              if (uploadedFile) {
+                resolve(uploadedFile);
+              } else {
+                reject(error);
+              }
+            }, 1000);
+          } else {
+            reject(error);
+          }
+        });
+
+        // Fallback check
+        setTimeout(() => {
+          const uploadedFile = targetFolder.children?.find(
+            (child: any) => child.name === uniqueFileName && !child.directory
+          );
+          if (uploadedFile) {
+            resolve(uploadedFile);
+          }
+        }, 2000);
+      } catch (error: any) {
+        if (error.message && error.message.includes('originalCb')) {
+          setTimeout(async () => {
+            try {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              const uploadedFile = targetFolder.children?.find(
+                (child: any) => child.name === uniqueFileName && !child.directory
+              );
+              if (uploadedFile) {
+                resolve(uploadedFile);
+              } else {
+                reject(error);
+              }
+            } catch {
+              reject(error);
+            }
+          }, 1000);
+        } else {
+          reject(error);
+        }
+      }
+    });
+
+    // Get file handle
+    const fileHandle = fileNode.nodeId || fileNode.h || fileNode.handle;
+    if (!fileHandle) {
+      throw new Error('Failed to get file handle from MEGA');
+    }
+
+    // Create internal URL for serving files
+    const fileUrl = `/api/storage/mega/${fileHandle}`;
+
+    console.log(`[MEGA] ✅ Call recording uploaded:`);
+    console.log(`   - Call SID: ${callSid}`);
+    console.log(`   - Folder: ${folderPath}`);
+    console.log(`   - Size: ${(fileBuffer.length / 1024).toFixed(2)} KB`);
+    console.log(`   - URL: ${fileUrl}`);
+
+    return {
+      fileHandle,
+      fileUrl,
+      fileName: uniqueFileName,
+      fileSize: fileBuffer.length,
+      mimeType: contentType,
+    };
+  } catch (error: any) {
+    console.error('[MEGA] Error uploading call recording:', error.message);
+    return null;
+  }
+}
+
+/**
  * Delete file from MEGA storage
  * @param fileHandle - MEGA file handle
  */

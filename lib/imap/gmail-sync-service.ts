@@ -231,8 +231,8 @@ export class GmailSyncService {
         port: 993,
         tls: true,
         tlsOptions: { rejectUnauthorized: false },
-        connTimeout: 30000, // Increased from 15s to 30s
-        authTimeout: 20000, // Added auth timeout
+        connTimeout: 90000, // Increased to 90s
+        authTimeout: 60000, // Increased to 60s
       })
 
       const messageIds = new Set<string>()
@@ -304,12 +304,14 @@ export class GmailSyncService {
         port: 993,
         tls: true,
         tlsOptions: { rejectUnauthorized: false },
-        connTimeout: 30000,
-        authTimeout: 20000, // Added auth timeout to prevent auth timeouts
+        connTimeout: 90000, // Increased to 90s
+        authTimeout: 60000, // Increased to 60s
         keepalive: {
-          interval: 10000,
           idleInterval: 300000, // 5 minutes
           forceNoop: true,
+        },
+        debug: (msg: string) => {
+          if (!msg.includes('BODY[')) console.log(`[IMAP RAW] ${msg}`)
         },
       })
 
@@ -367,6 +369,10 @@ export class GmailSyncService {
             })
           }, 30000) // Wait 30 seconds before reconnecting
         }
+      })
+
+      this.imap.once('close', (hadError: boolean) => {
+        console.log(`[Gmail Sync] IMAP connection closed (hadError: ${hadError})`)
       })
 
       this.imap.once('end', () => {

@@ -90,19 +90,27 @@ export async function GET(
     // Determine content type
     const extension = metadata.name.split('.').pop()?.toLowerCase()
     const contentTypeMap: Record<string, string> = {
+      // Images
       'jpg': 'image/jpeg',
       'jpeg': 'image/jpeg',
       'png': 'image/png',
       'gif': 'image/gif',
       'webp': 'image/webp',
       'svg': 'image/svg+xml',
+      // Videos
       'mp4': 'video/mp4',
       'mov': 'video/quicktime',
       'avi': 'video/x-msvideo',
       'webm': 'video/webm',
-      'ogg': 'video/ogg',
       'mpeg': 'video/mpeg',
       'mpg': 'video/mpeg',
+      // Audio (for call recordings)
+      'mp3': 'audio/mpeg',
+      'wav': 'audio/wav',
+      'ogg': 'audio/ogg',
+      'm4a': 'audio/mp4',
+      'aac': 'audio/aac',
+      // Documents
       'pdf': 'application/pdf',
       'doc': 'application/msword',
       'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

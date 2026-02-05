@@ -1,11 +1,11 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { useStore } from '@/lib/store-context'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { useToast } from '@/components/ui/use-toast'
+import { useState, useEffect } from 'react';
+import { useStore } from '@/lib/store-context';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/components/ui/use-toast';
 import {
   Phone,
   Calendar,
@@ -17,228 +17,319 @@ import {
   Loader2,
   Filter,
   X,
-} from 'lucide-react'
-import { cn, maskPhoneNumber } from '@/lib/utils'
-import { Label } from '@/components/ui/label'
+  Play,
+} from 'lucide-react';
+import { cn, maskPhoneNumber } from '@/lib/utils';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { CustomCalendar } from '@/components/ui/custom-calendar'
+} from '@/components/ui/select';
+import { CustomCalendar } from '@/components/ui/custom-calendar';
 
 interface CallLog {
-  id: string
-  ticketId: string | null
-  ticketNumber: string | null
-  ticketSubject: string | null
-  agentName: string
-  customerName: string
-  customerPhone: string
-  agentPhone: string
-  status: string
-  duration: number
-  durationFormatted: string
-  attempts: number
-  remark: string
-  startedAt: string
-  endedAt: string | null
+  id: string;
+  ticketId: string | null;
+  ticketNumber: string | null;
+  ticketSubject: string | null;
+  agentName: string;
+  customerName: string;
+  customerPhone: string;
+  agentPhone: string;
+  status: string;
+  duration: number;
+  durationFormatted: string;
+  attempts: number;
+  remark: string;
+  recordingUrl: string | null;
+  startedAt: string;
+  endedAt: string | null;
 }
 
-export function CallLogsClient() {
-  const { toast } = useToast()
-  const { selectedStoreId } = useStore()
-  const [callLogs, setCallLogs] = useState<CallLog[]>([])
-  const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState<string>('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [dateRangeFilter, setDateRangeFilter] = useState<string>('ALL')
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [datesWithData, setDatesWithData] = useState<string[]>([])
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [total, setTotal] = useState(0)
+interface CallLogsClientProps {
+  userRole?: string | null;
+}
 
-  const fetchCallLogs = async (currentPage?: number) => {
-    if (!selectedStoreId) {
-      toast({
-        title: 'Error',
-        description: 'Please select a store to view call logs',
-        variant: 'destructive',
-      })
-      return
+export function CallLogsClient(props?: CallLogsClientProps) {
+  const initialUserRole = props?.userRole;
+  const { toast } = useToast();
+  const { selectedStoreId } = useStore();
+  const [callLogs, setCallLogs] = useState<CallLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [dateRangeFilter, setDateRangeFilter] = useState<string>('ALL');
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [datesWithData, setDatesWithData] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(
+    initialUserRole || null,
+  );
+  const [isInitialized, setIsInitialized] = useState(!!initialUserRole);
+  const [refreshingStatus, setRefreshingStatus] = useState(false);
+
+  // If userRole is not provided as prop, try to fetch it (for backward compatibility)
+  useEffect(() => {
+    if (initialUserRole) {
+      // userRole already set from prop
+      return;
     }
 
+    const getUserRole = async () => {
+      try {
+        const response = await fetch('/api/auth/session');
+        const session = await response.json();
+        if (session?.user?.role) {
+          setUserRole(session.user.role);
+        }
+      } catch (error) {
+        console.error('Failed to fetch user role:', error);
+      } finally {
+        setIsInitialized(true);
+      }
+    };
+    getUserRole();
+  }, [initialUserRole]);
+
+  const fetchCallLogs = async (currentPage?: number) => {
+    // Agents can always fetch their calls
+    // Admins can fetch all calls (with optional store filter)
+    // No need to check selectedStoreId here anymore
+
     try {
-      setLoading(true)
-      const pageToUse = currentPage !== undefined ? currentPage : page
+      setLoading(true);
+      setError(null);
+      const pageToUse = currentPage !== undefined ? currentPage : page;
       const params = new URLSearchParams({
         page: pageToUse.toString(),
         limit: '50',
-        storeId: selectedStoreId,
-      })
+      });
+
+      // Add storeId only if selected (required for admins, optional for agents)
+      if (selectedStoreId) {
+        params.append('storeId', selectedStoreId);
+      }
 
       if (statusFilter && statusFilter !== 'ALL') {
-        params.append('status', statusFilter)
+        params.append('status', statusFilter);
       }
 
       // Priority: selectedDate > date range > startDate/endDate
       if (selectedDate) {
-        params.append('startDate', selectedDate)
-        params.append('endDate', selectedDate)
+        params.append('startDate', selectedDate);
+        params.append('endDate', selectedDate);
       } else {
         if (startDate) {
-          params.append('startDate', startDate)
+          params.append('startDate', startDate);
         }
 
         if (endDate) {
-          params.append('endDate', endDate)
+          params.append('endDate', endDate);
         }
       }
 
-      const response = await fetch(`/api/call-logs?${params.toString()}`)
-      const data = await response.json()
+      const response = await fetch(`/api/call-logs?${params.toString()}`);
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch call logs')
+        throw new Error(data.error || 'Failed to fetch call logs');
       }
 
-      setCallLogs(data.callLogs || [])
-      setTotalPages(data.pagination?.totalPages || 1)
-      setTotal(data.pagination?.total || 0)
-      
+      setCallLogs(data.callLogs || []);
+      setTotalPages(data.pagination?.totalPages || 1);
+      setTotal(data.pagination?.total || 0);
+
       // Set dates with data from API response
       if (data.datesWithData && Array.isArray(data.datesWithData)) {
-        setDatesWithData(data.datesWithData)
+        setDatesWithData(data.datesWithData);
       } else {
         // Fallback: extract from current call logs
-        const dates = new Set<string>()
+        const dates = new Set<string>();
         if (data.callLogs && Array.isArray(data.callLogs)) {
           data.callLogs.forEach((log: CallLog) => {
             if (log.startedAt) {
-              const dateStr = new Date(log.startedAt).toISOString().split('T')[0]
-              dates.add(dateStr)
+              const dateStr = new Date(log.startedAt)
+                .toISOString()
+                .split('T')[0];
+              dates.add(dateStr);
             }
-          })
+          });
         }
-        setDatesWithData(Array.from(dates))
+        setDatesWithData(Array.from(dates));
       }
     } catch (error: any) {
-      console.error('Error fetching call logs:', error)
+      console.error('Error fetching call logs:', error);
+      const errorMessage = error.message || 'Failed to fetch call logs';
+      setError(errorMessage);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to fetch call logs',
+        description: errorMessage,
         variant: 'destructive',
-      })
+      });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
+
+  // Refresh call statuses from Exotel API
+  const refreshCallStatuses = async () => {
+    try {
+      setRefreshingStatus(true);
+      const response = await fetch('/api/call-logs/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uploadRecordings: true }), // Upload recordings to local storage
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to refresh call statuses');
+      }
+
+      toast({
+        title: 'Status Refreshed',
+        description: `Updated ${data.updated} call(s) from Exotel`,
+      });
+
+      // Refetch call logs to show updated data
+      fetchCallLogs();
+    } catch (error: any) {
+      console.error('Error refreshing call statuses:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to refresh call statuses',
+        variant: 'destructive',
+      });
+    } finally {
+      setRefreshingStatus(false);
+    }
+  };
 
   useEffect(() => {
-    if (selectedStoreId) {
-      fetchCallLogs()
+    // Only fetch after component is initialized with user role
+    if (!isInitialized) {
+      return;
+    }
+
+    // Both agents and admins can fetch their calls
+    // Agents: filtered by their ID
+    // Admins: all calls (optionally filtered by store)
+    if (userRole === 'AGENT' || userRole === 'ADMIN') {
+      fetchCallLogs();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, selectedStoreId])
+  }, [page, selectedStoreId, userRole, isInitialized]);
 
   const handleSearch = () => {
-    setPage(1)
-    fetchCallLogs(1)
-  }
+    setPage(1);
+    fetchCallLogs(1);
+  };
 
   const handleDateRangeChange = (range: string) => {
-    setDateRangeFilter(range)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    let newStartDate = ''
-    let newEndDate = ''
-    
+    setDateRangeFilter(range);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let newStartDate = '';
+    let newEndDate = '';
+
     switch (range) {
       case 'TODAY':
-        newStartDate = today.toISOString().split('T')[0]
-        newEndDate = today.toISOString().split('T')[0]
-        break
+        newStartDate = today.toISOString().split('T')[0];
+        newEndDate = today.toISOString().split('T')[0];
+        break;
       case 'YESTERDAY':
-        const yesterday = new Date(today)
-        yesterday.setDate(yesterday.getDate() - 1)
-        newStartDate = yesterday.toISOString().split('T')[0]
-        newEndDate = yesterday.toISOString().split('T')[0]
-        break
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        newStartDate = yesterday.toISOString().split('T')[0];
+        newEndDate = yesterday.toISOString().split('T')[0];
+        break;
       case 'ALL':
       default:
-        newStartDate = ''
-        newEndDate = ''
-        setSelectedDate(null)
-        break
+        newStartDate = '';
+        newEndDate = '';
+        setSelectedDate(null);
+        break;
     }
-    
-    setStartDate(newStartDate)
-    setEndDate(newEndDate)
+
+    setStartDate(newStartDate);
+    setEndDate(newEndDate);
     if (range !== 'ALL') {
-      setSelectedDate(null)
+      setSelectedDate(null);
     }
-    setPage(1)
+    setPage(1);
     // Use setTimeout to ensure state updates before fetching
     setTimeout(() => {
-      fetchCallLogs(1)
-    }, 100)
-  }
+      fetchCallLogs(1);
+    }, 100);
+  };
 
   const handleClearFilters = () => {
-    setStatusFilter('')
-    setStartDate('')
-    setEndDate('')
-    setSelectedDate(null)
-    setDateRangeFilter('ALL')
-    setPage(1)
-    fetchCallLogs(1)
-  }
+    setStatusFilter('');
+    setStartDate('');
+    setEndDate('');
+    setSelectedDate(null);
+    setDateRangeFilter('ALL');
+    setPage(1);
+    fetchCallLogs(1);
+  };
 
   const handleFilterChange = () => {
-    setPage(1)
-    fetchCallLogs(1)
-  }
+    setPage(1);
+    fetchCallLogs(1);
+  };
 
   // Update dateRangeFilter when dates are manually changed
   useEffect(() => {
     if (selectedDate) {
-      setDateRangeFilter('CUSTOM')
-      return
+      setDateRangeFilter('CUSTOM');
+      return;
     }
-    
+
     if (!startDate && !endDate) {
-      setDateRangeFilter('ALL')
+      setDateRangeFilter('ALL');
     } else {
       // Check if the current dates match any preset range
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const todayStr = today.toISOString().split('T')[0]
-      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayStr = today.toISOString().split('T')[0];
+
       if (startDate === todayStr && endDate === todayStr) {
-        setDateRangeFilter('TODAY')
+        setDateRangeFilter('TODAY');
       } else {
-        const yesterday = new Date(today)
-        yesterday.setDate(yesterday.getDate() - 1)
-        const yesterdayStr = yesterday.toISOString().split('T')[0]
-        
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
         if (startDate === yesterdayStr && endDate === yesterdayStr) {
-          setDateRangeFilter('YESTERDAY')
+          setDateRangeFilter('YESTERDAY');
         } else {
-          setDateRangeFilter('CUSTOM')
+          setDateRangeFilter('CUSTOM');
         }
       }
     }
-  }, [startDate, endDate, selectedDate])
+  }, [startDate, endDate, selectedDate]);
 
-  const hasActiveFilters = statusFilter || startDate || endDate || selectedDate || dateRangeFilter !== 'ALL'
+  const hasActiveFilters =
+    statusFilter ||
+    startDate ||
+    endDate ||
+    selectedDate ||
+    dateRangeFilter !== 'ALL';
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { label: string; className: string; icon: any }> = {
+    const statusConfig: Record<
+      string,
+      { label: string; className: string; icon: any }
+    > = {
       INITIATED: {
         label: 'Initiated',
         className: 'bg-yellow-100 text-yellow-800 border-yellow-300',
@@ -279,31 +370,31 @@ export function CallLogsClient() {
         className: 'bg-gray-100 text-gray-800 border-gray-300',
         icon: XCircle,
       },
-    }
+    };
 
     const config = statusConfig[status] || {
       label: status,
       className: 'bg-gray-100 text-gray-800 border-gray-300',
       icon: AlertCircle,
-    }
+    };
 
-    const Icon = config.icon
+    const Icon = config.icon;
 
     return (
       <span
         className={cn(
           'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border',
-          config.className
+          config.className,
         )}
       >
         <Icon className="w-3 h-3" />
         {config.label}
       </span>
-    )
-  }
+    );
+  };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
+    const date = new Date(dateString);
     return date.toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -311,8 +402,8 @@ export function CallLogsClient() {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-    })
-  }
+    });
+  };
 
   return (
     <Card className="border border-gray-200 shadow-sm">
@@ -329,15 +420,31 @@ export function CallLogsClient() {
               </p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => fetchCallLogs()}
-            disabled={loading}
-          >
-            <RefreshCw className={cn('w-4 h-4 mr-2', loading && 'animate-spin')} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refreshCallStatuses}
+              disabled={refreshingStatus || loading}
+              title="Sync call statuses from Exotel"
+            >
+              <RefreshCw
+                className={cn('w-4 h-4 mr-2', refreshingStatus && 'animate-spin')}
+              />
+              {refreshingStatus ? 'Syncing...' : 'Sync Status'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fetchCallLogs()}
+              disabled={loading}
+            >
+              <RefreshCw
+                className={cn('w-4 h-4 mr-2', loading && 'animate-spin')}
+              />
+              Refresh
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -350,7 +457,9 @@ export function CallLogsClient() {
             </div>
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <Clock className="w-4 h-4" />
-              <span>{total.toLocaleString()} call{total !== 1 ? 's' : ''} found</span>
+              <span>
+                {total.toLocaleString()} call{total !== 1 ? 's' : ''} found
+              </span>
             </div>
           </div>
 
@@ -358,14 +467,17 @@ export function CallLogsClient() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
             {/* Status Filter */}
             <div>
-              <Label htmlFor="status-filter" className="text-xs font-medium text-gray-700 mb-1.5 block">
+              <Label
+                htmlFor="status-filter"
+                className="text-xs font-medium text-gray-700 mb-1.5 block"
+              >
                 Status
               </Label>
-              <Select 
-                value={statusFilter || 'ALL'} 
+              <Select
+                value={statusFilter || 'ALL'}
                 onValueChange={(value) => {
-                  setStatusFilter(value === 'ALL' ? '' : value)
-                  handleFilterChange()
+                  setStatusFilter(value === 'ALL' ? '' : value);
+                  handleFilterChange();
                 }}
               >
                 <SelectTrigger id="status-filter" className="w-full">
@@ -396,12 +508,13 @@ export function CallLogsClient() {
                   variant={dateRangeFilter === 'ALL' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => {
-                    handleDateRangeChange('ALL')
-                    setSelectedDate(null)
+                    handleDateRangeChange('ALL');
+                    setSelectedDate(null);
                   }}
                   className={cn(
                     'flex-1 h-9 text-xs',
-                    dateRangeFilter === 'ALL' && 'bg-blue-600 text-white hover:bg-blue-700'
+                    dateRangeFilter === 'ALL' &&
+                      'bg-blue-600 text-white hover:bg-blue-700',
                   )}
                 >
                   All
@@ -411,27 +524,31 @@ export function CallLogsClient() {
                   variant={dateRangeFilter === 'TODAY' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => {
-                    handleDateRangeChange('TODAY')
-                    setSelectedDate(null)
+                    handleDateRangeChange('TODAY');
+                    setSelectedDate(null);
                   }}
                   className={cn(
                     'flex-1 h-9 text-xs',
-                    dateRangeFilter === 'TODAY' && 'bg-blue-600 text-white hover:bg-blue-700'
+                    dateRangeFilter === 'TODAY' &&
+                      'bg-blue-600 text-white hover:bg-blue-700',
                   )}
                 >
                   Today
                 </Button>
                 <Button
                   type="button"
-                  variant={dateRangeFilter === 'YESTERDAY' ? 'default' : 'outline'}
+                  variant={
+                    dateRangeFilter === 'YESTERDAY' ? 'default' : 'outline'
+                  }
                   size="sm"
                   onClick={() => {
-                    handleDateRangeChange('YESTERDAY')
-                    setSelectedDate(null)
+                    handleDateRangeChange('YESTERDAY');
+                    setSelectedDate(null);
                   }}
                   className={cn(
                     'flex-1 h-9 text-xs',
-                    dateRangeFilter === 'YESTERDAY' && 'bg-blue-600 text-white hover:bg-blue-700'
+                    dateRangeFilter === 'YESTERDAY' &&
+                      'bg-blue-600 text-white hover:bg-blue-700',
                   )}
                 >
                   Yesterday
@@ -441,23 +558,26 @@ export function CallLogsClient() {
 
             {/* Select Date */}
             <div>
-              <Label htmlFor="select-date" className="text-xs font-medium text-gray-700 mb-1.5 block">
+              <Label
+                htmlFor="select-date"
+                className="text-xs font-medium text-gray-700 mb-1.5 block"
+              >
                 Select Date
               </Label>
               <CustomCalendar
                 value={selectedDate || undefined}
                 onChange={(date) => {
-                  setSelectedDate(date || null)
+                  setSelectedDate(date || null);
                   if (date) {
-                    setStartDate('')
-                    setEndDate('')
-                    setDateRangeFilter('CUSTOM')
-                    handleFilterChange()
+                    setStartDate('');
+                    setEndDate('');
+                    setDateRangeFilter('CUSTOM');
+                    handleFilterChange();
                   } else {
-                    setStartDate('')
-                    setEndDate('')
-                    setDateRangeFilter('ALL')
-                    handleFilterChange()
+                    setStartDate('');
+                    setEndDate('');
+                    setDateRangeFilter('ALL');
+                    handleFilterChange();
                   }
                 }}
                 placeholder="Choose a date"
@@ -488,6 +608,20 @@ export function CallLogsClient() {
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
           </div>
+        ) : error ? (
+          <div className="text-center py-12">
+            <XCircle className="w-12 h-12 mx-auto mb-4 text-red-400" />
+            <p className="text-red-600 font-medium mb-2">Failed to load call logs</p>
+            <p className="text-gray-500 text-sm mb-4">{error}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fetchCallLogs()}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Retry
+            </Button>
+          </div>
         ) : callLogs.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <Phone className="w-12 h-12 mx-auto mb-4 text-gray-400" />
@@ -517,9 +651,6 @@ export function CallLogsClient() {
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
                       ATTEMPTS
                     </th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                      REMARK
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -534,30 +665,57 @@ export function CallLogsClient() {
                             <Phone className="w-4 h-4 text-blue-600" />
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900">{log.customerName}</p>
+                            <p className="font-medium text-gray-900">
+                              {log.customerName}
+                            </p>
                             {log.ticketNumber && (
-                              <p className="text-xs text-gray-500">Ticket: {log.ticketNumber}</p>
+                              <p className="text-xs text-gray-500">
+                                Ticket: {log.ticketNumber}
+                              </p>
                             )}
                           </div>
                         </div>
                       </td>
                       <td className="py-4 px-4">
-                        <p className="text-sm text-gray-900">{maskPhoneNumber(log.customerPhone)}</p>
+                        <p className="text-sm text-gray-900">
+                          {maskPhoneNumber(log.customerPhone)}
+                        </p>
                       </td>
                       <td className="py-4 px-4">
-                        <p className="text-sm text-gray-600">{formatDate(log.startedAt)}</p>
+                        <p className="text-sm text-gray-600">
+                          {formatDate(log.startedAt)}
+                        </p>
                       </td>
-                      <td className="py-4 px-4">{getStatusBadge(log.status)}</td>
                       <td className="py-4 px-4">
-                        <p className="text-sm text-gray-900">{log.durationFormatted}</p>
+                        {getStatusBadge(log.status)}
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-2">
+                          {log.duration > 0 && log.recordingUrl ? (
+                            <button
+                              onClick={() => window.open(log.recordingUrl!, '_blank')}
+                              className="flex items-center justify-center w-7 h-7 rounded-full bg-green-100 hover:bg-green-200 text-green-600 transition-colors"
+                              title="Play recording"
+                            >
+                              <Play className="w-3.5 h-3.5 ml-0.5" />
+                            </button>
+                          ) : log.duration > 0 ? (
+                            <div
+                              className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 text-gray-400"
+                              title="Recording not available yet"
+                            >
+                              <Play className="w-3.5 h-3.5 ml-0.5" />
+                            </div>
+                          ) : null}
+                          <p className="text-sm text-gray-900">
+                            {log.durationFormatted}
+                          </p>
+                        </div>
                       </td>
                       <td className="py-4 px-4">
                         <span className="inline-flex items-center px-2 py-1 rounded-md bg-gray-100 text-xs font-medium text-gray-700">
                           {log.attempts}
                         </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <p className="text-sm text-gray-600">{log.remark}</p>
                       </td>
                     </tr>
                   ))}
@@ -595,6 +753,5 @@ export function CallLogsClient() {
         )}
       </CardContent>
     </Card>
-  )
+  );
 }
-

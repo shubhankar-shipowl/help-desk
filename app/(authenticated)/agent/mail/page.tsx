@@ -1,11 +1,17 @@
-'use client'
+'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { useSession } from 'next-auth/react'
-import { useStore } from '@/lib/store-context'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
+import { useStore } from '@/lib/store-context';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -13,113 +19,156 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '@/components/ui/dialog';
 
-import { Textarea } from '@/components/ui/textarea'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Mail, MailOpen, Clock, User, FileText, Loader2, AlertCircle, RefreshCw, Download, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calendar, AtSign, Trash2, CheckSquare, Square, AlertTriangle, Paperclip, Radio, Wifi, WifiOff, Play, Pause, Plus, Send, MessageSquare, Upload, X, Image, Smile } from 'lucide-react'
-import { formatDistanceToNow, format } from 'date-fns'
-import { useToast } from '@/components/ui/use-toast'
-import { cn, maskPhoneNumbersInText } from '@/lib/utils'
+import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Mail,
+  MailOpen,
+  Clock,
+  User,
+  FileText,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  Download,
+  ChevronDown,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
+  AtSign,
+  Trash2,
+  CheckSquare,
+  Square,
+  AlertTriangle,
+  Paperclip,
+  Radio,
+  Wifi,
+  WifiOff,
+  Play,
+  Pause,
+  Plus,
+  Send,
+  MessageSquare,
+  Upload,
+  X,
+  Image,
+  Smile,
+} from 'lucide-react';
+import { formatDistanceToNow, format } from 'date-fns';
+import { useToast } from '@/components/ui/use-toast';
+import { cn, maskPhoneNumbersInText } from '@/lib/utils';
 
 interface EmailAttachment {
-  id: string
-  filename: string
-  mimeType: string
-  size: number
-  fileUrl: string | null
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  fileUrl: string | null;
 }
 
 interface Email {
-  id: string
-  messageId: string
-  threadId?: string | null
-  fromEmail: string
-  fromName: string | null
-  toEmail: string
-  subject: string
-  textContent: string | null
-  htmlContent: string | null
-  headers?: Record<string, any> | null
-  read: boolean
-  readAt: Date | null
-  createdAt: Date
-  ticketId: string | null
-  hasAttachments: boolean
-  EmailAttachment?: EmailAttachment[]
+  id: string;
+  messageId: string;
+  threadId?: string | null;
+  fromEmail: string;
+  fromName: string | null;
+  toEmail: string;
+  subject: string;
+  textContent: string | null;
+  htmlContent: string | null;
+  headers?: Record<string, any> | null;
+  read: boolean;
+  readAt: Date | null;
+  createdAt: Date;
+  ticketId: string | null;
+  hasAttachments: boolean;
+  EmailAttachment?: EmailAttachment[];
   replies?: Array<{
-    id: string
-    subject: string
-    bodyText: string | null
-    bodyHtml: string | null
-    sentAt: Date | null
-  }>
+    id: string;
+    subject: string;
+    bodyText: string | null;
+    bodyHtml: string | null;
+    sentAt: Date | null;
+  }>;
   ticket: {
-    id: string
-    ticketNumber: string
-    subject: string
-    status: string
-  } | null
+    id: string;
+    ticketNumber: string;
+    subject: string;
+    status: string;
+  } | null;
 }
 
 type EmailThread = {
-  threadKey: string
-  latest: Email
-  emails: Email[]
-  emailIds: string[]
-  unread: boolean
-  count: number
-}
+  threadKey: string;
+  latest: Email;
+  emails: Email[];
+  emailIds: string[];
+  unread: boolean;
+  count: number;
+};
 
 function normalizeSubject(subject: string): string {
-  if (!subject) return ''
-  
-  let s = subject.trim()
-  
+  if (!subject) return '';
+
+  let s = subject.trim();
+
   // Strip common reply/forward prefixes repeatedly (Re:, RE:, Fw:, FWD:, Fwd:, FW:)
   // Also handle variations like "Re: " with different spacing
-  let changed = true
+  let changed = true;
   while (changed) {
-    changed = false
+    changed = false;
     // Match Re:, RE:, Fw:, FW:, Fwd:, FWD: at the start (case-insensitive)
     if (/^(re|fw|fwd)\s*:\s*/i.test(s)) {
-      s = s.replace(/^(re|fw|fwd)\s*:\s*/i, '').trim()
-      changed = true
+      s = s.replace(/^(re|fw|fwd)\s*:\s*/i, '').trim();
+      changed = true;
     }
   }
-  
+
   // Remove square brackets and their content (e.g., [External], [SPAM])
-  s = s.replace(/\[[^\]]*\]/g, '').trim()
-  
+  s = s.replace(/\[[^\]]*\]/g, '').trim();
+
   // Normalize whitespace
-  s = s.replace(/\s+/g, ' ').trim()
-  
-  return s.toLowerCase()
+  s = s.replace(/\s+/g, ' ').trim();
+
+  return s.toLowerCase();
 }
 
 function normalizeMessageId(msgId: string): string {
-  if (!msgId) return ''
+  if (!msgId) return '';
   // Remove angle brackets and trim whitespace
-  return msgId.replace(/^<|>$/g, '').trim()
+  return msgId.replace(/^<|>$/g, '').trim();
 }
 
-function extractInReplyToAndReferences(email: Email): { inReplyTo: string | null; references: string[] } {
-  const headers = email.headers || {}
-  let inReplyTo: string | null = null
-  const references: string[] = []
+function extractInReplyToAndReferences(email: Email): {
+  inReplyTo: string | null;
+  references: string[];
+} {
+  const headers = email.headers || {};
+  let inReplyTo: string | null = null;
+  const references: string[] = [];
 
   // Try different header name variations (case-insensitive)
-  const headerKeys = Object.keys(headers).map(k => k.toLowerCase())
-  
+  const headerKeys = Object.keys(headers).map((k) => k.toLowerCase());
+
   // Extract In-Reply-To
   for (const key of ['in-reply-to', 'in_reply_to', 'inreplyto']) {
     if (headerKeys.includes(key)) {
-      const value = headers[Object.keys(headers).find(k => k.toLowerCase() === key)!]
+      const value =
+        headers[Object.keys(headers).find((k) => k.toLowerCase() === key)!];
       if (value) {
-        inReplyTo = normalizeMessageId(String(value))
-        break
+        inReplyTo = normalizeMessageId(String(value));
+        break;
       }
     }
   }
@@ -127,114 +176,115 @@ function extractInReplyToAndReferences(email: Email): { inReplyTo: string | null
   // Extract References
   for (const key of ['references', 'reference']) {
     if (headerKeys.includes(key)) {
-      const value = headers[Object.keys(headers).find(k => k.toLowerCase() === key)!]
+      const value =
+        headers[Object.keys(headers).find((k) => k.toLowerCase() === key)!];
       if (value) {
         // References can contain multiple Message-IDs separated by whitespace
-        const refs = String(value).split(/\s+/).filter(Boolean)
-        refs.forEach(ref => {
-          const normalized = normalizeMessageId(ref)
+        const refs = String(value).split(/\s+/).filter(Boolean);
+        refs.forEach((ref) => {
+          const normalized = normalizeMessageId(ref);
           if (normalized && !references.includes(normalized)) {
-            references.push(normalized)
+            references.push(normalized);
           }
-        })
-        break
+        });
+        break;
       }
     }
   }
 
-  return { inReplyTo, references }
+  return { inReplyTo, references };
 }
 
 function buildEmailThreads(emails: Email[]): EmailThread[] {
-  if (!emails || emails.length === 0) return []
+  if (!emails || emails.length === 0) return [];
 
   // Build Message-ID to Email map for quick lookup
-  const messageIdMap = new Map<string, Email>()
-  emails.forEach(email => {
+  const messageIdMap = new Map<string, Email>();
+  emails.forEach((email) => {
     if (email.messageId) {
-      const normalized = normalizeMessageId(email.messageId)
-      messageIdMap.set(normalized, email)
+      const normalized = normalizeMessageId(email.messageId);
+      messageIdMap.set(normalized, email);
       // Also store with original format in case it's needed
       if (normalized !== email.messageId) {
-        messageIdMap.set(email.messageId, email)
+        messageIdMap.set(email.messageId, email);
       }
     }
-  })
+  });
 
   // Build bidirectional graph: email -> set of related emails
-  const emailGraph = new Map<Email, Set<Email>>()
-  
+  const emailGraph = new Map<Email, Set<Email>>();
+
   // Initialize graph with each email pointing to itself
-  emails.forEach(email => {
-    emailGraph.set(email, new Set([email]))
-  })
+  emails.forEach((email) => {
+    emailGraph.set(email, new Set([email]));
+  });
 
   // Step 1: Build connections using threadId (most reliable)
-  const threadIdMap = new Map<string, Email[]>()
-  emails.forEach(email => {
+  const threadIdMap = new Map<string, Email[]>();
+  emails.forEach((email) => {
     if (email.threadId) {
       if (!threadIdMap.has(email.threadId)) {
-        threadIdMap.set(email.threadId, [])
+        threadIdMap.set(email.threadId, []);
       }
-      threadIdMap.get(email.threadId)!.push(email)
+      threadIdMap.get(email.threadId)!.push(email);
     }
-  })
+  });
 
   // Connect emails with same threadId
   threadIdMap.forEach((threadEmails) => {
-    threadEmails.forEach(email1 => {
-      threadEmails.forEach(email2 => {
+    threadEmails.forEach((email1) => {
+      threadEmails.forEach((email2) => {
         if (email1 !== email2) {
-          emailGraph.get(email1)!.add(email2)
-          emailGraph.get(email2)!.add(email1)
+          emailGraph.get(email1)!.add(email2);
+          emailGraph.get(email2)!.add(email1);
         }
-      })
-    })
-  })
+      });
+    });
+  });
 
   // Step 2: Build connections using In-Reply-To and References headers
   for (const email of emails) {
-    const { inReplyTo, references } = extractInReplyToAndReferences(email)
-    const emailSet = emailGraph.get(email)!
+    const { inReplyTo, references } = extractInReplyToAndReferences(email);
+    const emailSet = emailGraph.get(email)!;
 
     // Follow In-Reply-To chain (find parent)
     if (inReplyTo) {
-      const parentEmail = messageIdMap.get(inReplyTo)
+      const parentEmail = messageIdMap.get(inReplyTo);
       if (parentEmail && parentEmail !== email) {
-        emailSet.add(parentEmail)
+        emailSet.add(parentEmail);
         // Also add this email to parent's set (bidirectional)
-        const parentSet = emailGraph.get(parentEmail)!
-        parentSet.add(email)
+        const parentSet = emailGraph.get(parentEmail)!;
+        parentSet.add(email);
       }
     }
 
     // Follow References chain (find all related emails)
     for (const refMsgId of references) {
-      const refEmail = messageIdMap.get(refMsgId)
+      const refEmail = messageIdMap.get(refMsgId);
       if (refEmail && refEmail !== email) {
-        emailSet.add(refEmail)
+        emailSet.add(refEmail);
         // Also add this email to referenced email's set (bidirectional)
-        const refSet = emailGraph.get(refEmail)!
-        refSet.add(email)
+        const refSet = emailGraph.get(refEmail)!;
+        refSet.add(email);
       }
     }
   }
 
   // Step 3: Build connections using normalized subject + participants (Gmail-style)
   // This is important for emails without proper headers
-  const subjectGroups = new Map<string, Email[]>()
-  
-  emails.forEach(email => {
-    const normalizedSubj = normalizeSubject(email.subject || '')
+  const subjectGroups = new Map<string, Email[]>();
+
+  emails.forEach((email) => {
+    const normalizedSubj = normalizeSubject(email.subject || '');
     if (normalizedSubj && normalizedSubj.length > 0) {
       // Group by normalized subject only (more flexible like Gmail)
       // Participants will be checked later for better matching
       if (!subjectGroups.has(normalizedSubj)) {
-        subjectGroups.set(normalizedSubj, [])
+        subjectGroups.set(normalizedSubj, []);
       }
-      subjectGroups.get(normalizedSubj)!.push(email)
+      subjectGroups.get(normalizedSubj)!.push(email);
     }
-  })
+  });
 
   // Connect emails with same normalized subject
   // Gmail-style: If normalized subject matches and they're close in time, group them
@@ -242,55 +292,61 @@ function buildEmailThreads(emails: Email[]): EmailThread[] {
     if (groupEmails.length > 1) {
       // Sort by date
       const sortedByDate = [...groupEmails].sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      )
-      
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+
       // Connect ALL emails with same normalized subject if they're within 7 days
       // Gmail groups by subject + time proximity, participants help but aren't required
       for (let i = 0; i < sortedByDate.length; i++) {
         for (let j = i + 1; j < sortedByDate.length; j++) {
-          const email1 = sortedByDate[i]
-          const email2 = sortedByDate[j]
-          
+          const email1 = sortedByDate[i];
+          const email2 = sortedByDate[j];
+
           // Check time window (7 days)
-          const timeDiff = Math.abs(new Date(email2.createdAt).getTime() - new Date(email1.createdAt).getTime())
-          const daysDiff = timeDiff / (1000 * 60 * 60 * 24)
-          
-          if (daysDiff > 7) continue // Skip if too far apart
-          
+          const timeDiff = Math.abs(
+            new Date(email2.createdAt).getTime() -
+              new Date(email1.createdAt).getTime(),
+          );
+          const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
+
+          if (daysDiff > 7) continue; // Skip if too far apart
+
           // For same normalized subject within time window, connect them if:
           // 1. They share at least one participant (most common case), OR
           // 2. One is clearly replying to the other (from matches to), OR
           // 3. They're from the same sender (check both email and name)
-          const email1From = (email1.fromEmail || '').toLowerCase()
-          const email1FromName = (email1.fromName || '').toLowerCase()
-          const email1To = (email1.toEmail || '').toLowerCase()
-          const email2From = (email2.fromEmail || '').toLowerCase()
-          const email2FromName = (email2.fromName || '').toLowerCase()
-          const email2To = (email2.toEmail || '').toLowerCase()
-          
+          const email1From = (email1.fromEmail || '').toLowerCase();
+          const email1FromName = (email1.fromName || '').toLowerCase();
+          const email1To = (email1.toEmail || '').toLowerCase();
+          const email2From = (email2.fromEmail || '').toLowerCase();
+          const email2FromName = (email2.fromName || '').toLowerCase();
+          const email2To = (email2.toEmail || '').toLowerCase();
+
           // Check participant overlap (by email or name)
-          const hasOverlap = 
+          const hasOverlap =
             email1From === email2From ||
             email1From === email2To ||
             email1To === email2From ||
             email1To === email2To ||
             (email1FromName && email1FromName === email2FromName) ||
             (email1FromName && email1FromName === email2To) ||
-            (email2FromName && email2FromName === email1To)
-          
+            (email2FromName && email2FromName === email1To);
+
           // Check if it's a reply pattern (one sender matches other's recipient)
-          const isReplyPattern = 
-            email1From === email2To || 
+          const isReplyPattern =
+            email1From === email2To ||
             email2From === email1To ||
             (email1FromName && email1FromName === email2To) ||
-            (email2FromName && email2FromName === email1To)
-          
+            (email2FromName && email2FromName === email1To);
+
           // Check if same sender (by email or name - common in support/helpdesk scenarios)
-          const sameSender = 
+          const sameSender =
             (email1From === email2From && email1From.length > 0) ||
-            (email1FromName && email1FromName === email2FromName && email1FromName.length > 0)
-          
+            (email1FromName &&
+              email1FromName === email2FromName &&
+              email1FromName.length > 0);
+
           // Connect if there's overlap, reply pattern, or same sender
           // This is more aggressive like Gmail
           // CRITICAL: For same normalized subject within 7 days, ALWAYS connect if same sender
@@ -298,31 +354,31 @@ function buildEmailThreads(emails: Email[]): EmailThread[] {
           // Gmail groups these even without proper headers
           if (sameSender) {
             // Same sender + same normalized subject = definitely same thread
-            emailGraph.get(email1)!.add(email2)
-            emailGraph.get(email2)!.add(email1)
+            emailGraph.get(email1)!.add(email2);
+            emailGraph.get(email2)!.add(email1);
           } else if (hasOverlap || isReplyPattern) {
             // Also connect if there's participant overlap or reply pattern
-            emailGraph.get(email1)!.add(email2)
-            emailGraph.get(email2)!.add(email1)
+            emailGraph.get(email1)!.add(email2);
+            emailGraph.get(email2)!.add(email1);
           }
         }
       }
     }
-  })
+  });
 
   // Find connected components (threads) using DFS
-  const visited = new Set<Email>()
-  const threadGroups: Email[][] = []
+  const visited = new Set<Email>();
+  const threadGroups: Email[][] = [];
 
   function dfs(email: Email, component: Email[]) {
-    if (visited.has(email)) return
-    visited.add(email)
-    component.push(email)
+    if (visited.has(email)) return;
+    visited.add(email);
+    component.push(email);
 
-    const relatedEmails = emailGraph.get(email) || new Set()
+    const relatedEmails = emailGraph.get(email) || new Set();
     for (const relatedEmail of relatedEmails) {
       if (!visited.has(relatedEmail)) {
-        dfs(relatedEmail, component)
+        dfs(relatedEmail, component);
       }
     }
   }
@@ -330,60 +386,62 @@ function buildEmailThreads(emails: Email[]): EmailThread[] {
   // Find all connected components
   for (const email of emails) {
     if (!visited.has(email)) {
-      const component: Email[] = []
-      dfs(email, component)
+      const component: Email[] = [];
+      dfs(email, component);
       if (component.length > 0) {
-        threadGroups.push(component)
+        threadGroups.push(component);
       }
     }
   }
 
   // Final fallback: Group remaining unthreaded emails by normalized subject + sender
   // This ensures emails like "subject" and "Re: subject" are grouped even without headers
-  const unthreadedEmails = emails.filter(e => !visited.has(e))
+  const unthreadedEmails = emails.filter((e) => !visited.has(e));
   if (unthreadedEmails.length > 0) {
-    const fallbackGroups = new Map<string, Email[]>()
-    
+    const fallbackGroups = new Map<string, Email[]>();
+
     for (const email of unthreadedEmails) {
-      const normalizedSubj = normalizeSubject(email.subject || '')
-      const fromEmail = (email.fromEmail || '').toLowerCase()
-      const fromName = (email.fromName || '').toLowerCase()
-      
+      const normalizedSubj = normalizeSubject(email.subject || '');
+      const fromEmail = (email.fromEmail || '').toLowerCase();
+      const fromName = (email.fromName || '').toLowerCase();
+
       if (normalizedSubj) {
         // Create key from normalized subject + sender (email or name)
         // This groups "subject" and "Re: subject" from same sender
-        const sender = fromEmail || fromName
-        const key = `${normalizedSubj}|${sender}`
-        
+        const sender = fromEmail || fromName;
+        const key = `${normalizedSubj}|${sender}`;
+
         if (!fallbackGroups.has(key)) {
-          fallbackGroups.set(key, [])
+          fallbackGroups.set(key, []);
         }
-        fallbackGroups.get(key)!.push(email)
+        fallbackGroups.get(key)!.push(email);
       } else {
         // Emails without subject go into their own thread
-        fallbackGroups.set(`no-subject-${email.id}`, [email])
+        fallbackGroups.set(`no-subject-${email.id}`, [email]);
       }
     }
-    
+
     // Add all fallback groups (including single emails)
     fallbackGroups.forEach((group) => {
-      threadGroups.push(group)
-    })
+      threadGroups.push(group);
+    });
   }
 
   // Build final thread objects
-  const threads: EmailThread[] = []
+  const threads: EmailThread[] = [];
   threadGroups.forEach((threadEmails) => {
     const sorted = [...threadEmails].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    )
-    const latest = sorted[0]
-    const emailIds = sorted.map((e) => e.id)
-    const unread = sorted.some((e) => !e.read)
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+    const latest = sorted[0];
+    const emailIds = sorted.map((e) => e.id);
+    const unread = sorted.some((e) => !e.read);
 
     // Generate a stable thread key
     // Prefer threadId from database, otherwise use first email's messageId
-    const threadKey = latest.threadId || latest.messageId || `thread-${sorted[0].id}`
+    const threadKey =
+      latest.threadId || latest.messageId || `thread-${sorted[0].id}`;
 
     threads.push({
       threadKey,
@@ -392,85 +450,117 @@ function buildEmailThreads(emails: Email[]): EmailThread[] {
       emailIds,
       unread,
       count: sorted.length,
-    })
-  })
+    });
+  });
 
   // Sort threads by latest message time (newest first)
-  threads.sort((a, b) => new Date(b.latest.createdAt).getTime() - new Date(a.latest.createdAt).getTime())
-  return threads
+  threads.sort(
+    (a, b) =>
+      new Date(b.latest.createdAt).getTime() -
+      new Date(a.latest.createdAt).getTime(),
+  );
+  return threads;
 }
 
 // Helper function to format file size
 function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 Bytes'
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 // Component to render email HTML content with clickable images
-function EmailContent({ 
-  htmlContent, 
-  attachments, 
+function EmailContent({
+  htmlContent,
+  attachments,
   emailId,
-  onProcessed 
-}: { 
-  htmlContent: string
-  attachments: EmailAttachment[]
-  emailId?: string
-  onProcessed?: (processedHtml: string, newAttachments: EmailAttachment[]) => void
+  onProcessed,
+}: {
+  htmlContent: string;
+  attachments: EmailAttachment[];
+  emailId?: string;
+  onProcessed?: (
+    processedHtml: string,
+    newAttachments: EmailAttachment[],
+  ) => void;
 }) {
-  const contentRef = useRef<HTMLDivElement>(null)
-  const [processedHtml, setProcessedHtml] = useState<string | null>(null)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const processedOnceRef = useRef<Set<string>>(new Set())
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [processedHtml, setProcessedHtml] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const processedOnceRef = useRef<Set<string>>(new Set());
+  const onProcessedRef = useRef(onProcessed);
+
+  // Update ref when callback changes (without triggering useEffect)
+  useEffect(() => {
+    onProcessedRef.current = onProcessed;
+  }, [onProcessed]);
 
   // Check if HTML has data URIs and process them
   useEffect(() => {
     if (!htmlContent || !emailId) {
-      setProcessedHtml(null)
-      return
+      setProcessedHtml(null);
+      return;
     }
 
     // Check if HTML already has Mega URLs (already processed)
-    const hasMegaUrls = htmlContent.includes('/api/storage/mega/')
+    const hasMegaUrls = htmlContent.includes('/api/storage/mega/');
     if (hasMegaUrls) {
       // Already processed, use as-is - images should be visible
-      setProcessedHtml(null) // Use original HTML
-      return
+      setProcessedHtml(null); // Use original HTML
+      return;
     }
-    
+
     // Also check if we have image attachments but HTML doesn't reference them
     // This might mean images were processed but HTML wasn't updated
-    const hasImageAttachments = attachments.some(att => 
-      att.mimeType?.startsWith('image/') || att.mimeType?.startsWith('video/')
-    )
-    if (hasImageAttachments && !hasMegaUrls && !htmlContent.includes('cid:') && !htmlContent.includes('data:')) {
+    const hasImageAttachments = attachments.some(
+      (att) =>
+        att.mimeType?.startsWith('image/') ||
+        att.mimeType?.startsWith('video/'),
+    );
+    if (
+      hasImageAttachments &&
+      !hasMegaUrls &&
+      !htmlContent.includes('cid:') &&
+      !htmlContent.includes('data:')
+    ) {
       // Images exist but HTML doesn't reference them - might need to trigger processing
       // But if there are no CID or data URIs, images might be separate attachments
       // In this case, we'll just use the HTML as-is
-      setProcessedHtml(null)
-      return
+      setProcessedHtml(null);
+      return;
     }
 
     // Check for data URIs or CID references that need processing
-    const hasDataUris = htmlContent.includes('data:image/') || htmlContent.includes('data:video/')
-    const hasCidReferences = htmlContent.includes('cid:')
-    
+    const hasDataUris =
+      htmlContent.includes('data:image/') ||
+      htmlContent.includes('data:video/');
+    const hasCidReferences = htmlContent.includes('cid:');
+
     // If no inline images/videos to process, use HTML as-is
     if (!hasDataUris && !hasCidReferences) {
-      setProcessedHtml(null)
-      return
+      setProcessedHtml(null);
+      return;
+    }
+
+    // If we have data URIs, render them directly (don't try to process to Mega)
+    // Data URIs will display inline and can be clicked to open
+    if (hasDataUris && !hasCidReferences) {
+      console.log(
+        '[EmailContent] Email has data URIs, rendering directly without processing',
+      );
+      setProcessedHtml(null); // Use original HTML with data URIs
+      return;
     }
 
     // Guard: only process once per emailId to prevent spam re-renders from retriggering fetch.
-    if (processedOnceRef.current.has(emailId)) return
-    processedOnceRef.current.add(emailId)
+    if (processedOnceRef.current.has(emailId)) return;
+    processedOnceRef.current.add(emailId);
 
-    setIsProcessing(true)
+    setIsProcessing(true);
 
-    const ac = new AbortController()
+    const ac = new AbortController();
 
     fetch(`/api/emails/${emailId}/process-images`, {
       method: 'POST',
@@ -479,38 +569,50 @@ function EmailContent({
     })
       .then(async (res) => {
         // Always try to parse JSON, even for error responses
-        let data
+        let data;
         try {
-          data = await res.json()
+          data = await res.json();
         } catch (parseError) {
           // If JSON parsing fails, create a basic error response
-          throw new Error(`Failed to parse response: ${res.status} ${res.statusText}`)
+          throw new Error(
+            `Failed to parse response: ${res.status} ${res.statusText}`,
+          );
         }
 
         // Check if response indicates an error
         if (!res.ok) {
-          const errorMsg = data?.error || data?.message || `HTTP ${res.status}: ${res.statusText}`
-          throw new Error(errorMsg)
+          const errorMsg =
+            data?.error ||
+            data?.message ||
+            `HTTP ${res.status}: ${res.statusText}`;
+          throw new Error(errorMsg);
         }
 
-        return data
+        return data;
       })
-      .then(data => {
+      .then((data) => {
         console.log('[EmailContent] Processing response:', {
           success: data?.success,
           hasProcessedHtml: !!data?.processedHtml,
           processedHtmlLength: data?.processedHtml?.length,
           uploadedImagesCount: data?.uploadedImages?.length,
           message: data?.message,
-        })
+        });
 
         // Always update HTML if processedHtml is provided
-        if (data?.processedHtml !== null && data?.processedHtml !== undefined && data.processedHtml !== '') {
-          console.log('[EmailContent] Setting processed HTML, length:', data.processedHtml.length)
-          setProcessedHtml(data.processedHtml)
+        if (
+          data?.processedHtml !== null &&
+          data?.processedHtml !== undefined &&
+          data.processedHtml !== ''
+        ) {
+          console.log(
+            '[EmailContent] Setting processed HTML, length:',
+            data.processedHtml.length,
+          );
+          setProcessedHtml(data.processedHtml);
 
           // Notify parent component about processed images (so list updates and stops future calls)
-          if (onProcessed && Array.isArray(data.uploadedImages)) {
+          if (onProcessedRef.current && Array.isArray(data.uploadedImages)) {
             const newAttachments: EmailAttachment[] = data.uploadedImages
               .filter((img: any) => img && img.fileUrl) // Only include valid attachments
               .map((img: any) => ({
@@ -519,213 +621,504 @@ function EmailContent({
                 mimeType: img.mimeType || 'image/png',
                 size: img.size || 0,
                 fileUrl: img.fileUrl,
-              }))
-            console.log('[EmailContent] Notifying parent with', newAttachments.length, 'new attachments')
-            onProcessed(data.processedHtml, newAttachments)
+              }));
+            console.log(
+              '[EmailContent] Notifying parent with',
+              newAttachments.length,
+              'new attachments',
+            );
+            onProcessedRef.current(data.processedHtml, newAttachments);
           }
         } else if (data?.success === false) {
           // If processing failed but we have a message, log it
-          console.warn('[EmailContent] Image processing failed:', data.error || data.message)
+          console.warn(
+            '[EmailContent] Image processing failed:',
+            data.error || data.message,
+          );
           // Don't retry if it's a known issue (like CID references that can't be resolved)
-          if (data.message?.includes('CID references') || data.error?.includes('CID')) {
+          if (
+            data.message?.includes('CID references') ||
+            data.error?.includes('CID')
+          ) {
             // Keep the guard so we don't retry
-            console.log('[EmailContent] CID references cannot be resolved, skipping retry')
+            console.log(
+              '[EmailContent] CID references cannot be resolved, skipping retry',
+            );
           } else {
             // Allow retry for other errors
-            processedOnceRef.current.delete(emailId)
+            processedOnceRef.current.delete(emailId);
           }
         } else if (data?.success === true) {
           // Success but no processedHtml - use original HTML
-          console.log('[EmailContent] Processing completed:', data.message)
+          console.log('[EmailContent] Processing completed:', data.message);
           // Even if no processedHtml, make sure we're using the original HTML
           if (!data.processedHtml && htmlContent) {
-            setProcessedHtml(null) // Explicitly set to null to use original
+            setProcessedHtml(null); // Explicitly set to null to use original
           }
         }
       })
-      .catch(error => {
+      .catch((error) => {
         if (error?.name !== 'AbortError') {
-          console.error('[EmailContent] Error processing inline images:', error)
+          console.error(
+            '[EmailContent] Error processing inline images:',
+            error,
+          );
           console.error('[EmailContent] Error details:', {
             name: error?.name,
             message: error?.message,
             stack: error?.stack,
-          })
+          });
         }
         // Allow retry if it failed (unless it was aborted)
         if (error?.name !== 'AbortError') {
-          processedOnceRef.current.delete(emailId)
+          processedOnceRef.current.delete(emailId);
         }
       })
       .finally(() => {
-        setIsProcessing(false)
-      })
+        setIsProcessing(false);
+      });
 
-    return () => ac.abort()
-  }, [htmlContent, emailId, onProcessed])
+    return () => ac.abort();
+  }, [htmlContent, emailId]);
 
   useEffect(() => {
     // Process images and videos in the email content to make them clickable
-    const emailContentDiv = contentRef.current
-    if (!emailContentDiv) return
+    const emailContentDiv = contentRef.current;
+    if (!emailContentDiv) return;
 
-    const cleanupFunctions: (() => void)[] = []
+    const cleanupFunctions: (() => void)[] = [];
 
     // Wait a bit for the HTML to be rendered
     const timeoutId = setTimeout(() => {
       // Find all images and videos in the email content
-      const images = emailContentDiv.querySelectorAll('img')
-      const videos = emailContentDiv.querySelectorAll('video')
+      const images = emailContentDiv.querySelectorAll('img');
+      const videos = emailContentDiv.querySelectorAll('video');
 
-      console.log('[EmailContent] Found', images.length, 'images and', videos.length, 'videos in rendered HTML')
-      
+      console.log(
+        '[EmailContent] Found',
+        images.length,
+        'images and',
+        videos.length,
+        'videos in rendered HTML',
+      );
+
       // Log image sources for debugging
       images.forEach((img, idx) => {
-        const src = img.getAttribute('src')
-        console.log(`[EmailContent] Image ${idx + 1} src:`, src?.substring(0, 100) + (src && src.length > 100 ? '...' : ''))
-      })
+        const src = img.getAttribute('src');
+        const alt = img.getAttribute('alt');
+        const style = img.getAttribute('style');
+        console.log(`[EmailContent] Image ${idx + 1}:`, {
+          srcLength: src?.length || 0,
+          srcStart: src?.substring(0, 80),
+          alt,
+          computedWidth: img.clientWidth,
+          computedHeight: img.clientHeight,
+          displayStyle: window.getComputedStyle(img).display,
+        });
+      });
 
-      // Process images
+      // Process images - style them exactly like Gmail
       images.forEach((img) => {
-      // Make images clickable to open in new window
-      // Display inline like Gmail (not block)
-      img.style.cursor = 'pointer'
-      img.style.maxWidth = '100%'
-      img.style.height = 'auto'
-      img.style.borderRadius = '4px'
-      img.style.margin = '8px 0'
-      img.style.display = 'inline-block'
-      img.style.verticalAlign = 'middle'
-      
-      // Add click handler to open image in new window
-      const handleClick = (e: Event) => {
-        e.preventDefault()
-        e.stopPropagation()
-        
-        const src = img.getAttribute('src')
-        if (src) {
-          // If it's a data URI, create a blob URL
-          if (src.startsWith('data:')) {
-            try {
-              const byteString = atob(src.split(',')[1])
-              const mimeString = src.split(',')[0].split(':')[1].split(';')[0]
-              const ab = new ArrayBuffer(byteString.length)
-              const ia = new Uint8Array(ab)
-              for (let i = 0; i < byteString.length; i++) {
-                ia[i] = byteString.charCodeAt(i)
-              }
-              const blob = new Blob([ab], { type: mimeString })
-              const blobUrl = URL.createObjectURL(blob)
-              window.open(blobUrl, '_blank', 'noopener,noreferrer')
-              // Clean up blob URL after a delay
-              setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
-            } catch (error) {
-              console.error('Error opening image:', error)
-              // Fallback: try to open the data URI directly
-              window.open(src, '_blank', 'noopener,noreferrer')
-            }
-          } else {
-            // Regular URL - open directly
-            window.open(src, '_blank', 'noopener,noreferrer')
-          }
-        }
-      }
-      
-      img.addEventListener('click', handleClick)
-      
-      // Add hover effect
-      const handleMouseEnter = () => {
-        img.style.opacity = '0.9'
-        img.style.transition = 'opacity 0.2s'
-      }
-      const handleMouseLeave = () => {
-        img.style.opacity = '1'
-      }
-      
-      img.addEventListener('mouseenter', handleMouseEnter)
-      img.addEventListener('mouseleave', handleMouseLeave)
-      
-      // Store cleanup function
-      cleanupFunctions.push(() => {
-        img.removeEventListener('click', handleClick)
-        img.removeEventListener('mouseenter', handleMouseEnter)
-        img.removeEventListener('mouseleave', handleMouseLeave)
-      })
-    })
+        // Make images clickable to open in new window
+        // Display inline like Gmail (not block)
+        img.style.cursor = 'pointer';
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+        img.style.borderRadius = '4px';
+        img.style.margin = '8px 0';
+        img.style.display = 'inline-block';
+        img.style.verticalAlign = 'middle';
 
-    // Process videos (make them clickable and styled)
-    // Display inline like Gmail (not block)
-    videos.forEach((video) => {
-      video.style.cursor = 'pointer'
-      video.style.maxWidth = '100%'
-      video.style.height = 'auto'
-      video.style.borderRadius = '4px'
-      video.style.margin = '8px 0'
-      video.style.display = 'inline-block'
-      video.style.verticalAlign = 'middle'
-      
-      // Add click handler to open video in new window
-      const handleClick = (e: Event) => {
-        e.preventDefault()
-        e.stopPropagation()
-        
-        const src = video.getAttribute('src')
-        if (src) {
-          if (src.startsWith('data:')) {
-            try {
-              const byteString = atob(src.split(',')[1])
-              const mimeString = src.split(',')[0].split(':')[1].split(';')[0]
-              const ab = new ArrayBuffer(byteString.length)
-              const ia = new Uint8Array(ab)
-              for (let i = 0; i < byteString.length; i++) {
-                ia[i] = byteString.charCodeAt(i)
-              }
-              const blob = new Blob([ab], { type: mimeString })
-              const blobUrl = URL.createObjectURL(blob)
-              window.open(blobUrl, '_blank', 'noopener,noreferrer')
-              setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
-            } catch (error) {
-              console.error('Error opening video:', error)
-              window.open(src, '_blank', 'noopener,noreferrer')
-            }
-          } else {
-            window.open(src, '_blank', 'noopener,noreferrer')
+        // CRITICAL: Ensure data URIs render properly
+        // Remove any CSS that might hide images
+        img.style.visibility = 'visible';
+        img.style.opacity = '1';
+
+        // Ensure image loads even if src is a data URI
+        const src = img.getAttribute('src');
+        if (src && src.startsWith('data:')) {
+          // Data URI - ensure it's set correctly
+          if (img.src !== src) {
+            img.src = src;
           }
         }
-      }
-      
-      video.addEventListener('click', handleClick)
-      
+
+        // Add click handler to open image in new window
+        const handleClick = (e: Event) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const src = img.getAttribute('src');
+          if (src) {
+            // If it's a data URI, create a blob URL
+            if (src.startsWith('data:')) {
+              try {
+                const byteString = atob(src.split(',')[1]);
+                const mimeString = src
+                  .split(',')[0]
+                  .split(':')[1]
+                  .split(';')[0];
+                const ab = new ArrayBuffer(byteString.length);
+                const ia = new Uint8Array(ab);
+                for (let i = 0; i < byteString.length; i++) {
+                  ia[i] = byteString.charCodeAt(i);
+                }
+                const blob = new Blob([ab], { type: mimeString });
+                const blobUrl = URL.createObjectURL(blob);
+                window.open(blobUrl, '_blank', 'noopener,noreferrer');
+                // Clean up blob URL after a delay
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+              } catch (error) {
+                console.error('Error opening image:', error);
+                // Fallback: try to open the data URI directly
+                window.open(src, '_blank', 'noopener,noreferrer');
+              }
+            } else {
+              // Regular URL - open directly
+              window.open(src, '_blank', 'noopener,noreferrer');
+            }
+          }
+        };
+
+        img.addEventListener('click', handleClick);
+
+        // Add hover effect
+        const handleMouseEnter = () => {
+          img.style.opacity = '0.9';
+          img.style.transition = 'opacity 0.2s';
+        };
+        const handleMouseLeave = () => {
+          img.style.opacity = '1';
+        };
+
+        img.addEventListener('mouseenter', handleMouseEnter);
+        img.addEventListener('mouseleave', handleMouseLeave);
+
+        // Store cleanup function
         cleanupFunctions.push(() => {
-          video.removeEventListener('click', handleClick)
-        })
-      })
-    }, 100) // Small delay to ensure HTML is rendered
+          img.removeEventListener('click', handleClick);
+          img.removeEventListener('mouseenter', handleMouseEnter);
+          img.removeEventListener('mouseleave', handleMouseLeave);
+        });
+      });
+
+      // Process videos (make them clickable and styled)
+      // Display inline like Gmail (not block)
+      videos.forEach((video) => {
+        video.style.cursor = 'pointer';
+        video.style.maxWidth = '100%';
+        video.style.height = 'auto';
+        video.style.borderRadius = '4px';
+        video.style.margin = '8px 0';
+        video.style.display = 'inline-block';
+        video.style.verticalAlign = 'middle';
+
+        // Add click handler to open video in new window
+        const handleClick = (e: Event) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const src = video.getAttribute('src');
+          if (src) {
+            if (src.startsWith('data:')) {
+              try {
+                const byteString = atob(src.split(',')[1]);
+                const mimeString = src
+                  .split(',')[0]
+                  .split(':')[1]
+                  .split(';')[0];
+                const ab = new ArrayBuffer(byteString.length);
+                const ia = new Uint8Array(ab);
+                for (let i = 0; i < byteString.length; i++) {
+                  ia[i] = byteString.charCodeAt(i);
+                }
+                const blob = new Blob([ab], { type: mimeString });
+                const blobUrl = URL.createObjectURL(blob);
+                window.open(blobUrl, '_blank', 'noopener,noreferrer');
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+              } catch (error) {
+                console.error('Error opening video:', error);
+                window.open(src, '_blank', 'noopener,noreferrer');
+              }
+            } else {
+              window.open(src, '_blank', 'noopener,noreferrer');
+            }
+          }
+        };
+
+        video.addEventListener('click', handleClick);
+
+        cleanupFunctions.push(() => {
+          video.removeEventListener('click', handleClick);
+        });
+      });
+    }, 100); // Small delay to ensure HTML is rendered
 
     // Cleanup function for useEffect
     return () => {
-      clearTimeout(timeoutId)
-      cleanupFunctions.forEach(cleanup => cleanup())
-    }
-  }, [processedHtml, htmlContent])
+      clearTimeout(timeoutId);
+      cleanupFunctions.forEach((cleanup) => cleanup());
+    };
+  }, [processedHtml, htmlContent]);
 
-  const displayHtml = processedHtml !== null ? processedHtml : htmlContent
+  const displayHtml = processedHtml !== null ? processedHtml : htmlContent;
+
+  // Fix broken img tags with data URIs - extract and rebuild them properly
+  const fixDataUriImages = (html: string) => {
+    if (
+      !html ||
+      (!html.includes('data:image/') && !html.includes('data:video/'))
+    ) {
+      return html;
+    }
+
+    console.log('[EmailContent] Attempting to fix data URI images in HTML...');
+
+    try {
+      let fixedHtml = html;
+
+      // STEP 1: Remove all broken/incomplete img tags that have data URIs
+      // Pattern: <img followed by src=" followed by data: but no closing >
+      // These are malformed tags like: <img src="data:image/...data...
+      console.log('[EmailContent] Step 1: Removing broken img tags...');
+
+      // Find and remove broken img tags by looking for <img...src="data: patterns
+      // We'll replace them with just the data URI so we can wrap it properly in step 2
+      let brokenTagsRemoved = 0;
+      let currentHtml = fixedHtml;
+
+      // Look for <img anything src="data:...more data... (without closing >)
+      const brokenImgPattern =
+        /<img\s+[^>]*?src=["']?(data:[^"'<]*?)(?=\s|<|$)/g;
+      let brokenMatch;
+
+      // We need to do this manually to avoid regex issues with long data URIs
+      // Look for all occurrences of <img followed by src=" followed by data:
+      const imgStartPos = currentHtml.indexOf('<img');
+      if (imgStartPos !== -1) {
+        let searchPos = imgStartPos;
+        while (searchPos !== -1) {
+          const imgPos = currentHtml.indexOf('<img', searchPos);
+          if (imgPos === -1) break;
+
+          const srcPos = currentHtml.indexOf('src=', imgPos);
+          if (srcPos === -1 || srcPos > imgPos + 200) break; // reasonable distance
+
+          // Check if this src contains a data URI
+          const afterSrc = currentHtml.substring(srcPos + 4, srcPos + 30);
+          if (
+            afterSrc.includes('data:image') ||
+            afterSrc.includes('data:video')
+          ) {
+            // This is a broken img tag with data URI
+            // Find the end - look for the next <, or end of string
+            const nextTagPos = currentHtml.indexOf('<', imgPos + 1);
+            const endPos = nextTagPos !== -1 ? nextTagPos : currentHtml.length;
+
+            // Extract just the data URI part
+            const tagContent = currentHtml.substring(imgPos, endPos);
+            const dataUriStartIdx = tagContent.indexOf('data:');
+            if (dataUriStartIdx !== -1) {
+              // Remove the broken tag, keep the data URI for step 2
+              currentHtml =
+                currentHtml.substring(0, imgPos) +
+                tagContent.substring(dataUriStartIdx) +
+                currentHtml.substring(endPos);
+              brokenTagsRemoved++;
+              searchPos = imgPos;
+            } else {
+              searchPos = imgPos + 1;
+            }
+          } else {
+            searchPos = imgPos + 1;
+          }
+        }
+      }
+
+      console.log(
+        '[EmailContent] Removed',
+        brokenTagsRemoved,
+        'broken img tags',
+      );
+      fixedHtml = currentHtml;
+
+      // STEP 2: Find all complete data URIs and wrap them in proper img tags
+      console.log('[EmailContent] Step 2: Wrapping data URIs...');
+
+      const dataUriPattern =
+        /data:(image|video)\/([a-zA-Z0-9\-+.]+);base64,([A-Za-z0-9+/=]{100,})/g;
+
+      const matches: Array<{ full: string; type: string; mimeType: string }> =
+        [];
+      let match;
+
+      while ((match = dataUriPattern.exec(fixedHtml)) !== null) {
+        matches.push({
+          full: match[0],
+          type: match[1],
+          mimeType: match[2],
+        });
+      }
+
+      console.log('[EmailContent] Found', matches.length, 'data URIs to wrap');
+
+      if (matches.length === 0) {
+        return fixedHtml;
+      }
+
+      // Wrap each data URI
+      matches.forEach((item, idx) => {
+        const dataUri = item.full;
+
+        // Skip if already wrapped
+        if (fixedHtml.includes(`<img src="${dataUri}"`)) {
+          console.log(`[EmailContent] URI ${idx + 1} already wrapped`);
+          return;
+        }
+
+        // Create proper img tag - let CSS handle styling
+        const properImgTag = `<img src="${dataUri}" alt="Embedded image" />`;
+
+        console.log(`[EmailContent] Wrapping URI ${idx + 1}...`);
+        fixedHtml = fixedHtml.split(dataUri).join(properImgTag);
+      });
+
+      console.log('[EmailContent] Complete. Final length:', fixedHtml.length);
+      return fixedHtml;
+    } catch (error) {
+      console.error('[EmailContent] Error:', error);
+      return html;
+    }
+  };
+
+  // Apply fix to display HTML if it has any data URIs (even if some appear to be in img tags)
+  // This ensures all data URIs are properly wrapped, not just broken ones
+  let fixedDisplayHtml =
+    displayHtml &&
+    (displayHtml.includes('data:image/') || displayHtml.includes('data:video/'))
+      ? fixDataUriImages(displayHtml)
+      : displayHtml;
+
+  // Remove "[Content truncated]" text and broken images from display
+  if (fixedDisplayHtml) {
+    fixedDisplayHtml = fixedDisplayHtml.replace(/\[Content truncated\]/gi, '');
+
+    // Remove all img tags with data: URIs that are truncated or invalid
+    // A valid base64 image should have substantial data and end properly
+    fixedDisplayHtml = fixedDisplayHtml.replace(
+      /<img[^>]*src=["']?(data:image\/[^;]+;base64,[^"']*?)["']?[^>]*\/?>/gi,
+      (match, dataUri) => {
+        if (!dataUri) return '';
+
+        // Check if the base64 data is valid (minimum length and proper ending)
+        const base64Part = dataUri.split(',')[1] || '';
+
+        // Base64 should be at least 100 chars for a minimal image and divisible by 4
+        // Also check it doesn't end abruptly (truncated data often ends mid-character)
+        const isValidLength = base64Part.length >= 100;
+        const hasValidEnding = base64Part.length % 4 === 0 ||
+                               base64Part.endsWith('=') ||
+                               base64Part.endsWith('==');
+        const isNotTruncated = !dataUri.endsWith('...') &&
+                               base64Part.length > 0 &&
+                               /^[A-Za-z0-9+/=]+$/.test(base64Part);
+
+        if (isValidLength && hasValidEnding && isNotTruncated) {
+          return match; // Keep valid images
+        }
+
+        console.log('[EmailContent] Removing truncated/invalid data URI image');
+        return ''; // Remove truncated/invalid images
+      }
+    );
+
+    // Remove img tags with "Embedded image" alt text that failed to load
+    fixedDisplayHtml = fixedDisplayHtml.replace(
+      /<img[^>]*alt=["']?Embedded image["']?[^>]*\/?>/gi,
+      (match) => {
+        // Only keep if it has a valid http/https/api URL (not data: since those were handled above)
+        if (/src=["']?(https?:\/\/|\/api\/)/i.test(match)) {
+          return match;
+        }
+        return ''; // Remove broken embedded images
+      }
+    );
+
+    // Remove any remaining img tags with empty or missing src
+    fixedDisplayHtml = fixedDisplayHtml.replace(
+      /<img[^>]*\/?>/gi,
+      (match) => {
+        // Keep images with valid src (http, https, /api/)
+        if (/src=["']?(https?:\/\/|\/api\/)[^"']+["']?/i.test(match)) {
+          return match;
+        }
+        // Keep data: images only if they have substantial content (already validated above)
+        if (/src=["']?data:image\/[^;]+;base64,[A-Za-z0-9+/=]{100,}["']?/i.test(match)) {
+          return match;
+        }
+        return ''; // Remove invalid images
+      }
+    );
+  }
 
   // Debug logging
   useEffect(() => {
-    if (displayHtml) {
-      const hasImages = displayHtml.includes('<img') || displayHtml.includes('<video')
-      const hasDataUris = displayHtml.includes('data:image/') || displayHtml.includes('data:video/')
-      const hasMegaUrls = displayHtml.includes('/api/storage/mega/')
+    if (fixedDisplayHtml) {
+      const hasImages =
+        fixedDisplayHtml.includes('<img') ||
+        fixedDisplayHtml.includes('<video');
+      const hasDataUris =
+        fixedDisplayHtml.includes('data:image/') ||
+        fixedDisplayHtml.includes('data:video/');
+      const hasMegaUrls = fixedDisplayHtml.includes('/api/storage/mega/');
+
+      // Count actual img tags
+      const imgTagRegex = /<img[^>]*>/gi;
+      const imgTags = fixedDisplayHtml.match(imgTagRegex) || [];
+
       console.log('[EmailContent] Display HTML state:', {
         hasImages,
+        imgTagCount: imgTags.length,
         hasDataUris,
         hasMegaUrls,
         usingProcessed: processedHtml !== null,
-        htmlLength: displayHtml.length,
-      })
+        htmlLength: fixedDisplayHtml.length,
+      });
+      // Log first image tag if found
+      if (imgTags.length > 0 && imgTags[0]) {
+        console.log(
+          '[EmailContent] First image tag:',
+          imgTags[0].substring(0, 200),
+        );
+      }
+
+      // After render, check if images are actually in the DOM
+      setTimeout(() => {
+        if (contentRef.current) {
+          const domImages = contentRef.current.querySelectorAll('img');
+          const domVideos = contentRef.current.querySelectorAll('video');
+          console.log(
+            '[EmailContent] DOM elements after render:',
+            domImages.length,
+            'img tags,',
+            domVideos.length,
+            'video tags',
+          );
+
+          if (domImages.length > 0) {
+            const firstImg = domImages[0] as HTMLImageElement;
+            console.log('[EmailContent] First DOM img:', {
+              src: firstImg.src?.substring(0, 100),
+              alt: firstImg.alt,
+              width: firstImg.width,
+              height: firstImg.height,
+              displayed: firstImg.offsetHeight > 0,
+            });
+          }
+        }
+      }, 100);
     }
-  }, [displayHtml, processedHtml])
+  }, [fixedDisplayHtml, processedHtml]);
 
   return (
     <div className="relative">
@@ -740,102 +1133,161 @@ function EmailContent({
       <div
         ref={contentRef}
         className="text-slate-700 leading-relaxed email-content"
-        dangerouslySetInnerHTML={{ __html: displayHtml || '' }}
+        dangerouslySetInnerHTML={{ __html: fixedDisplayHtml || '' }}
         style={{
           fontFamily: 'system-ui, -apple-system, sans-serif',
           lineHeight: '1.6',
+          wordBreak: 'break-word',
         }}
+        // Ensure images render properly - like Gmail
+        suppressHydrationWarning={true}
       />
+      <style jsx global>{`
+        /* Ensure email images render exactly like Gmail */
+        .email-content img {
+          max-width: 100% !important;
+          width: auto !important;
+          height: auto !important;
+          max-height: none !important;
+          display: block !important;
+          margin: 8px 0 !important;
+          border-radius: 4px !important;
+          cursor: pointer !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          background-color: #f3f4f6 !important;
+          padding: 4px !important;
+          object-fit: contain !important;
+        }
+        .email-content video {
+          max-width: 100% !important;
+          height: auto !important;
+          max-height: none !important;
+          display: inline-block !important;
+          margin: 8px 0 !important;
+          border-radius: 4px !important;
+          cursor: pointer !important;
+        }
+        /* Ensure parent containers don't clip images */
+        .email-content div,
+        .email-content table,
+        .email-content td {
+          max-height: none !important;
+          overflow: visible !important;
+        }
+      `}</style>
     </div>
-  )
+  );
 }
 
 export default function MailPage() {
-  const { data: session } = useSession()
-  const { selectedStoreId, loading: storeLoading } = useStore()
-  const { toast } = useToast()
-  const [emails, setEmails] = useState<Email[]>([])
-  const [loading, setLoading] = useState(true)
-  const [fetching, setFetching] = useState(false)
-  const [unreadCount, setUnreadCount] = useState(0)
-  const [totalCount, setTotalCount] = useState(0) // Total count of all emails
-  const [readCount, setReadCount] = useState(0) // Count of read emails
-  const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all')
-  const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null)
-  const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set())
-  const [deleting, setDeleting] = useState(false)
+  const { data: session } = useSession();
+  const { selectedStoreId, loading: storeLoading } = useStore();
+  const { toast } = useToast();
+  const [emails, setEmails] = useState<Email[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetching, setFetching] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0); // Total count of all emails
+  const [readCount, setReadCount] = useState(0); // Count of read emails
+  const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
+  const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
+  const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<{
-    open: boolean
-    type: 'selected' | 'all'
-    count: number
-  }>({ open: false, type: 'selected', count: 0 })
-  
+    open: boolean;
+    type: 'selected' | 'all';
+    count: number;
+  }>({ open: false, type: 'selected', count: 0 });
+
   // Pagination state
-  const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [pageSize] = useState(25) // Emails per page
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [pageSize] = useState(25); // Emails per page
 
   // Group emails into Gmail-style threads for the list view
   const threads = useMemo(() => {
-    const result = buildEmailThreads(emails)
+    const result = buildEmailThreads(emails);
     // Debug logging (remove in production)
     if (process.env.NODE_ENV === 'development') {
       console.log('[Email Threading]', {
         totalEmails: emails.length,
         totalThreads: result.length,
-        threadsWithMultipleEmails: result.filter(t => t.count > 1).length,
-        sampleThreads: result.slice(0, 3).map(t => ({
+        threadsWithMultipleEmails: result.filter((t) => t.count > 1).length,
+        sampleThreads: result.slice(0, 3).map((t) => ({
           key: t.threadKey,
           count: t.count,
           subject: t.latest.subject,
           normalizedSubject: normalizeSubject(t.latest.subject),
         })),
-      })
+      });
     }
-    return result
-  }, [emails])
-  const displayedEmailIds = useMemo(() => threads.flatMap((t) => t.emailIds), [threads])
+    return result;
+  }, [emails]);
+  const displayedEmailIds = useMemo(
+    () => threads.flatMap((t) => t.emailIds),
+    [threads],
+  );
 
   // Real-time sync state
-  const [syncRunning, setSyncRunning] = useState(false)
+  const [syncRunning, setSyncRunning] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{
-    lastSync: string | null
-    emailsSynced: number
-    idleConnected: boolean
-  } | null>(null)
-  const [syncLoading, setSyncLoading] = useState(false)
+    lastSync: string | null;
+    emailsSynced: number;
+    idleConnected: boolean;
+  } | null>(null);
+  const [syncLoading, setSyncLoading] = useState(false);
 
   // Reply and Ticket Modal states
   const [replyModal, setReplyModal] = useState<{
-    open: boolean
-    email: Email | null
-  }>({ open: false, email: null })
+    open: boolean;
+    email: Email | null;
+  }>({ open: false, email: null });
   const [ticketModal, setTicketModal] = useState<{
-    open: boolean
-    email: Email | null
-  }>({ open: false, email: null })
-  const [categories, setCategories] = useState<Array<{ id: string; name: string; subjects: string[] | null }>>([])
-  const [replying, setReplying] = useState(false)
-  const [creatingTicket, setCreatingTicket] = useState(false)
+    open: boolean;
+    email: Email | null;
+  }>({ open: false, email: null });
+  const [categories, setCategories] = useState<
+    Array<{ id: string; name: string; subjects: string[] | null }>
+  >([]);
+  const [replying, setReplying] = useState(false);
+  const [creatingTicket, setCreatingTicket] = useState(false);
   const [replyForm, setReplyForm] = useState({
     subject: '',
     body: '',
     toEmail: '',
     ccEmail: '',
-  })
-  
+  });
+
   // Inline reply state (Gmail-style)
-  const [showInlineReply, setShowInlineReply] = useState(false)
-  const [ccVisible, setCcVisible] = useState(false)
-  const [bccVisible, setBccVisible] = useState(false)
-  const [bccEmail, setBccEmail] = useState('')
-  const [replyAttachments, setReplyAttachments] = useState<File[]>([])
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const replyFileInputRef = useRef<HTMLInputElement>(null)
-  const replyImageInputRef = useRef<HTMLInputElement>(null)
-  
+  const [showInlineReply, setShowInlineReply] = useState(false);
+  const [ccVisible, setCcVisible] = useState(false);
+  const [bccVisible, setBccVisible] = useState(false);
+  const [bccEmail, setBccEmail] = useState('');
+  const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const replyFileInputRef = useRef<HTMLInputElement>(null);
+  const replyImageInputRef = useRef<HTMLInputElement>(null);
+
   // Common emojis for quick picker
-  const commonEmojis = ['😊', '👍', '🙏', '❤️', '😂', '🎉', '✅', '⭐', '🔥', '💯', '👏', '🤝', '📧', '📞', '🛒', '📦']
+  const commonEmojis = [
+    '😊',
+    '👍',
+    '🙏',
+    '❤️',
+    '😂',
+    '🎉',
+    '✅',
+    '⭐',
+    '🔥',
+    '💯',
+    '👏',
+    '🤝',
+    '📧',
+    '📞',
+    '🛒',
+    '📦',
+  ];
   const [ticketForm, setTicketForm] = useState({
     name: '',
     email: '',
@@ -847,78 +1299,94 @@ export default function MailPage() {
     categoryId: '',
     priority: 'NORMAL',
     assignedAgentId: '',
-  })
-  const [ticketFormErrors, setTicketFormErrors] = useState<Record<string, string>>({})
-  const lookupTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  
+  });
+  const [ticketFormErrors, setTicketFormErrors] = useState<
+    Record<string, string>
+  >({});
+  const lookupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // File upload states
-  const [attachments, setAttachments] = useState<File[]>([])
-  const [singleFile, setSingleFile] = useState<File | null>(null)
-  const [imageFiles, setImageFiles] = useState<[File | null, File | null, File | null]>([null, null, null])
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const singleFileInputRef = useRef<HTMLInputElement>(null)
-  const imageFileInputRefs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)]
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [singleFile, setSingleFile] = useState<File | null>(null);
+  const [imageFiles, setImageFiles] = useState<
+    [File | null, File | null, File | null]
+  >([null, null, null]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const singleFileInputRef = useRef<HTMLInputElement>(null);
+  const imageFileInputRefs = [
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+  ];
 
   // Check if selected category requires attachments
   const requiresAttachments = () => {
-    if (!ticketForm.categoryId) return false
-    const selectedCategory = categories.find(cat => cat.id === ticketForm.categoryId)
-    if (!selectedCategory) return false
-    
-    const categoryName = selectedCategory.name.toLowerCase()
+    if (!ticketForm.categoryId) return false;
+    const selectedCategory = categories.find(
+      (cat) => cat.id === ticketForm.categoryId,
+    );
+    if (!selectedCategory) return false;
+
+    const categoryName = selectedCategory.name.toLowerCase();
     // Remove emojis and special characters, normalize spaces
-    const cleanName = categoryName.replace(/[📦🔄&/]/g, ' ').replace(/\s+/g, ' ').trim()
-    
+    const cleanName = categoryName
+      .replace(/[📦🔄&/]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
     // Check for "Order & Product Issues" or similar
-    const isOrderProduct = cleanName.includes('order') && cleanName.includes('product')
-    
+    const isOrderProduct =
+      cleanName.includes('order') && cleanName.includes('product');
+
     // Check for "Return / Refund / Replacement" or similar
-    const isReturnRefund = cleanName.includes('return') && (cleanName.includes('refund') || cleanName.includes('replacement'))
-    
-    return isOrderProduct || isReturnRefund
-  }
+    const isReturnRefund =
+      cleanName.includes('return') &&
+      (cleanName.includes('refund') || cleanName.includes('replacement'));
+
+    return isOrderProduct || isReturnRefund;
+  };
 
   // Format file size helper
   const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return bytes + ' B'
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-  }
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
 
   // File upload handlers
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
+    const files = Array.from(e.target.files || []);
     if (files.length > 0) {
-      const maxSize = 10 * 1024 * 1024 // 10MB
-      const validFiles = files.filter(file => {
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      const validFiles = files.filter((file) => {
         if (file.size > maxSize) {
           toast({
             title: 'File too large',
             description: `${file.name} exceeds 10MB limit`,
             variant: 'destructive',
-          })
-          return false
+          });
+          return false;
         }
-        return true
-      })
-      
-      const newFiles = [...attachments, ...validFiles].slice(0, 5)
-      setAttachments(newFiles)
-      
+        return true;
+      });
+
+      const newFiles = [...attachments, ...validFiles].slice(0, 5);
+      setAttachments(newFiles);
+
       if (validFiles.length > 0) {
         toast({
           title: 'Files selected',
           description: `${validFiles.length} file(s) added`,
-        })
+        });
       }
     }
     if (fileInputRef.current) {
-      fileInputRef.current.value = ''
+      fileInputRef.current.value = '';
     }
-  }
+  };
 
   const handleSingleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+    const file = e.target.files?.[0];
     if (file) {
       // Check if it's a video
       if (!file.type.startsWith('video/')) {
@@ -926,234 +1394,250 @@ export default function MailPage() {
           title: 'Invalid file type',
           description: 'Only video files are allowed in this section',
           variant: 'destructive',
-        })
+        });
         if (singleFileInputRef.current) {
-          singleFileInputRef.current.value = ''
+          singleFileInputRef.current.value = '';
         }
-        return
+        return;
       }
-      const maxSize = 10 * 1024 * 1024 // 10MB
+      const maxSize = 10 * 1024 * 1024; // 10MB
       if (file.size > maxSize) {
         toast({
           title: 'File too large',
           description: `${file.name} exceeds 10MB limit`,
           variant: 'destructive',
-        })
+        });
         if (singleFileInputRef.current) {
-          singleFileInputRef.current.value = ''
+          singleFileInputRef.current.value = '';
         }
-        return
+        return;
       }
-      setSingleFile(file)
+      setSingleFile(file);
       if (ticketFormErrors.attachments) {
-        setTicketFormErrors(prev => {
-          const newErrors = { ...prev }
-          delete newErrors.attachments
-          return newErrors
-        })
+        setTicketFormErrors((prev) => {
+          const newErrors = { ...prev };
+          delete newErrors.attachments;
+          return newErrors;
+        });
       }
       toast({
         title: 'Video selected',
         description: `${file.name} added`,
-      })
+      });
     }
     if (singleFileInputRef.current) {
-      singleFileInputRef.current.value = ''
+      singleFileInputRef.current.value = '';
     }
-  }
+  };
 
-  const handleImageFileSelect = (index: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      // Check if it's an image
-      if (!file.type.startsWith('image/')) {
-        toast({
-          title: 'Invalid file type',
-          description: 'Only images are allowed in this section',
-          variant: 'destructive',
-        })
-        if (imageFileInputRefs[index].current) {
-          imageFileInputRefs[index].current.value = ''
+  const handleImageFileSelect =
+    (index: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        // Check if it's an image
+        if (!file.type.startsWith('image/')) {
+          toast({
+            title: 'Invalid file type',
+            description: 'Only images are allowed in this section',
+            variant: 'destructive',
+          });
+          if (imageFileInputRefs[index].current) {
+            imageFileInputRefs[index].current.value = '';
+          }
+          return;
         }
-        return
-      }
-      const maxSize = 10 * 1024 * 1024 // 10MB
-      if (file.size > maxSize) {
-        toast({
-          title: 'File too large',
-          description: `${file.name} exceeds 10MB limit`,
-          variant: 'destructive',
-        })
-        if (imageFileInputRefs[index].current) {
-          imageFileInputRefs[index].current.value = ''
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (file.size > maxSize) {
+          toast({
+            title: 'File too large',
+            description: `${file.name} exceeds 10MB limit`,
+            variant: 'destructive',
+          });
+          if (imageFileInputRefs[index].current) {
+            imageFileInputRefs[index].current.value = '';
+          }
+          return;
         }
-        return
+        const newImageFiles: [File | null, File | null, File | null] = [
+          ...imageFiles,
+        ];
+        newImageFiles[index] = file;
+        setImageFiles(newImageFiles);
+        if (ticketFormErrors.attachments) {
+          setTicketFormErrors((prev) => {
+            const newErrors = { ...prev };
+            delete newErrors.attachments;
+            return newErrors;
+          });
+        }
+        toast({
+          title: 'Image selected',
+          description: `${file.name} added`,
+        });
       }
-      const newImageFiles: [File | null, File | null, File | null] = [...imageFiles]
-      newImageFiles[index] = file
-      setImageFiles(newImageFiles)
-      if (ticketFormErrors.attachments) {
-        setTicketFormErrors(prev => {
-          const newErrors = { ...prev }
-          delete newErrors.attachments
-          return newErrors
-        })
+      if (imageFileInputRefs[index].current) {
+        imageFileInputRefs[index].current.value = '';
       }
-      toast({
-        title: 'Image selected',
-        description: `${file.name} added`,
-      })
-    }
-    if (imageFileInputRefs[index].current) {
-      imageFileInputRefs[index].current.value = ''
-    }
-  }
+    };
 
   const handleRemoveAttachment = (index: number) => {
-    setAttachments(attachments.filter((_, i) => i !== index))
-  }
+    setAttachments(attachments.filter((_, i) => i !== index));
+  };
 
   const handleRemoveSingleFile = () => {
-    setSingleFile(null)
-  }
+    setSingleFile(null);
+  };
 
   const handleRemoveImageFile = (index: number) => {
-    const newImageFiles: [File | null, File | null, File | null] = [...imageFiles]
-    newImageFiles[index] = null
-    setImageFiles(newImageFiles)
-  }
+    const newImageFiles: [File | null, File | null, File | null] = [
+      ...imageFiles,
+    ];
+    newImageFiles[index] = null;
+    setImageFiles(newImageFiles);
+  };
 
   // Get available subjects based on selected category
   const getAvailableSubjects = () => {
     if (!ticketForm.categoryId) {
-      return []
+      return [];
     }
-    const selectedCategory = categories.find(cat => cat.id === ticketForm.categoryId)
+    const selectedCategory = categories.find(
+      (cat) => cat.id === ticketForm.categoryId,
+    );
     if (!selectedCategory) {
-      return []
+      return [];
     }
     // Use subjects from database if available, otherwise return empty array
     // Handle JSON field which might be stored as object or array
     if (selectedCategory.subjects) {
       if (Array.isArray(selectedCategory.subjects)) {
-        return selectedCategory.subjects.filter((s: any) => s && typeof s === 'string' && s.trim() !== '')
+        return selectedCategory.subjects.filter(
+          (s: any) => s && typeof s === 'string' && s.trim() !== '',
+        );
       }
       // If it's an object, try to convert it
       if (typeof selectedCategory.subjects === 'object') {
-        const subjectsArray = Object.values(selectedCategory.subjects).filter((s: any) => s && typeof s === 'string' && s.trim() !== '')
-        return subjectsArray.length > 0 ? subjectsArray : []
+        const subjectsArray = Object.values(selectedCategory.subjects).filter(
+          (s: any) => s && typeof s === 'string' && s.trim() !== '',
+        );
+        return subjectsArray.length > 0 ? subjectsArray : [];
       }
     }
-    return []
-  }
+    return [];
+  };
 
   // Reset subject when category changes
   useEffect(() => {
     if (ticketModal.open && ticketForm.categoryId) {
-      setTicketForm(prev => ({ ...prev, subject: '' }))
+      setTicketForm((prev) => ({ ...prev, subject: '' }));
     }
-  }, [ticketForm.categoryId, ticketModal.open])
-
+  }, [ticketForm.categoryId, ticketModal.open]);
 
   // Reset to page 1 when filter changes
   useEffect(() => {
-    setCurrentPage(1)
-  }, [filter, selectedStoreId])
+    setCurrentPage(1);
+  }, [filter, selectedStoreId]);
 
   // Fetch categories for ticket creation
   useEffect(() => {
     if (selectedStoreId) {
-      const url = selectedStoreId ? `/api/categories?storeId=${selectedStoreId}` : '/api/categories'
+      const url = selectedStoreId
+        ? `/api/categories?storeId=${selectedStoreId}`
+        : '/api/categories';
       fetch(url)
         .then((res) => res.json())
-      .then((data) => {
-        const categoryArray = data.categories || []
-        setCategories(categoryArray.map((cat: any) => ({
-          id: cat.id,
-          name: cat.name,
-          subjects: cat.subjects || null,
-        })))
-      })
-        .catch((error) => {
-          console.error('Error fetching categories:', error)
-          setCategories([])
+        .then((data) => {
+          const categoryArray = data.categories || [];
+          setCategories(
+            categoryArray.map((cat: any) => ({
+              id: cat.id,
+              name: cat.name,
+              subjects: cat.subjects || null,
+            })),
+          );
         })
+        .catch((error) => {
+          console.error('Error fetching categories:', error);
+          setCategories([]);
+        });
     }
-  }, [selectedStoreId])
+  }, [selectedStoreId]);
 
   // Fetch emails from database when filter, store, or page changes (with debounce)
-  const fetchDebounceRef = useRef<NodeJS.Timeout | null>(null)
-  
+  const fetchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     // Clear any existing debounce timer
     if (fetchDebounceRef.current) {
-      clearTimeout(fetchDebounceRef.current)
+      clearTimeout(fetchDebounceRef.current);
     }
-    
+
     if (!storeLoading && selectedStoreId) {
       // Debounce the fetch to prevent rapid re-fetching during initialization
       fetchDebounceRef.current = setTimeout(() => {
-        fetchEmails()
-      }, 100) // 100ms debounce
+        fetchEmails();
+      }, 100); // 100ms debounce
     } else if (!storeLoading && session?.user?.role !== 'ADMIN') {
       // For non-admin users without a store requirement
       fetchDebounceRef.current = setTimeout(() => {
-        fetchEmails()
-      }, 100)
+        fetchEmails();
+      }, 100);
     }
-    
+
     return () => {
       if (fetchDebounceRef.current) {
-        clearTimeout(fetchDebounceRef.current)
+        clearTimeout(fetchDebounceRef.current);
       }
-    }
-  }, [filter, selectedStoreId, storeLoading, currentPage])
+    };
+  }, [filter, selectedStoreId, storeLoading, currentPage]);
 
   // Check sync status on load and periodically
   useEffect(() => {
     if (selectedStoreId) {
       // Check sync status immediately on mount to restore state
-      checkSyncStatus()
-      const interval = setInterval(checkSyncStatus, 10000) // Check every 10 seconds
-      return () => clearInterval(interval)
+      checkSyncStatus();
+      const interval = setInterval(checkSyncStatus, 10000); // Check every 10 seconds
+      return () => clearInterval(interval);
     } else {
       // Reset sync state when store changes
-      setSyncRunning(false)
-      setSyncStatus(null)
+      setSyncRunning(false);
+      setSyncStatus(null);
     }
-  }, [selectedStoreId])
+  }, [selectedStoreId]);
 
   // Auto-refresh emails when sync is running (silent - no loading spinner)
   useEffect(() => {
     if (syncRunning && selectedStoreId) {
       const interval = setInterval(() => {
-        fetchEmails(true) // Pass silent=true to avoid showing loading spinner
-      }, 15000) // Refresh every 15 seconds when sync is running
-      return () => clearInterval(interval)
+        fetchEmails(true); // Pass silent=true to avoid showing loading spinner
+      }, 15000); // Refresh every 15 seconds when sync is running
+      return () => clearInterval(interval);
     }
-  }, [syncRunning, selectedStoreId, filter, currentPage])
+  }, [syncRunning, selectedStoreId, filter, currentPage]);
 
   const checkSyncStatus = async () => {
-    if (!selectedStoreId) return
-    
+    if (!selectedStoreId) return;
+
     try {
-      const response = await fetch(`/api/emails/sync?storeId=${selectedStoreId}`)
-      const data = await response.json()
-      
+      const response = await fetch(
+        `/api/emails/sync?storeId=${selectedStoreId}`,
+      );
+      const data = await response.json();
+
       if (response.ok) {
-        setSyncRunning(data.isRunning || false)
+        setSyncRunning(data.isRunning || false);
         if (data.status) {
           setSyncStatus({
             lastSync: data.status.lastSync,
             emailsSynced: data.status.emailsSynced || 0,
             idleConnected: data.status.idleConnected || false,
-          })
+          });
         }
       }
     } catch (error) {
-      console.error('Error checking sync status:', error)
+      console.error('Error checking sync status:', error);
     }
-  }
+  };
 
   const toggleSync = async () => {
     if (!selectedStoreId) {
@@ -1161,132 +1645,138 @@ export default function MailPage() {
         title: 'Error',
         description: 'Please select a store first',
         variant: 'destructive',
-      })
-      return
+      });
+      return;
     }
 
-    setSyncLoading(true)
+    setSyncLoading(true);
     try {
-      const action = syncRunning ? 'stop' : 'start'
+      const action = syncRunning ? 'stop' : 'start';
       const response = await fetch('/api/emails/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, storeId: selectedStoreId }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || `Failed to ${action} sync`)
+        throw new Error(data.error || `Failed to ${action} sync`);
       }
 
-      setSyncRunning(data.isRunning)
+      setSyncRunning(data.isRunning);
       if (data.status) {
         setSyncStatus({
           lastSync: data.status.lastSync,
           emailsSynced: data.status.emailsSynced || 0,
           idleConnected: data.status.idleConnected || false,
-        })
+        });
       }
 
       toast({
         title: 'Success',
         description: data.message,
-      })
+      });
 
       // Refresh emails after starting sync
       if (action === 'start') {
-        setTimeout(() => fetchEmails(), 2000)
+        setTimeout(() => fetchEmails(), 2000);
       }
     } catch (error: any) {
-      console.error('Error toggling sync:', error)
+      console.error('Error toggling sync:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to toggle sync',
         variant: 'destructive',
-      })
+      });
     } finally {
-      setSyncLoading(false)
+      setSyncLoading(false);
     }
-  }
+  };
 
   const fetchEmails = async (silent = false) => {
     // For admins, require store selection
     if (session?.user?.role === 'ADMIN' && !selectedStoreId) {
-      setLoading(false)
-      return
+      setLoading(false);
+      return;
     }
 
     // Only show loading spinner for non-silent refreshes
     if (!silent) {
-      setLoading(true)
+      setLoading(true);
     }
-    
+
     try {
-      const params = new URLSearchParams()
-      params.append('page', currentPage.toString())
-      params.append('limit', pageSize.toString())
-      
+      const params = new URLSearchParams();
+      params.append('page', currentPage.toString());
+      params.append('limit', pageSize.toString());
+
       if (filter === 'unread') {
-        params.append('read', 'false')
+        params.append('read', 'false');
       } else if (filter === 'read') {
-        params.append('read', 'true')
+        params.append('read', 'true');
       }
       // For 'all' filter, don't add read parameter - show all emails
 
       if (selectedStoreId) {
-        params.append('storeId', selectedStoreId)
+        params.append('storeId', selectedStoreId);
       }
 
-      const response = await fetch(`/api/emails?${params.toString()}`)
-      const data = await response.json()
+      const response = await fetch(`/api/emails?${params.toString()}`);
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch emails')
+        throw new Error(data.error || 'Failed to fetch emails');
       }
 
-      setEmails(data.emails || [])
-      setUnreadCount(data.unreadCount || 0)
-      setTotalCount(data.totalAll || data.total || 0) // Use totalAll for "All" count
-      setReadCount(data.readCount || 0)
-      setTotalPages(data.totalPages || 1)
+      setEmails(data.emails || []);
+      setUnreadCount(data.unreadCount || 0);
+      setTotalCount(data.totalAll || data.total || 0); // Use totalAll for "All" count
+      setReadCount(data.readCount || 0);
+      setTotalPages(data.totalPages || 1);
     } catch (error: any) {
-      console.error('Error fetching emails:', error)
+      console.error('Error fetching emails:', error);
     } finally {
       // Only update loading state for non-silent refreshes
       if (!silent) {
-        setLoading(false)
+        setLoading(false);
       }
     }
-  }
+  };
 
   const markAsRead = async (emailId: string) => {
     try {
-      await fetch(`/api/emails/${emailId}`, { method: 'PATCH' })
+      await fetch(`/api/emails/${emailId}`, { method: 'PATCH' });
       setEmails((prev) =>
         prev.map((email) =>
-          email.id === emailId ? { ...email, read: true, readAt: new Date() } : email
-        )
-      )
-      setUnreadCount((prev) => Math.max(0, prev - 1))
+          email.id === emailId
+            ? { ...email, read: true, readAt: new Date() }
+            : email,
+        ),
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (error) {
-      console.error('Error marking email as read:', error)
+      console.error('Error marking email as read:', error);
     }
-  }
+  };
 
-  const fetchFromGmail = async (mode: 'unread' | 'latest' = 'unread', limit?: number, silent = false) => {
+  const fetchFromGmail = async (
+    mode: 'unread' | 'latest' = 'unread',
+    limit?: number,
+    silent = false,
+  ) => {
     if (!selectedStoreId && session?.user?.role === 'ADMIN') {
       if (!silent) {
         toast({
           title: 'Error',
           description: 'Please select a store to fetch emails',
           variant: 'destructive',
-        })
+        });
       }
-      return
+      return;
     }
 
-    setFetching(true)
+    setFetching(true);
     try {
       const response = await fetch('/api/emails/fetch', {
         method: 'POST',
@@ -1298,102 +1788,106 @@ export default function MailPage() {
           mode,
           limit,
         }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch emails from Gmail')
+        throw new Error(data.error || 'Failed to fetch emails from Gmail');
       }
 
       if (!silent) {
         toast({
           title: 'Success',
-          description: data.message || `Fetched ${data.stats?.fetched || 0} emails, stored ${data.stats?.stored || 0} new emails`,
-        })
+          description:
+            data.message ||
+            `Fetched ${data.stats?.fetched || 0} emails, stored ${data.stats?.stored || 0} new emails`,
+        });
       }
 
       // Refresh email list after fetching (with small delay to ensure emails are stored)
       setTimeout(() => {
-        fetchEmails()
-      }, 500)
+        fetchEmails();
+      }, 500);
     } catch (error: any) {
-      console.error('Error fetching emails from Gmail:', error)
+      console.error('Error fetching emails from Gmail:', error);
       if (!silent) {
         toast({
           title: 'Error',
           description: error.message || 'Failed to fetch emails from Gmail',
           variant: 'destructive',
-        })
+        });
       }
     } finally {
-      setFetching(false)
+      setFetching(false);
     }
-  }
+  };
 
   const getEmailPreview = (email: Email) => {
     if (email.htmlContent) {
       // Strip HTML tags for preview
-      const text = email.htmlContent.replace(/<[^>]*>/g, '').trim()
-      return text.substring(0, 150) + (text.length > 150 ? '...' : '')
+      const text = email.htmlContent.replace(/<[^>]*>/g, '').trim();
+      return text.substring(0, 150) + (text.length > 150 ? '...' : '');
     }
-    return email.textContent?.substring(0, 150) || 'No content'
-  }
+    return email.textContent?.substring(0, 150) || 'No content';
+  };
 
   const toggleEmailExpansion = (emailId: string) => {
-    setExpandedEmailId(expandedEmailId === emailId ? null : emailId)
-  }
+    setExpandedEmailId(expandedEmailId === emailId ? null : emailId);
+  };
 
   const getEmailContent = (email: Email) => {
     // Prefer HTML content if available, otherwise use text content
     if (email.htmlContent) {
-      return email.htmlContent
+      return email.htmlContent;
     }
-    return email.textContent || 'No content available'
-  }
+    return email.textContent || 'No content available';
+  };
 
   const toggleEmailSelection = (emailId: string) => {
     setSelectedEmails((prev) => {
-      const newSet = new Set(prev)
+      const newSet = new Set(prev);
       if (newSet.has(emailId)) {
-        newSet.delete(emailId)
+        newSet.delete(emailId);
       } else {
-        newSet.add(emailId)
+        newSet.add(emailId);
       }
-      return newSet
-    })
-  }
+      return newSet;
+    });
+  };
 
   const toggleThreadSelection = (emailIds: string[]) => {
     setSelectedEmails((prev) => {
-      const newSet = new Set(prev)
-      const allSelected = emailIds.length > 0 && emailIds.every((id) => newSet.has(id))
+      const newSet = new Set(prev);
+      const allSelected =
+        emailIds.length > 0 && emailIds.every((id) => newSet.has(id));
 
       if (allSelected) {
-        emailIds.forEach((id) => newSet.delete(id))
+        emailIds.forEach((id) => newSet.delete(id));
       } else {
-        emailIds.forEach((id) => newSet.add(id))
+        emailIds.forEach((id) => newSet.add(id));
       }
 
-      return newSet
-    })
-  }
+      return newSet;
+    });
+  };
 
   const toggleSelectAll = () => {
     setSelectedEmails((prev) => {
-      const newSet = new Set(prev)
+      const newSet = new Set(prev);
       const allDisplayedSelected =
-        displayedEmailIds.length > 0 && displayedEmailIds.every((id) => newSet.has(id))
+        displayedEmailIds.length > 0 &&
+        displayedEmailIds.every((id) => newSet.has(id));
 
       if (allDisplayedSelected) {
-        displayedEmailIds.forEach((id) => newSet.delete(id))
+        displayedEmailIds.forEach((id) => newSet.delete(id));
       } else {
-        displayedEmailIds.forEach((id) => newSet.add(id))
+        displayedEmailIds.forEach((id) => newSet.add(id));
       }
 
-      return newSet
-    })
-  }
+      return newSet;
+    });
+  };
 
   const deleteSelectedEmails = async () => {
     if (selectedEmails.size === 0) {
@@ -1401,20 +1895,20 @@ export default function MailPage() {
         title: 'No emails selected',
         description: 'Please select emails to delete',
         variant: 'destructive',
-      })
-      return
+      });
+      return;
     }
 
     setDeleteDialog({
       open: true,
       type: 'selected',
       count: selectedEmails.size,
-    })
-  }
+    });
+  };
 
   const confirmDeleteSelected = async () => {
-    setDeleteDialog({ open: false, type: 'selected', count: 0 })
-    setDeleting(true)
+    setDeleteDialog({ open: false, type: 'selected', count: 0 });
+    setDeleting(true);
     try {
       const response = await fetch('/api/emails/delete', {
         method: 'POST',
@@ -1425,32 +1919,32 @@ export default function MailPage() {
           emailIds: Array.from(selectedEmails),
           storeId: selectedStoreId,
         }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to delete emails')
+        throw new Error(data.error || 'Failed to delete emails');
       }
 
       toast({
         title: 'Success',
         description: data.message || `Deleted ${data.deletedCount} email(s)`,
-      })
+      });
 
-      setSelectedEmails(new Set())
-      fetchEmails()
+      setSelectedEmails(new Set());
+      fetchEmails();
     } catch (error: any) {
-      console.error('Error deleting emails:', error)
+      console.error('Error deleting emails:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to delete emails',
         variant: 'destructive',
-      })
+      });
     } finally {
-      setDeleting(false)
+      setDeleting(false);
     }
-  }
+  };
 
   const deleteAllEmails = async () => {
     if (totalCount === 0) {
@@ -1458,20 +1952,20 @@ export default function MailPage() {
         title: 'No emails to delete',
         description: 'There are no emails to delete',
         variant: 'destructive',
-      })
-      return
+      });
+      return;
     }
 
     setDeleteDialog({
       open: true,
       type: 'all',
       count: totalCount, // Use totalCount instead of emails.length to show all emails count
-    })
-  }
+    });
+  };
 
   const confirmDeleteAll = async () => {
-    setDeleteDialog({ open: false, type: 'all', count: 0 })
-    setDeleting(true)
+    setDeleteDialog({ open: false, type: 'all', count: 0 });
+    setDeleting(true);
     try {
       const response = await fetch('/api/emails/delete', {
         method: 'POST',
@@ -1482,62 +1976,64 @@ export default function MailPage() {
           deleteAll: true,
           storeId: selectedStoreId,
         }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to delete emails')
+        throw new Error(data.error || 'Failed to delete emails');
       }
 
       toast({
         title: 'Success',
         description: data.message || `Deleted ${data.deletedCount} email(s)`,
-      })
+      });
 
-      setSelectedEmails(new Set())
-      fetchEmails()
+      setSelectedEmails(new Set());
+      fetchEmails();
     } catch (error: any) {
-      console.error('Error deleting all emails:', error)
+      console.error('Error deleting all emails:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to delete emails',
         variant: 'destructive',
-      })
+      });
     } finally {
-      setDeleting(false)
+      setDeleting(false);
     }
-  }
+  };
 
   const openReplyModal = (email: Email) => {
     setReplyForm({
-      subject: email.subject.startsWith('Re:') ? email.subject : `Re: ${email.subject}`,
+      subject: email.subject.startsWith('Re:')
+        ? email.subject
+        : `Re: ${email.subject}`,
       body: '',
       toEmail: email.fromEmail,
       ccEmail: '',
-    })
-    setReplyModal({ open: true, email })
-  }
+    });
+    setReplyModal({ open: true, email });
+  };
 
   const closeReplyModal = () => {
-    setReplyModal({ open: false, email: null })
-    setReplyForm({ subject: '', body: '', toEmail: '', ccEmail: '' })
-  }
+    setReplyModal({ open: false, email: null });
+    setReplyForm({ subject: '', body: '', toEmail: '', ccEmail: '' });
+  };
 
   const sendReply = async () => {
     // For inline reply, use expandedEmailId; for modal, use replyModal.email
-    const emailId = expandedEmailId || replyModal.email?.id
-    
+    const emailId = expandedEmailId || replyModal.email?.id;
+
     if (!emailId || !replyForm.body.trim()) {
       toast({
         title: 'Error',
         description: 'Please enter a reply message',
         variant: 'destructive',
-      })
-      return
+      });
+      return;
     }
 
-    setReplying(true)
+    setReplying(true);
     try {
       const response = await fetch(`/api/emails/${emailId}/reply`, {
         method: 'POST',
@@ -1550,62 +2046,63 @@ export default function MailPage() {
           toEmail: replyForm.toEmail,
           ccEmail: replyForm.ccEmail || undefined,
         }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to send reply')
+        throw new Error(data.error || 'Failed to send reply');
       }
 
       toast({
         title: 'Success',
         description: 'Email reply sent successfully',
-      })
+      });
 
       // Close inline reply form or modal
-      setShowInlineReply(false)
-      closeReplyModal()
-      setReplyForm({ subject: '', body: '', toEmail: '', ccEmail: '' })
-      fetchEmails() // Refresh to show updated email
+      setShowInlineReply(false);
+      closeReplyModal();
+      setReplyForm({ subject: '', body: '', toEmail: '', ccEmail: '' });
+      fetchEmails(); // Refresh to show updated email
     } catch (error: any) {
-      console.error('Error sending reply:', error)
+      console.error('Error sending reply:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to send email reply',
         variant: 'destructive',
-      })
+      });
     } finally {
-      setReplying(false)
+      setReplying(false);
     }
-  }
+  };
 
   const openTicketModal = async (email: Email) => {
     if (email.ticketId) {
       // Verify the ticket actually exists before showing error
       try {
-        const response = await fetch(`/api/tickets/${email.ticketId}`)
+        const response = await fetch(`/api/tickets/${email.ticketId}`);
         if (response.ok) {
-          const ticketData = await response.json()
+          const ticketData = await response.json();
           if (ticketData.ticket) {
             toast({
               title: 'Already Linked',
               description: 'This email is already linked to a ticket',
               variant: 'destructive',
-            })
-            return
+            });
+            return;
           }
         }
         // Ticket doesn't exist - backend will clear invalid ticketId when creating new ticket
         // Continue to open modal
       } catch (error) {
-        console.error('Error checking ticket:', error)
+        console.error('Error checking ticket:', error);
         // If check fails, allow ticket creation to proceed
         // Backend will verify and clear invalid ticketId if needed
       }
     }
     // Pre-fill form with email data
-    const emailContent = email.textContent || email.htmlContent?.replace(/<[^>]*>/g, '') || ''
+    const emailContent =
+      email.textContent || email.htmlContent?.replace(/<[^>]*>/g, '') || '';
     setTicketForm({
       name: email.fromName || email.fromEmail.split('@')[0] || '',
       email: email.fromEmail,
@@ -1617,21 +2114,21 @@ export default function MailPage() {
       categoryId: '',
       priority: 'NORMAL',
       assignedAgentId: '',
-    })
-    setTicketFormErrors({})
+    });
+    setTicketFormErrors({});
     // Reset file uploads
-    setAttachments([])
-    setSingleFile(null)
-    setImageFiles([null, null, null])
-    setTicketModal({ open: true, email })
-  }
+    setAttachments([]);
+    setSingleFile(null);
+    setImageFiles([null, null, null]);
+    setTicketModal({ open: true, email });
+  };
 
   const closeTicketModal = () => {
     // Clear timeout if modal is closed
     if (lookupTimeoutRef.current) {
-      clearTimeout(lookupTimeoutRef.current)
+      clearTimeout(lookupTimeoutRef.current);
     }
-    setTicketModal({ open: false, email: null })
+    setTicketModal({ open: false, email: null });
     setTicketForm({
       name: '',
       email: '',
@@ -1643,137 +2140,140 @@ export default function MailPage() {
       categoryId: '',
       priority: 'NORMAL',
       assignedAgentId: '',
-    })
-    setTicketFormErrors({})
+    });
+    setTicketFormErrors({});
     // Reset file uploads
-    setAttachments([])
-    setSingleFile(null)
-    setImageFiles([null, null, null])
-  }
+    setAttachments([]);
+    setSingleFile(null);
+    setImageFiles([null, null, null]);
+  };
 
   // Lookup Order ID and Tracking ID by phone number
   const lookupOrderTracking = async (phone: string) => {
     try {
       // Normalize phone number
-      const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '')
-      
+      const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
+
       if (normalizedPhone.length < 10) {
-        return
+        return;
       }
 
       // Build lookup URL with storeId if available
       const params = new URLSearchParams({
         phone: normalizedPhone,
-      })
+      });
       if (selectedStoreId) {
-        params.append('storeId', selectedStoreId)
+        params.append('storeId', selectedStoreId);
       }
 
-      const response = await fetch(`/api/order-tracking/lookup?${params.toString()}`)
-      const data = await response.json()
+      const response = await fetch(
+        `/api/order-tracking/lookup?${params.toString()}`,
+      );
+      const data = await response.json();
 
       if (data.found && data.orderId && data.trackingId) {
         // Auto-fill Order ID and Tracking ID
-        setTicketForm(prev => ({
+        setTicketForm((prev) => ({
           ...prev,
           order: data.orderId,
           trackingId: data.trackingId,
-        }))
-        
+        }));
+
         // Clear any existing errors for these fields
-        setTicketFormErrors(prev => ({
+        setTicketFormErrors((prev) => ({
           ...prev,
           order: '',
           trackingId: '',
-        }))
+        }));
 
         toast({
           title: 'Order information found',
           description: 'Order ID and Tracking ID have been auto-filled',
-        })
+        });
       }
     } catch (error) {
       // Silently fail - don't show error if lookup fails
-      console.error('Error looking up order tracking:', error)
+      console.error('Error looking up order tracking:', error);
     }
-  }
+  };
 
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (lookupTimeoutRef.current) {
-        clearTimeout(lookupTimeoutRef.current)
+        clearTimeout(lookupTimeoutRef.current);
       }
-    }
-  }, [])
+    };
+  }, []);
 
   const validateTicketForm = (): boolean => {
-    const errors: Record<string, string> = {}
-    
+    const errors: Record<string, string> = {};
+
     if (!ticketForm.name.trim()) {
-      errors.name = 'Name is required'
+      errors.name = 'Name is required';
     } else if (ticketForm.name.trim().length < 2) {
-      errors.name = 'Name must be at least 2 characters'
+      errors.name = 'Name must be at least 2 characters';
     }
-    
+
     if (!ticketForm.email.trim()) {
-      errors.email = 'Email is required'
+      errors.email = 'Email is required';
     } else {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(ticketForm.email)) {
-        errors.email = 'Please enter a valid email address'
+        errors.email = 'Please enter a valid email address';
       }
     }
-    
+
     if (!ticketForm.phone.trim()) {
-      errors.phone = 'Phone number is required'
+      errors.phone = 'Phone number is required';
     }
-    
+
     if (!ticketForm.order.trim()) {
-      errors.order = 'Order ID is required'
+      errors.order = 'Order ID is required';
     }
-    
+
     if (!ticketForm.trackingId.trim()) {
-      errors.trackingId = 'Tracking ID is required'
+      errors.trackingId = 'Tracking ID is required';
     }
-    
+
     if (!ticketForm.categoryId.trim()) {
-      errors.categoryId = 'Category is required'
+      errors.categoryId = 'Category is required';
     }
-    
+
     if (!ticketForm.subject.trim()) {
-      errors.subject = 'Subject is required'
+      errors.subject = 'Subject is required';
     } else if (ticketForm.subject.trim().length < 5) {
-      errors.subject = 'Subject must be at least 5 characters'
+      errors.subject = 'Subject must be at least 5 characters';
     }
-    
+
     if (!ticketForm.description.trim()) {
-      errors.description = 'Description is required'
+      errors.description = 'Description is required';
     } else if (ticketForm.description.trim().length < 20) {
-      errors.description = 'Please provide more details (at least 20 characters)'
+      errors.description =
+        'Please provide more details (at least 20 characters)';
     }
-    
+
     // Check if attachments are required for selected category
     if (requiresAttachments()) {
       // Collect all files: single file + image files + old attachments
-      const allFiles: File[] = []
-      if (singleFile) allFiles.push(singleFile)
-      imageFiles.forEach(file => {
-        if (file) allFiles.push(file)
-      })
-      attachments.forEach(file => allFiles.push(file))
+      const allFiles: File[] = [];
+      if (singleFile) allFiles.push(singleFile);
+      imageFiles.forEach((file) => {
+        if (file) allFiles.push(file);
+      });
+      attachments.forEach((file) => allFiles.push(file));
 
       if (allFiles.length === 0) {
-        errors.attachments = 'Images or videos are required for this category'
+        errors.attachments = 'Images or videos are required for this category';
       }
     }
-    
-    setTicketFormErrors(errors)
-    return Object.keys(errors).length === 0
-  }
+
+    setTicketFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const createTicketFromEmail = async () => {
-    if (!ticketModal.email) return
+    if (!ticketModal.email) return;
 
     // Validate form
     if (!validateTicketForm()) {
@@ -1781,100 +2281,105 @@ export default function MailPage() {
         title: 'Validation Error',
         description: 'Please fill in all required fields correctly',
         variant: 'destructive',
-      })
-      return
+      });
+      return;
     }
 
-    setCreatingTicket(true)
+    setCreatingTicket(true);
     try {
       // Collect all files: single file + image files + attachments
-      const allFiles: File[] = []
-      if (singleFile) allFiles.push(singleFile)
-      imageFiles.forEach(file => {
-        if (file) allFiles.push(file)
-      })
-      attachments.forEach(file => allFiles.push(file))
+      const allFiles: File[] = [];
+      if (singleFile) allFiles.push(singleFile);
+      imageFiles.forEach((file) => {
+        if (file) allFiles.push(file);
+      });
+      attachments.forEach((file) => allFiles.push(file));
 
-      let response: Response
+      let response: Response;
 
       if (allFiles.length > 0) {
         // Use FormData for file uploads
-        const formDataToSend = new FormData()
-        formDataToSend.append('name', ticketForm.name.trim())
-        formDataToSend.append('email', ticketForm.email.trim())
-        formDataToSend.append('phone', ticketForm.phone.trim())
-        formDataToSend.append('order', ticketForm.order.trim())
-        formDataToSend.append('trackingId', ticketForm.trackingId.trim())
-        formDataToSend.append('subject', ticketForm.subject.trim())
-        formDataToSend.append('description', ticketForm.description.trim())
-        formDataToSend.append('categoryId', ticketForm.categoryId || '')
-        formDataToSend.append('priority', ticketForm.priority)
+        const formDataToSend = new FormData();
+        formDataToSend.append('name', ticketForm.name.trim());
+        formDataToSend.append('email', ticketForm.email.trim());
+        formDataToSend.append('phone', ticketForm.phone.trim());
+        formDataToSend.append('order', ticketForm.order.trim());
+        formDataToSend.append('trackingId', ticketForm.trackingId.trim());
+        formDataToSend.append('subject', ticketForm.subject.trim());
+        formDataToSend.append('description', ticketForm.description.trim());
+        formDataToSend.append('categoryId', ticketForm.categoryId || '');
+        formDataToSend.append('priority', ticketForm.priority);
         if (ticketForm.assignedAgentId) {
-          formDataToSend.append('assignedAgentId', ticketForm.assignedAgentId)
+          formDataToSend.append('assignedAgentId', ticketForm.assignedAgentId);
         }
 
-        allFiles.forEach(file => {
-          formDataToSend.append('attachments', file)
-        })
+        allFiles.forEach((file) => {
+          formDataToSend.append('attachments', file);
+        });
 
-        response = await fetch(`/api/emails/${ticketModal.email.id}/create-ticket`, {
-          method: 'POST',
-          body: formDataToSend,
-        })
+        response = await fetch(
+          `/api/emails/${ticketModal.email.id}/create-ticket`,
+          {
+            method: 'POST',
+            body: formDataToSend,
+          },
+        );
       } else {
         // Use JSON for no files
-        response = await fetch(`/api/emails/${ticketModal.email.id}/create-ticket`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        response = await fetch(
+          `/api/emails/${ticketModal.email.id}/create-ticket`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              name: ticketForm.name.trim(),
+              email: ticketForm.email.trim(),
+              phone: ticketForm.phone.trim(),
+              order: ticketForm.order.trim(),
+              trackingId: ticketForm.trackingId.trim(),
+              subject: ticketForm.subject.trim(),
+              description: ticketForm.description.trim(),
+              categoryId: ticketForm.categoryId || undefined,
+              priority: ticketForm.priority,
+              assignedAgentId: ticketForm.assignedAgentId || undefined,
+            }),
           },
-          body: JSON.stringify({
-            name: ticketForm.name.trim(),
-            email: ticketForm.email.trim(),
-            phone: ticketForm.phone.trim(),
-            order: ticketForm.order.trim(),
-            trackingId: ticketForm.trackingId.trim(),
-            subject: ticketForm.subject.trim(),
-            description: ticketForm.description.trim(),
-            categoryId: ticketForm.categoryId || undefined,
-            priority: ticketForm.priority,
-            assignedAgentId: ticketForm.assignedAgentId || undefined,
-          }),
-        })
+        );
       }
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create ticket')
+        throw new Error(data.error || 'Failed to create ticket');
       }
 
       toast({
         title: 'Success',
         description: `Ticket ${data.ticket?.ticketNumber} created successfully`,
-      })
+      });
 
-      closeTicketModal()
-      fetchEmails() // Refresh to show updated email with ticket link
+      closeTicketModal();
+      fetchEmails(); // Refresh to show updated email with ticket link
     } catch (error: any) {
-      console.error('Error creating ticket:', error)
+      console.error('Error creating ticket:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to create ticket from email',
         variant: 'destructive',
-      })
+      });
     } finally {
-      setCreatingTicket(false)
+      setCreatingTicket(false);
     }
-  }
-
+  };
 
   if (storeLoading || loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
-    )
+    );
   }
 
   if (session?.user?.role === 'ADMIN' && !selectedStoreId) {
@@ -1888,12 +2393,14 @@ export default function MailPage() {
           <CardContent className="py-12">
             <div className="text-center">
               <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">Please select a store to view emails</p>
+              <p className="text-gray-600">
+                Please select a store to view emails
+              </p>
             </div>
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   return (
@@ -1913,7 +2420,7 @@ export default function MailPage() {
                 </div>
               </div>
             </div>
-            
+
             <div className="flex items-center space-x-3">
               {unreadCount > 0 && (
                 <div className="flex items-center bg-red-50 text-red-600 px-4 py-2 rounded-lg border border-red-100">
@@ -1921,7 +2428,7 @@ export default function MailPage() {
                   <span className="ml-1 text-sm">unread</span>
                 </div>
               )}
-              
+
               {selectedEmails.size > 0 ? (
                 <>
                   <Button
@@ -1934,7 +2441,11 @@ export default function MailPage() {
                     ) : (
                       <Trash2 className="w-4 h-4" />
                     )}
-                    <span className="font-medium">{deleting ? 'Deleting...' : `Delete Selected (${selectedEmails.size})`}</span>
+                    <span className="font-medium">
+                      {deleting
+                        ? 'Deleting...'
+                        : `Delete Selected (${selectedEmails.size})`}
+                    </span>
                   </Button>
                   <Button
                     variant="outline"
@@ -1958,10 +2469,12 @@ export default function MailPage() {
                       ) : (
                         <Trash2 className="w-4 h-4" />
                       )}
-                      <span className="font-medium">{deleting ? 'Deleting...' : 'Delete All'}</span>
+                      <span className="font-medium">
+                        {deleting ? 'Deleting...' : 'Delete All'}
+                      </span>
                     </Button>
                   )}
-                  
+
                   {session?.user?.role === 'ADMIN' && (
                     <>
                       <Button
@@ -1975,9 +2488,11 @@ export default function MailPage() {
                         ) : (
                           <Download className="w-4 h-4" />
                         )}
-                        <span className="font-medium">{fetching ? 'Fetching...' : 'Fetch Unread'}</span>
+                        <span className="font-medium">
+                          {fetching ? 'Fetching...' : 'Fetch Unread'}
+                        </span>
                       </Button>
-                      
+
                       <Button
                         variant="outline"
                         onClick={() => fetchFromGmail('latest')}
@@ -1989,16 +2504,19 @@ export default function MailPage() {
                         ) : (
                           <RefreshCw className="w-4 h-4" />
                         )}
-                        <span className="font-medium">{fetching ? 'Fetching...' : 'Fetch Latest'}</span>
+                        <span className="font-medium">
+                          {fetching ? 'Fetching...' : 'Fetch Latest'}
+                        </span>
                       </Button>
-                      
+
                       <Button
                         variant={syncRunning ? 'default' : 'outline'}
                         onClick={toggleSync}
                         disabled={syncLoading || !selectedStoreId}
                         className={cn(
-                          "gap-2",
-                          syncRunning && "bg-green-600 hover:bg-green-700 text-white"
+                          'gap-2',
+                          syncRunning &&
+                            'bg-green-600 hover:bg-green-700 text-white',
                         )}
                       >
                         {syncLoading ? (
@@ -2008,7 +2526,13 @@ export default function MailPage() {
                         ) : (
                           <WifiOff className="w-4 h-4" />
                         )}
-                        <span className="font-medium">{syncLoading ? 'Loading...' : syncRunning ? 'Sync On' : 'Sync Off'}</span>
+                        <span className="font-medium">
+                          {syncLoading
+                            ? 'Loading...'
+                            : syncRunning
+                              ? 'Sync On'
+                              : 'Sync Off'}
+                        </span>
                       </Button>
                     </>
                   )}
@@ -2027,10 +2551,10 @@ export default function MailPage() {
               <Button
                 onClick={() => setFilter('all')}
                 className={cn(
-                  "px-5 py-2.5 rounded-lg font-medium transition-all",
+                  'px-5 py-2.5 rounded-lg font-medium transition-all',
                   filter === 'all'
-                    ? "bg-blue-500 text-white shadow-md hover:bg-blue-600"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    ? 'bg-blue-500 text-white shadow-md hover:bg-blue-600'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
                 )}
               >
                 All ({totalCount})
@@ -2038,10 +2562,10 @@ export default function MailPage() {
               <Button
                 onClick={() => setFilter('unread')}
                 className={cn(
-                  "px-5 py-2.5 rounded-lg font-medium transition-all",
+                  'px-5 py-2.5 rounded-lg font-medium transition-all',
                   filter === 'unread'
-                    ? "bg-blue-500 text-white shadow-md hover:bg-blue-600"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    ? 'bg-blue-500 text-white shadow-md hover:bg-blue-600'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
                 )}
               >
                 Unread ({unreadCount})
@@ -2049,29 +2573,53 @@ export default function MailPage() {
               <Button
                 onClick={() => setFilter('read')}
                 className={cn(
-                  "px-5 py-2.5 rounded-lg font-medium transition-all",
+                  'px-5 py-2.5 rounded-lg font-medium transition-all',
                   filter === 'read'
-                    ? "bg-blue-500 text-white shadow-md hover:bg-blue-600"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    ? 'bg-blue-500 text-white shadow-md hover:bg-blue-600'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
                 )}
               >
                 Read ({readCount})
               </Button>
             </div>
           </div>
-          
+
           <div className="flex items-center justify-between text-sm text-slate-500">
             <label className="flex items-center space-x-2 cursor-pointer">
-              <button onClick={toggleSelectAll} className="flex items-center gap-2">
+              <button
+                onClick={toggleSelectAll}
+                className="flex items-center gap-2"
+              >
                 {selectedEmails.size === emails.length && emails.length > 0 ? (
                   <CheckSquare className="w-4 h-4 text-primary" />
                 ) : (
                   <Square className="w-4 h-4 text-gray-400" />
                 )}
-                <span>{selectedEmails.size === emails.length && emails.length > 0 ? 'Deselect All' : 'Select All'}</span>
+                <span>
+                  {selectedEmails.size === emails.length && emails.length > 0
+                    ? 'Deselect All'
+                    : 'Select All'}
+                </span>
               </button>
             </label>
-            <span>Showing {emails.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}-{Math.min(currentPage * pageSize, filter === 'all' ? totalCount : filter === 'unread' ? unreadCount : readCount)} of {filter === 'all' ? totalCount : filter === 'unread' ? unreadCount : readCount}</span>
+            <span>
+              Showing {emails.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}
+              -
+              {Math.min(
+                currentPage * pageSize,
+                filter === 'all'
+                  ? totalCount
+                  : filter === 'unread'
+                    ? unreadCount
+                    : readCount,
+              )}{' '}
+              of{' '}
+              {filter === 'all'
+                ? totalCount
+                : filter === 'unread'
+                  ? unreadCount
+                  : readCount}
+            </span>
           </div>
         </div>
 
@@ -2088,21 +2636,25 @@ export default function MailPage() {
                   Real-time sync active
                 </span>
                 {syncStatus?.idleConnected && (
-                  <span className="ml-2 text-xs text-green-600">• Connected</span>
+                  <span className="ml-2 text-xs text-green-600">
+                    • Connected
+                  </span>
                 )}
               </div>
             </div>
             <div className="flex items-center gap-4 text-sm text-green-700">
               {syncStatus?.lastSync && (
                 <span>
-                  Last sync: {new Date(syncStatus.lastSync).toLocaleTimeString()}
+                  Last sync:{' '}
+                  {new Date(syncStatus.lastSync).toLocaleTimeString()}
                 </span>
               )}
-              {syncStatus?.emailsSynced !== undefined && syncStatus.emailsSynced > 0 && (
-                <span className="font-medium">
-                  {syncStatus.emailsSynced} emails synced
-                </span>
-              )}
+              {syncStatus?.emailsSynced !== undefined &&
+                syncStatus.emailsSynced > 0 && (
+                  <span className="font-medium">
+                    {syncStatus.emailsSynced} emails synced
+                  </span>
+                )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -2130,14 +2682,26 @@ export default function MailPage() {
                   <div className="absolute inset-0 rounded-full border-4 border-blue-500 border-t-transparent animate-spin"></div>
                   <Mail className="absolute inset-0 w-8 h-8 text-blue-500 m-auto" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Fetching Emails...</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Fetching Emails...
+                </h3>
                 <p className="text-sm text-gray-500 max-w-sm mx-auto">
-                  Connecting to Gmail and downloading emails. This may take a moment if you have many unread emails.
+                  Connecting to Gmail and downloading emails. This may take a
+                  moment if you have many unread emails.
                 </p>
                 <div className="flex items-center justify-center gap-1 mt-4">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  <span
+                    className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                    style={{ animationDelay: '0ms' }}
+                  ></span>
+                  <span
+                    className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                    style={{ animationDelay: '150ms' }}
+                  ></span>
+                  <span
+                    className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                    style={{ animationDelay: '300ms' }}
+                  ></span>
                 </div>
               </div>
             </CardContent>
@@ -2154,7 +2718,9 @@ export default function MailPage() {
                 {filter === 'unread' ? 'No Unread Emails' : 'No Emails Found'}
               </h3>
               <p className="text-slate-500">
-                {filter === 'unread' ? 'All caught up! No unread emails.' : 'Select a different filter or fetch new emails'}
+                {filter === 'unread'
+                  ? 'All caught up! No unread emails.'
+                  : 'Select a different filter or fetch new emails'}
               </p>
             </div>
           </div>
@@ -2163,31 +2729,33 @@ export default function MailPage() {
           <div>
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               {threads.map((thread) => {
-                const email = thread.latest
-                const isSelected = thread.emailIds.length > 0 && thread.emailIds.every((id) => selectedEmails.has(id))
+                const email = thread.latest;
+                const isSelected =
+                  thread.emailIds.length > 0 &&
+                  thread.emailIds.every((id) => selectedEmails.has(id));
                 return (
                   <div
                     key={thread.threadKey}
                     onClick={() => {
-                      setExpandedEmailId(email.id)
+                      setExpandedEmailId(email.id);
                       // Mark all unread emails in this thread as read (best effort)
                       thread.emails.forEach((e) => {
                         if (!e.read) {
-                          markAsRead(e.id)
+                          markAsRead(e.id);
                         }
-                      })
+                      });
                     }}
                     className={cn(
-                      "p-4 border-b border-slate-100 cursor-pointer transition-all hover:bg-slate-50",
-                      thread.unread && "bg-blue-50/50",
-                      isSelected && "ring-2 ring-primary ring-offset-2"
+                      'p-4 border-b border-slate-100 cursor-pointer transition-all hover:bg-slate-50',
+                      thread.unread && 'bg-blue-50/50',
+                      isSelected && 'ring-2 ring-primary ring-offset-2',
                     )}
                   >
                     <div className="flex items-start space-x-4">
                       <button
                         onClick={(e) => {
-                          e.stopPropagation()
-                          toggleThreadSelection(thread.emailIds)
+                          e.stopPropagation();
+                          toggleThreadSelection(thread.emailIds);
                         }}
                         className="mt-1"
                       >
@@ -2197,15 +2765,19 @@ export default function MailPage() {
                           <Square className="w-4 h-4 text-gray-400 hover:text-gray-600" />
                         )}
                       </button>
-                      
+
                       <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
-                        {(email.fromName || email.fromEmail).charAt(0).toUpperCase()}
+                        {(email.fromName || email.fromEmail)
+                          .charAt(0)
+                          .toUpperCase()}
                       </div>
-                      
+
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center space-x-2">
-                            <h3 className="font-semibold text-slate-800">{email.fromName || email.fromEmail}</h3>
+                            <h3 className="font-semibold text-slate-800">
+                              {email.fromName || email.fromEmail}
+                            </h3>
                             {thread.unread && (
                               <span className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full font-medium">
                                 New
@@ -2221,14 +2793,19 @@ export default function MailPage() {
                                 ✓ Ticket
                               </Badge>
                             )}
-                            {email.hasAttachments && <Paperclip className="w-4 h-4 text-slate-400" />}
+                            {email.hasAttachments && (
+                              <Paperclip className="w-4 h-4 text-slate-400" />
+                            )}
                           </div>
                           <div className="flex items-center text-xs text-slate-400">
                             <Clock className="w-3 h-3 mr-1" />
-                            {format(new Date(email.createdAt), 'MMM d, yyyy h:mm a')}
+                            {format(
+                              new Date(email.createdAt),
+                              'MMM d, yyyy h:mm a',
+                            )}
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center gap-2 mb-1">
                           <p className="text-sm font-medium text-slate-600">
                             {email.subject || '(No Subject)'}
@@ -2239,14 +2816,14 @@ export default function MailPage() {
                             </span>
                           )}
                         </div>
-                        
+
                         <p className="text-sm text-slate-500 truncate">
                           {getEmailPreview(email)}
                         </p>
                       </div>
                     </div>
                   </div>
-                )
+                );
               })}
             </div>
 
@@ -2260,7 +2837,9 @@ export default function MailPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.max(1, prev - 1))
+                    }
                     disabled={currentPage === 1}
                     className="gap-1"
                   >
@@ -2270,7 +2849,9 @@ export default function MailPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                    }
                     disabled={currentPage === totalPages}
                     className="gap-1"
                   >
@@ -2281,19 +2862,25 @@ export default function MailPage() {
               </div>
             )}
           </div>
-        ) : !fetching && expandedEmailId && (
+        ) : (
+          !fetching &&
+          expandedEmailId &&
           // Full-width Email Detail View (Gmail-style conversation)
           (() => {
-            const selectedEmail = emails.find(e => e.id === expandedEmailId)
-            if (!selectedEmail) return null
+            const selectedEmail = emails.find((e) => e.id === expandedEmailId);
+            if (!selectedEmail) return null;
 
             // Find full thread for this email to show all messages in chronological order
-            const currentThread = threads.find(t => t.emailIds.includes(expandedEmailId))
+            const currentThread = threads.find((t) =>
+              t.emailIds.includes(expandedEmailId),
+            );
             const conversationEmails = currentThread
               ? [...currentThread.emails].sort(
-                  (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+                  (a, b) =>
+                    new Date(a.createdAt).getTime() -
+                    new Date(b.createdAt).getTime(),
                 )
-              : [selectedEmail]
+              : [selectedEmail];
             // All emails in chronological order (oldest to newest) - latest reply will be at bottom
 
             return (
@@ -2303,8 +2890,8 @@ export default function MailPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setExpandedEmailId(null)
-                      setShowInlineReply(false)
+                      setExpandedEmailId(null);
+                      setShowInlineReply(false);
                     }}
                     className="gap-2"
                   >
@@ -2316,28 +2903,34 @@ export default function MailPage() {
                 {/* Display all emails in chronological order (oldest to newest) */}
                 <div className="divide-y divide-slate-200">
                   {conversationEmails.map((email, index) => {
-                    const isSelectedEmail = email.id === selectedEmail.id
+                    const isSelectedEmail = email.id === selectedEmail.id;
                     return (
                       <div key={email.id} className="p-6">
                         {/* Email Header */}
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-start space-x-4">
                             <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
-                              {(email.fromName || email.fromEmail).charAt(0).toUpperCase()}
+                              {(email.fromName || email.fromEmail)
+                                .charAt(0)
+                                .toUpperCase()}
                             </div>
                             <div>
-                              <h2 className="text-xl font-bold text-slate-800">{email.fromName || email.fromEmail}</h2>
-                              <p className="text-sm text-slate-500">{email.fromEmail}</p>
+                              <h2 className="text-xl font-bold text-slate-800">
+                                {email.fromName || email.fromEmail}
+                              </h2>
+                              <p className="text-sm text-slate-500">
+                                {email.fromEmail}
+                              </p>
                             </div>
                           </div>
-                          
+
                           <div className="flex items-center space-x-2">
                             {isSelectedEmail && (
                               <>
-                                <button 
+                                <button
                                   onClick={(e) => {
-                                    e.stopPropagation()
-                                    toggleEmailSelection(email.id)
+                                    e.stopPropagation();
+                                    toggleEmailSelection(email.id);
                                   }}
                                   className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
                                 >
@@ -2347,11 +2940,11 @@ export default function MailPage() {
                                     <Square className="w-5 h-5 text-slate-400" />
                                   )}
                                 </button>
-                                <button 
+                                <button
                                   className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
                                   onClick={() => {
-                                    setSelectedEmails(new Set([email.id]))
-                                    deleteSelectedEmails()
+                                    setSelectedEmails(new Set([email.id]));
+                                    deleteSelectedEmails();
                                   }}
                                 >
                                   <Trash2 className="w-5 h-5 text-slate-400" />
@@ -2360,7 +2953,7 @@ export default function MailPage() {
                             )}
                           </div>
                         </div>
-                        
+
                         <div className="space-y-2 text-sm mb-4">
                           <div className="flex items-center text-slate-600">
                             <span className="font-medium w-20">To:</span>
@@ -2368,62 +2961,88 @@ export default function MailPage() {
                           </div>
                           <div className="flex items-center text-slate-600">
                             <span className="font-medium w-20">Date:</span>
-                            <span>{format(new Date(email.createdAt), 'MMM d, yyyy h:mm a')}</span>
+                            <span>
+                              {format(
+                                new Date(email.createdAt),
+                                'MMM d, yyyy h:mm a',
+                              )}
+                            </span>
                           </div>
                         </div>
-                        
+
                         <div className="mb-4">
                           <h3 className="text-lg font-semibold text-slate-800">
                             {email.subject || '(No Subject)'}
                           </h3>
                         </div>
-                        
+
                         {/* Email Content */}
-                        <div className="prose max-w-none email-content-wrapper mb-4" style={{ wordBreak: 'break-word' }}>
+                        <div
+                          className="prose max-w-none email-content-wrapper mb-4"
+                          style={{ wordBreak: 'break-word' }}
+                        >
                           {email.htmlContent ? (
-                            <EmailContent 
-                              htmlContent={maskPhoneNumbersInText(email.htmlContent)}
+                            <EmailContent
+                              htmlContent={maskPhoneNumbersInText(
+                                email.htmlContent,
+                              )}
                               attachments={email.EmailAttachment || []}
                               emailId={email.id}
                               onProcessed={(processedHtml, newAttachments) => {
                                 // Update the email in the list with processed HTML and new attachments
-                                setEmails(prevEmails => prevEmails.map(e => 
-                                  e.id === email.id 
-                                    ? {
-                                        ...e,
-                                        htmlContent: processedHtml,
-                                        EmailAttachment: [...(e.EmailAttachment || []), ...newAttachments],
-                                        hasAttachments: true,
-                                      }
-                                    : e
-                                ))
+                                setEmails((prevEmails) =>
+                                  prevEmails.map((e) =>
+                                    e.id === email.id
+                                      ? {
+                                          ...e,
+                                          htmlContent: processedHtml,
+                                          EmailAttachment: [
+                                            ...(e.EmailAttachment || []),
+                                            ...newAttachments,
+                                          ],
+                                          hasAttachments: true,
+                                        }
+                                      : e,
+                                  ),
+                                );
                               }}
                             />
                           ) : (
                             <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
-                              {maskPhoneNumbersInText(email.textContent) || 'No content available'}
+                              {maskPhoneNumbersInText(email.textContent) ||
+                                'No content available'}
                             </p>
                           )}
                         </div>
 
                         {/* Attachments Section */}
-                        {(email.EmailAttachment && email.EmailAttachment.length > 0) ? (
+                        {(() => {
+                          // Filter out inline images (those embedded in email body) from attachments display
+                          const regularAttachments = (email.EmailAttachment || []).filter(
+                            (att) => !att.filename.startsWith('inline-image-') && !att.filename.startsWith('inline-video-')
+                          );
+                          return regularAttachments.length > 0 ? (
                           <div className="mt-4 bg-slate-50 rounded-lg border border-slate-200 p-4">
                             <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center gap-2">
                                 <Paperclip className="w-4 h-4 text-slate-500" />
                                 <span className="text-sm font-medium text-slate-700">
-                                  Attachments ({email.EmailAttachment.length})
+                                  Attachments ({regularAttachments.length})
                                 </span>
                               </div>
                               <div className="text-xs text-slate-500">
-                                From: {email.fromName || email.fromEmail} • {format(new Date(email.createdAt), 'MMM d, yyyy h:mm a')}
+                                From: {email.fromName || email.fromEmail} •{' '}
+                                {format(
+                                  new Date(email.createdAt),
+                                  'MMM d, yyyy h:mm a',
+                                )}
                               </div>
                             </div>
                             <div className="grid gap-2">
-                              {email.EmailAttachment.map((attachment) => {
-                                const isImage = attachment.mimeType?.startsWith('image/')
-                                
+                              {regularAttachments.map((attachment) => {
+                                const isImage =
+                                  attachment.mimeType?.startsWith('image/');
+
                                 return attachment.fileUrl ? (
                                   <a
                                     key={attachment.id}
@@ -2440,8 +3059,9 @@ export default function MailPage() {
                                             alt={attachment.filename}
                                             className="w-full h-full object-cover"
                                             onError={(e) => {
-                                              const target = e.target as HTMLImageElement
-                                              target.style.display = 'none'
+                                              const target =
+                                                e.target as HTMLImageElement;
+                                              target.style.display = 'none';
                                             }}
                                           />
                                           <div className="absolute inset-0 flex items-center justify-center bg-slate-100 hidden">
@@ -2458,8 +3078,13 @@ export default function MailPage() {
                                           {attachment.filename}
                                         </div>
                                         <div className="text-xs text-slate-500">
-                                          {attachment.mimeType} • {formatFileSize(attachment.size)}
-                                          {isImage && <span className="ml-1 text-blue-600">(Image)</span>}
+                                          {attachment.mimeType} •{' '}
+                                          {formatFileSize(attachment.size)}
+                                          {isImage && (
+                                            <span className="ml-1 text-blue-600">
+                                              (Image)
+                                            </span>
+                                          )}
                                         </div>
                                       </div>
                                     </div>
@@ -2479,36 +3104,46 @@ export default function MailPage() {
                                           {attachment.filename}
                                         </div>
                                         <div className="text-xs text-amber-600">
-                                          Processing... • {formatFileSize(attachment.size)}
+                                          Processing... •{' '}
+                                          {formatFileSize(attachment.size)}
                                         </div>
                                       </div>
                                     </div>
                                     <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />
                                   </div>
-                                )
+                                );
                               })}
                             </div>
                           </div>
+                        ) : email.hasAttachments && regularAttachments.length === 0 ? (
+                          // Only show processing message if there are NO regular attachments
+                          // (inline images are handled separately in email body)
+                          null
                         ) : email.hasAttachments ? (
                           <div className="mt-4 bg-amber-50 rounded-lg border border-amber-200 p-4">
                             <div className="flex items-center gap-2">
                               <Paperclip className="w-4 h-4 text-amber-500" />
                               <span className="text-sm font-medium text-amber-700">
-                                This email has attachments (processing or data unavailable)
+                                This email has attachments (processing or data
+                                unavailable)
                               </span>
                             </div>
                           </div>
-                        ) : null}
+                        ) : null;
+                        })()}
 
                         {/* Linked Ticket */}
                         {email.ticket && (
                           <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
                             <FileText className="w-4 h-4" />
-                            <span>Linked to ticket: <strong>{email.ticket.ticketNumber}</strong></span>
+                            <span>
+                              Linked to ticket:{' '}
+                              <strong>{email.ticket.ticketNumber}</strong>
+                            </span>
                           </div>
                         )}
                       </div>
-                    )
+                    );
                   })}
                 </div>
 
@@ -2529,7 +3164,12 @@ export default function MailPage() {
                         >
                           <div className="flex items-center gap-2 mb-2">
                             <span className="text-xs text-slate-500">
-                              {reply.sentAt ? format(new Date(reply.sentAt), 'MMM d, yyyy h:mm a') : 'Pending'}
+                              {reply.sentAt
+                                ? format(
+                                    new Date(reply.sentAt),
+                                    'MMM d, yyyy h:mm a',
+                                  )
+                                : 'Pending'}
                             </span>
                           </div>
                           {/* Use EmailContent component to render HTML with images */}
@@ -2551,30 +3191,30 @@ export default function MailPage() {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Action Buttons - Only show when reply is not open */}
                 {!showInlineReply && selectedEmail && (
                   <div className="p-6 border-t border-slate-200 bg-slate-50">
                     <div className="flex items-center space-x-3">
                       <Button
                         onClick={() => {
-                          setShowInlineReply(true)
+                          setShowInlineReply(true);
                           setReplyForm({
                             subject: `Re: ${selectedEmail.subject}`,
                             body: '',
                             toEmail: selectedEmail.fromEmail,
                             ccEmail: '',
-                          })
-                          setBccEmail('')
-                          setCcVisible(false)
-                          setBccVisible(false)
+                          });
+                          setBccEmail('');
+                          setCcVisible(false);
+                          setBccVisible(false);
                         }}
                         className="gap-2 bg-blue-500 hover:bg-blue-600 text-white shadow-md"
                       >
                         <Send className="w-4 h-4" />
                         <span>Reply</span>
                       </Button>
-                      
+
                       {!selectedEmail.read && (
                         <Button
                           variant="outline"
@@ -2583,7 +3223,7 @@ export default function MailPage() {
                           Mark as Read
                         </Button>
                       )}
-                      
+
                       {!selectedEmail.ticket && (
                         <Button
                           variant="outline"
@@ -2595,7 +3235,7 @@ export default function MailPage() {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Gmail-Style Inline Reply Form */}
                 {showInlineReply && selectedEmail && (
                   <div className="border-t border-slate-200">
@@ -2606,7 +3246,7 @@ export default function MailPage() {
                           <Send className="w-5 h-5" />
                           <span className="font-medium">Reply</span>
                         </div>
-                        <button 
+                        <button
                           onClick={() => setShowInlineReply(false)}
                           className="text-slate-500 hover:text-slate-700 p-1 hover:bg-slate-100 rounded"
                         >
@@ -2617,28 +3257,37 @@ export default function MailPage() {
                       {/* From Field (Display Only) */}
                       <div className="mb-3 flex items-center text-sm">
                         <span className="text-slate-600 w-16">From:</span>
-                        <span className="text-slate-900">{selectedEmail.toEmail}</span>
+                        <span className="text-slate-900">
+                          {selectedEmail.toEmail}
+                        </span>
                       </div>
 
                       {/* To Field */}
                       <div className="mb-3 flex items-start">
-                        <span className="text-slate-600 w-16 pt-2 text-sm">To:</span>
+                        <span className="text-slate-600 w-16 pt-2 text-sm">
+                          To:
+                        </span>
                         <div className="flex-1">
                           <input
                             type="text"
                             value={replyForm.toEmail}
-                            onChange={(e) => setReplyForm({ ...replyForm, toEmail: e.target.value })}
+                            onChange={(e) =>
+                              setReplyForm({
+                                ...replyForm,
+                                toEmail: e.target.value,
+                              })
+                            }
                             className="w-full px-3 py-2 border-b border-slate-300 focus:border-blue-500 focus:outline-none text-sm"
                           />
                           {!ccVisible && !bccVisible && (
                             <div className="mt-1 flex gap-3">
-                              <button 
+                              <button
                                 onClick={() => setCcVisible(true)}
                                 className="text-sm text-slate-600 hover:text-slate-900"
                               >
                                 Cc
                               </button>
-                              <button 
+                              <button
                                 onClick={() => setBccVisible(true)}
                                 className="text-sm text-slate-600 hover:text-slate-900"
                               >
@@ -2652,11 +3301,18 @@ export default function MailPage() {
                       {/* CC Field */}
                       {ccVisible && (
                         <div className="mb-3 flex items-center">
-                          <span className="text-slate-600 w-16 text-sm">Cc:</span>
+                          <span className="text-slate-600 w-16 text-sm">
+                            Cc:
+                          </span>
                           <input
                             type="text"
                             value={replyForm.ccEmail}
-                            onChange={(e) => setReplyForm({ ...replyForm, ccEmail: e.target.value })}
+                            onChange={(e) =>
+                              setReplyForm({
+                                ...replyForm,
+                                ccEmail: e.target.value,
+                              })
+                            }
                             placeholder="CC email addresses"
                             className="flex-1 px-3 py-2 border-b border-slate-300 focus:border-blue-500 focus:outline-none text-sm"
                           />
@@ -2666,7 +3322,9 @@ export default function MailPage() {
                       {/* BCC Field */}
                       {bccVisible && (
                         <div className="mb-3 flex items-center">
-                          <span className="text-slate-600 w-16 text-sm">Bcc:</span>
+                          <span className="text-slate-600 w-16 text-sm">
+                            Bcc:
+                          </span>
                           <input
                             type="text"
                             value={bccEmail}
@@ -2679,7 +3337,9 @@ export default function MailPage() {
 
                       {/* Subject Field */}
                       <div className="mb-4 flex items-center">
-                        <span className="text-slate-600 w-16 text-sm">Subject:</span>
+                        <span className="text-slate-600 w-16 text-sm">
+                          Subject:
+                        </span>
                         <input
                           type="text"
                           value={replyForm.subject}
@@ -2692,7 +3352,9 @@ export default function MailPage() {
                       <div className="mb-4">
                         <textarea
                           value={replyForm.body}
-                          onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
+                          onChange={(e) =>
+                            setReplyForm({ ...replyForm, body: e.target.value })
+                          }
                           placeholder="Type your reply here..."
                           className="w-full px-3 py-3 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none text-sm min-h-[200px] resize-y"
                         />
@@ -2702,11 +3364,20 @@ export default function MailPage() {
                       {replyAttachments.length > 0 && (
                         <div className="mb-4 flex flex-wrap gap-2">
                           {replyAttachments.map((file, index) => (
-                            <div key={index} className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg text-sm">
+                            <div
+                              key={index}
+                              className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg text-sm"
+                            >
                               <Paperclip className="w-4 h-4 text-slate-500" />
-                              <span className="text-slate-700 max-w-[150px] truncate">{file.name}</span>
+                              <span className="text-slate-700 max-w-[150px] truncate">
+                                {file.name}
+                              </span>
                               <button
-                                onClick={() => setReplyAttachments(prev => prev.filter((_, i) => i !== index))}
+                                onClick={() =>
+                                  setReplyAttachments((prev) =>
+                                    prev.filter((_, i) => i !== index),
+                                  )
+                                }
                                 className="text-slate-400 hover:text-red-500"
                               >
                                 <X className="w-4 h-4" />
@@ -2723,9 +3394,10 @@ export default function MailPage() {
                         className="hidden"
                         multiple
                         onChange={(e) => {
-                          const files = Array.from(e.target.files || [])
-                          setReplyAttachments(prev => [...prev, ...files])
-                          if (replyFileInputRef.current) replyFileInputRef.current.value = ''
+                          const files = Array.from(e.target.files || []);
+                          setReplyAttachments((prev) => [...prev, ...files]);
+                          if (replyFileInputRef.current)
+                            replyFileInputRef.current.value = '';
                         }}
                       />
                       <input
@@ -2735,9 +3407,10 @@ export default function MailPage() {
                         accept="image/*"
                         multiple
                         onChange={(e) => {
-                          const files = Array.from(e.target.files || [])
-                          setReplyAttachments(prev => [...prev, ...files])
-                          if (replyImageInputRef.current) replyImageInputRef.current.value = ''
+                          const files = Array.from(e.target.files || []);
+                          setReplyAttachments((prev) => [...prev, ...files]);
+                          if (replyImageInputRef.current)
+                            replyImageInputRef.current.value = '';
                         }}
                       />
 
@@ -2756,26 +3429,30 @@ export default function MailPage() {
                             )}
                             {replying ? 'Sending...' : 'Send'}
                           </Button>
-                          <button 
+                          <button
                             onClick={() => replyFileInputRef.current?.click()}
-                            className="p-2 text-slate-600 hover:bg-slate-100 rounded transition-colors" 
+                            className="p-2 text-slate-600 hover:bg-slate-100 rounded transition-colors"
                             title="Attach file"
                           >
                             <Paperclip className="w-5 h-5" />
                           </button>
-                          <button 
+                          <button
                             onClick={() => replyImageInputRef.current?.click()}
-                            className="p-2 text-slate-600 hover:bg-slate-100 rounded transition-colors" 
+                            className="p-2 text-slate-600 hover:bg-slate-100 rounded transition-colors"
                             title="Insert image"
                           >
                             <Image className="w-5 h-5" />
                           </button>
                           <div className="relative">
-                            <button 
-                              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                            <button
+                              onClick={() =>
+                                setShowEmojiPicker(!showEmojiPicker)
+                              }
                               className={cn(
-                                "p-2 rounded transition-colors",
-                                showEmojiPicker ? "bg-slate-200 text-slate-900" : "text-slate-600 hover:bg-slate-100"
+                                'p-2 rounded transition-colors',
+                                showEmojiPicker
+                                  ? 'bg-slate-200 text-slate-900'
+                                  : 'text-slate-600 hover:bg-slate-100',
                               )}
                               title="Insert emoji"
                             >
@@ -2790,12 +3467,17 @@ export default function MailPage() {
                                       key={index}
                                       type="button"
                                       onClick={() => {
-                                        setReplyForm(prev => ({ ...prev, body: prev.body + emoji }))
-                                        setShowEmojiPicker(false)
+                                        setReplyForm((prev) => ({
+                                          ...prev,
+                                          body: prev.body + emoji,
+                                        }));
+                                        setShowEmojiPicker(false);
                                       }}
                                       className="w-10 h-10 flex items-center justify-center text-2xl hover:bg-slate-100 rounded-lg transition-colors"
                                     >
-                                      <span role="img" aria-label="emoji">{emoji}</span>
+                                      <span role="img" aria-label="emoji">
+                                        {emoji}
+                                      </span>
                                     </button>
                                   ))}
                                 </div>
@@ -2803,11 +3485,11 @@ export default function MailPage() {
                             )}
                           </div>
                         </div>
-                        <button 
+                        <button
                           onClick={() => {
-                            setShowInlineReply(false)
-                            setReplyAttachments([])
-                            setShowEmojiPicker(false)
+                            setShowInlineReply(false);
+                            setReplyAttachments([]);
+                            setShowEmojiPicker(false);
                           }}
                           className="p-2 text-slate-600 hover:bg-slate-100 rounded transition-colors"
                         >
@@ -2818,59 +3500,80 @@ export default function MailPage() {
                   </div>
                 )}
               </div>
-            )
+            );
           })()
         )}
       </div>
 
       {/* Reply Email Modal */}
-      <Dialog open={replyModal.open} onOpenChange={(open) => !open && closeReplyModal()}>
+      <Dialog
+        open={replyModal.open}
+        onOpenChange={(open) => !open && closeReplyModal()}
+      >
         <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader className="pb-4 border-b border-slate-200">
-            <DialogTitle className="text-2xl font-bold text-slate-800">Reply to Email</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-slate-800">
+              Reply to Email
+            </DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div>
-              <Label className="block text-sm font-semibold text-slate-700 mb-2">To</Label>
+              <Label className="block text-sm font-semibold text-slate-700 mb-2">
+                To
+              </Label>
               <Input
                 value={replyForm.toEmail}
-                onChange={(e) => setReplyForm({ ...replyForm, toEmail: e.target.value })}
+                onChange={(e) =>
+                  setReplyForm({ ...replyForm, toEmail: e.target.value })
+                }
                 className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg bg-blue-50 text-slate-700 font-medium"
               />
             </div>
-            
+
             <div>
-              <Label className="block text-sm font-semibold text-slate-700 mb-2">CC (Optional)</Label>
+              <Label className="block text-sm font-semibold text-slate-700 mb-2">
+                CC (Optional)
+              </Label>
               <Input
                 value={replyForm.ccEmail}
-                onChange={(e) => setReplyForm({ ...replyForm, ccEmail: e.target.value })}
+                onChange={(e) =>
+                  setReplyForm({ ...replyForm, ccEmail: e.target.value })
+                }
                 placeholder="CC email addresses"
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            
+
             <div>
-              <Label className="block text-sm font-semibold text-slate-700 mb-2">Subject</Label>
+              <Label className="block text-sm font-semibold text-slate-700 mb-2">
+                Subject
+              </Label>
               <Input
                 value={replyForm.subject}
-                onChange={(e) => setReplyForm({ ...replyForm, subject: e.target.value })}
+                onChange={(e) =>
+                  setReplyForm({ ...replyForm, subject: e.target.value })
+                }
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            
+
             <div>
-              <Label className="block text-sm font-semibold text-slate-700 mb-2">Message</Label>
+              <Label className="block text-sm font-semibold text-slate-700 mb-2">
+                Message
+              </Label>
               <Textarea
                 value={replyForm.body}
-                onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })}
+                onChange={(e) =>
+                  setReplyForm({ ...replyForm, body: e.target.value })
+                }
                 placeholder="Type your reply here..."
                 rows={10}
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
               />
             </div>
           </div>
-          
+
           <DialogFooter className="pt-4 border-t border-slate-200 bg-slate-50 -mx-6 -mb-6 px-6 py-4 rounded-b-2xl flex items-center justify-end space-x-3">
             <Button
               variant="outline"
@@ -2902,12 +3605,16 @@ export default function MailPage() {
       </Dialog>
 
       {/* Create Ticket from Email Modal */}
-      <Dialog open={ticketModal.open} onOpenChange={(open) => !open && closeTicketModal()}>
+      <Dialog
+        open={ticketModal.open}
+        onOpenChange={(open) => !open && closeTicketModal()}
+      >
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Ticket from Email</DialogTitle>
             <DialogDescription>
-              Create a support ticket from this email. All fields marked with * are required.
+              Create a support ticket from this email. All fields marked with *
+              are required.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -2920,16 +3627,18 @@ export default function MailPage() {
                   id="ticket-name"
                   value={ticketForm.name}
                   onChange={(e) => {
-                    setTicketForm({ ...ticketForm, name: e.target.value })
+                    setTicketForm({ ...ticketForm, name: e.target.value });
                     if (ticketFormErrors.name) {
-                      setTicketFormErrors({ ...ticketFormErrors, name: '' })
+                      setTicketFormErrors({ ...ticketFormErrors, name: '' });
                     }
                   }}
                   placeholder="Customer name"
                   className={ticketFormErrors.name ? 'border-red-500' : ''}
                 />
                 {ticketFormErrors.name && (
-                  <p className="text-sm text-red-500">{ticketFormErrors.name}</p>
+                  <p className="text-sm text-red-500">
+                    {ticketFormErrors.name}
+                  </p>
                 )}
               </div>
               <div className="space-y-2">
@@ -2941,20 +3650,22 @@ export default function MailPage() {
                   type="email"
                   value={ticketForm.email}
                   onChange={(e) => {
-                    setTicketForm({ ...ticketForm, email: e.target.value })
+                    setTicketForm({ ...ticketForm, email: e.target.value });
                     if (ticketFormErrors.email) {
-                      setTicketFormErrors({ ...ticketFormErrors, email: '' })
+                      setTicketFormErrors({ ...ticketFormErrors, email: '' });
                     }
                   }}
                   placeholder="customer@example.com"
                   className={ticketFormErrors.email ? 'border-red-500' : ''}
                 />
                 {ticketFormErrors.email && (
-                  <p className="text-sm text-red-500">{ticketFormErrors.email}</p>
+                  <p className="text-sm text-red-500">
+                    {ticketFormErrors.email}
+                  </p>
                 )}
               </div>
             </div>
-              <div className="space-y-2">
+            <div className="space-y-2">
               <Label htmlFor="ticket-phone">
                 Phone <span className="text-red-500">*</span>
               </Label>
@@ -2962,23 +3673,23 @@ export default function MailPage() {
                 id="ticket-phone"
                 value={ticketForm.phone}
                 onChange={(e) => {
-                  const phoneValue = e.target.value
-                  setTicketForm({ ...ticketForm, phone: phoneValue })
+                  const phoneValue = e.target.value;
+                  setTicketForm({ ...ticketForm, phone: phoneValue });
                   if (ticketFormErrors.phone) {
-                    setTicketFormErrors({ ...ticketFormErrors, phone: '' })
+                    setTicketFormErrors({ ...ticketFormErrors, phone: '' });
                   }
 
                   // Auto-fill Order ID and Tracking ID when phone number is entered (with debounce)
                   if (phoneValue.trim().length >= 10) {
                     // Clear existing timeout
                     if (lookupTimeoutRef.current) {
-                      clearTimeout(lookupTimeoutRef.current)
+                      clearTimeout(lookupTimeoutRef.current);
                     }
-                    
+
                     // Set new timeout for debounced lookup
                     lookupTimeoutRef.current = setTimeout(() => {
-                      lookupOrderTracking(phoneValue.trim())
-                    }, 500) // Wait 500ms after user stops typing
+                      lookupOrderTracking(phoneValue.trim());
+                    }, 500); // Wait 500ms after user stops typing
                   }
                 }}
                 placeholder="+1234567890"
@@ -2997,16 +3708,18 @@ export default function MailPage() {
                   id="ticket-order"
                   value={ticketForm.order}
                   onChange={(e) => {
-                    setTicketForm({ ...ticketForm, order: e.target.value })
+                    setTicketForm({ ...ticketForm, order: e.target.value });
                     if (ticketFormErrors.order) {
-                      setTicketFormErrors({ ...ticketFormErrors, order: '' })
+                      setTicketFormErrors({ ...ticketFormErrors, order: '' });
                     }
                   }}
                   placeholder="Order number"
                   className={ticketFormErrors.order ? 'border-red-500' : ''}
                 />
                 {ticketFormErrors.order && (
-                  <p className="text-sm text-red-500">{ticketFormErrors.order}</p>
+                  <p className="text-sm text-red-500">
+                    {ticketFormErrors.order}
+                  </p>
                 )}
               </div>
               <div className="space-y-2">
@@ -3017,16 +3730,26 @@ export default function MailPage() {
                   id="ticket-tracking"
                   value={ticketForm.trackingId}
                   onChange={(e) => {
-                    setTicketForm({ ...ticketForm, trackingId: e.target.value })
+                    setTicketForm({
+                      ...ticketForm,
+                      trackingId: e.target.value,
+                    });
                     if (ticketFormErrors.trackingId) {
-                      setTicketFormErrors({ ...ticketFormErrors, trackingId: '' })
+                      setTicketFormErrors({
+                        ...ticketFormErrors,
+                        trackingId: '',
+                      });
                     }
                   }}
                   placeholder="Tracking number"
-                  className={ticketFormErrors.trackingId ? 'border-red-500' : ''}
+                  className={
+                    ticketFormErrors.trackingId ? 'border-red-500' : ''
+                  }
                 />
                 {ticketFormErrors.trackingId && (
-                  <p className="text-sm text-red-500">{ticketFormErrors.trackingId}</p>
+                  <p className="text-sm text-red-500">
+                    {ticketFormErrors.trackingId}
+                  </p>
                 )}
               </div>
             </div>
@@ -3036,8 +3759,14 @@ export default function MailPage() {
             {/* Issue Details Section */}
             <div className="space-y-3">
               <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
-                <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(43, 185, 205, 0.1)' }}>
-                  <MessageSquare className="w-3.5 h-3.5" style={{ color: '#2bb9cd' }} />
+                <div
+                  className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: 'rgba(43, 185, 205, 0.1)' }}
+                >
+                  <MessageSquare
+                    className="w-3.5 h-3.5"
+                    style={{ color: '#2bb9cd' }}
+                  />
                 </div>
                 <h3 className="text-sm font-semibold text-gray-900">
                   Issue Details
@@ -3046,28 +3775,38 @@ export default function MailPage() {
 
               {/* Category Selection */}
               <div className="space-y-2">
-                <Label htmlFor="ticket-category" className="text-xs font-semibold text-gray-700">
+                <Label
+                  htmlFor="ticket-category"
+                  className="text-xs font-semibold text-gray-700"
+                >
                   Category <span className="text-red-500">*</span>
                 </Label>
                 <Select
                   value={ticketForm.categoryId || undefined}
                   onValueChange={(value) => {
-                    setTicketForm({ ...ticketForm, categoryId: value || '', subject: '' })
+                    setTicketForm({
+                      ...ticketForm,
+                      categoryId: value || '',
+                      subject: '',
+                    });
                     if (ticketFormErrors.categoryId) {
-                      setTicketFormErrors({ ...ticketFormErrors, categoryId: '' })
+                      setTicketFormErrors({
+                        ...ticketFormErrors,
+                        categoryId: '',
+                      });
                     }
                   }}
                 >
-                  <SelectTrigger 
+                  <SelectTrigger
                     id="ticket-category"
                     className={cn(
-                      "w-full h-10 text-sm rounded-lg border-2 transition-all duration-200",
-                      "focus:outline-none focus:ring-2",
+                      'w-full h-10 text-sm rounded-lg border-2 transition-all duration-200',
+                      'focus:outline-none focus:ring-2',
                       ticketFormErrors.categoryId
-                        ? "border-red-300 bg-red-50 focus:border-red-500"
+                        ? 'border-red-300 bg-red-50 focus:border-red-500'
                         : ticketForm.categoryId && !ticketFormErrors.categoryId
-                        ? "border-green-300 bg-green-50 focus:border-green-500"
-                        : "border-gray-200 hover:border-gray-300"
+                          ? 'border-green-300 bg-green-50 focus:border-green-500'
+                          : 'border-gray-200 hover:border-gray-300',
                     )}
                   >
                     <SelectValue placeholder="Select category" />
@@ -3090,36 +3829,45 @@ export default function MailPage() {
 
               {/* Subject */}
               <div className="space-y-2">
-                <Label htmlFor="ticket-subject" className="text-xs font-semibold text-gray-700">
+                <Label
+                  htmlFor="ticket-subject"
+                  className="text-xs font-semibold text-gray-700"
+                >
                   Subject <span className="text-red-500">*</span>
                 </Label>
                 {ticketForm.categoryId && getAvailableSubjects().length > 0 ? (
                   <Select
                     value={ticketForm.subject || undefined}
                     onValueChange={(value) => {
-                      setTicketForm({ ...ticketForm, subject: value })
+                      setTicketForm({ ...ticketForm, subject: value });
                       if (ticketFormErrors.subject) {
-                        setTicketFormErrors({ ...ticketFormErrors, subject: '' })
+                        setTicketFormErrors({
+                          ...ticketFormErrors,
+                          subject: '',
+                        });
                       }
                     }}
                   >
-                    <SelectTrigger 
+                    <SelectTrigger
                       id="ticket-subject"
                       className={cn(
-                        "w-full h-10 text-sm rounded-lg border-2 transition-all duration-200",
-                        "focus:outline-none focus:ring-2",
+                        'w-full h-10 text-sm rounded-lg border-2 transition-all duration-200',
+                        'focus:outline-none focus:ring-2',
                         ticketFormErrors.subject
-                          ? "border-red-300 bg-red-50 focus:border-red-500"
+                          ? 'border-red-300 bg-red-50 focus:border-red-500'
                           : ticketForm.subject && !ticketFormErrors.subject
-                          ? "border-green-300 bg-green-50 focus:border-green-500"
-                          : "border-gray-200 hover:border-gray-300"
+                            ? 'border-green-300 bg-green-50 focus:border-green-500'
+                            : 'border-gray-200 hover:border-gray-300',
                       )}
                     >
                       <SelectValue placeholder="Select issue type" />
                     </SelectTrigger>
                     <SelectContent>
                       {getAvailableSubjects().map((subject, index) => (
-                        <SelectItem key={`${subject}-${index}`} value={String(subject)}>
+                        <SelectItem
+                          key={`${subject}-${index}`}
+                          value={String(subject)}
+                        >
                           {String(subject)}
                         </SelectItem>
                       ))}
@@ -3130,22 +3878,27 @@ export default function MailPage() {
                     id="ticket-subject"
                     value={ticketForm.subject}
                     onChange={(e) => {
-                      setTicketForm({ ...ticketForm, subject: e.target.value })
+                      setTicketForm({ ...ticketForm, subject: e.target.value });
                       if (ticketFormErrors.subject) {
-                        setTicketFormErrors({ ...ticketFormErrors, subject: '' })
+                        setTicketFormErrors({
+                          ...ticketFormErrors,
+                          subject: '',
+                        });
                       }
                     }}
                     placeholder="Select category first"
                     disabled={!ticketForm.categoryId}
                     className={cn(
-                      "w-full h-10 text-sm rounded-lg border-2 transition-all duration-200",
-                      "focus:outline-none focus:ring-2",
-                      !ticketForm.categoryId ? "bg-gray-50 cursor-not-allowed" : "",
+                      'w-full h-10 text-sm rounded-lg border-2 transition-all duration-200',
+                      'focus:outline-none focus:ring-2',
+                      !ticketForm.categoryId
+                        ? 'bg-gray-50 cursor-not-allowed'
+                        : '',
                       ticketFormErrors.subject
-                        ? "border-red-300 bg-red-50 focus:border-red-500"
+                        ? 'border-red-300 bg-red-50 focus:border-red-500'
                         : ticketForm.subject && !ticketFormErrors.subject
-                        ? "border-green-300 bg-green-50 focus:border-green-500"
-                        : "border-gray-200 hover:border-gray-300"
+                          ? 'border-green-300 bg-green-50 focus:border-green-500'
+                          : 'border-gray-200 hover:border-gray-300',
                     )}
                   />
                 )}
@@ -3159,28 +3912,37 @@ export default function MailPage() {
 
               {/* Description */}
               <div className="space-y-2">
-                <Label htmlFor="ticket-description" className="text-xs font-semibold text-gray-700">
+                <Label
+                  htmlFor="ticket-description"
+                  className="text-xs font-semibold text-gray-700"
+                >
                   Description <span className="text-red-500">*</span>
                 </Label>
                 <Textarea
                   id="ticket-description"
                   value={ticketForm.description}
                   onChange={(e) => {
-                    setTicketForm({ ...ticketForm, description: e.target.value })
+                    setTicketForm({
+                      ...ticketForm,
+                      description: e.target.value,
+                    });
                     if (ticketFormErrors.description) {
-                      setTicketFormErrors({ ...ticketFormErrors, description: '' })
+                      setTicketFormErrors({
+                        ...ticketFormErrors,
+                        description: '',
+                      });
                     }
                   }}
                   placeholder="Please provide detailed information about your issue..."
                   rows={3}
                   className={cn(
-                    "w-full text-sm rounded-lg border-2 transition-all duration-200 resize-none",
-                    "focus:outline-none focus:ring-2",
+                    'w-full text-sm rounded-lg border-2 transition-all duration-200 resize-none',
+                    'focus:outline-none focus:ring-2',
                     ticketFormErrors.description
-                      ? "border-red-300 bg-red-50 focus:border-red-500"
+                      ? 'border-red-300 bg-red-50 focus:border-red-500'
                       : ticketForm.description && !ticketFormErrors.description
-                      ? "border-green-300 bg-green-50 focus:border-green-500"
-                      : "border-gray-200 hover:border-gray-300"
+                        ? 'border-green-300 bg-green-50 focus:border-green-500'
+                        : 'border-gray-200 hover:border-gray-300',
                   )}
                 />
                 {ticketFormErrors.description && (
@@ -3193,14 +3955,19 @@ export default function MailPage() {
 
               {/* Priority */}
               <div className="space-y-2">
-                <Label htmlFor="ticket-priority" className="text-xs font-semibold text-gray-700">
+                <Label
+                  htmlFor="ticket-priority"
+                  className="text-xs font-semibold text-gray-700"
+                >
                   Priority
                 </Label>
                 <Select
                   value={ticketForm.priority}
-                  onValueChange={(value) => setTicketForm({ ...ticketForm, priority: value })}
+                  onValueChange={(value) =>
+                    setTicketForm({ ...ticketForm, priority: value })
+                  }
                 >
-                  <SelectTrigger 
+                  <SelectTrigger
                     id="ticket-priority"
                     className="w-full h-10 text-sm rounded-lg border-2 border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2"
                   >
@@ -3236,7 +4003,7 @@ export default function MailPage() {
                     <span>{ticketFormErrors.attachments}</span>
                   </p>
                 )}
-                
+
                 {/* First Row: Single Video Upload Card */}
                 <div className="mb-2">
                   <label className="cursor-pointer block">
@@ -3248,26 +4015,28 @@ export default function MailPage() {
                       className="hidden"
                       disabled={!!singleFile}
                     />
-                    <div className={cn(
-                      "border-2 border-dashed rounded-lg p-3 text-center transition-all duration-200",
-                      singleFile 
-                        ? "border-green-300 bg-green-50" 
-                        : requiresAttachments() && !singleFile
-                        ? "border-red-300 bg-red-50 hover:border-red-400"
-                        : "border-gray-300 hover:border-gray-400"
-                    )}
-                    onMouseEnter={(e) => {
-                      if (!singleFile && !requiresAttachments()) {
-                        e.currentTarget.style.borderColor = '#2bb9cd'
-                        e.currentTarget.style.backgroundColor = 'rgba(43, 185, 205, 0.05)'
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!singleFile && !requiresAttachments()) {
-                        e.currentTarget.style.borderColor = ''
-                        e.currentTarget.style.backgroundColor = ''
-                      }
-                    }}
+                    <div
+                      className={cn(
+                        'border-2 border-dashed rounded-lg p-3 text-center transition-all duration-200',
+                        singleFile
+                          ? 'border-green-300 bg-green-50'
+                          : requiresAttachments() && !singleFile
+                            ? 'border-red-300 bg-red-50 hover:border-red-400'
+                            : 'border-gray-300 hover:border-gray-400',
+                      )}
+                      onMouseEnter={(e) => {
+                        if (!singleFile && !requiresAttachments()) {
+                          e.currentTarget.style.borderColor = '#2bb9cd';
+                          e.currentTarget.style.backgroundColor =
+                            'rgba(43, 185, 205, 0.05)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!singleFile && !requiresAttachments()) {
+                          e.currentTarget.style.borderColor = '';
+                          e.currentTarget.style.backgroundColor = '';
+                        }
+                      }}
                     >
                       {singleFile ? (
                         <div className="flex items-center justify-between">
@@ -3287,9 +4056,9 @@ export default function MailPage() {
                           <button
                             type="button"
                             onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              handleRemoveSingleFile()
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleRemoveSingleFile();
                             }}
                             className="flex-shrink-0 p-1.5 hover:bg-red-100 active:bg-red-200 rounded-lg transition-colors"
                             aria-label="Remove video"
@@ -3299,8 +4068,16 @@ export default function MailPage() {
                         </div>
                       ) : (
                         <>
-                          <div className="inline-flex items-center justify-center w-10 h-10 rounded-full mb-2" style={{ backgroundColor: 'rgba(43, 185, 205, 0.1)' }}>
-                            <Upload className="w-5 h-5" style={{ color: '#2bb9cd' }} />
+                          <div
+                            className="inline-flex items-center justify-center w-10 h-10 rounded-full mb-2"
+                            style={{
+                              backgroundColor: 'rgba(43, 185, 205, 0.1)',
+                            }}
+                          >
+                            <Upload
+                              className="w-5 h-5"
+                              style={{ color: '#2bb9cd' }}
+                            />
                           </div>
                           <p className="text-xs font-medium text-gray-900 mb-1">
                             Tap to upload video
@@ -3327,26 +4104,31 @@ export default function MailPage() {
                           className="hidden"
                           disabled={!!imageFiles[index]}
                         />
-                        <div className={cn(
-                          "border-2 border-dashed rounded-lg p-1.5 text-center transition-all duration-200 h-20",
-                          imageFiles[index]
-                            ? "border-green-300 bg-green-50" 
-                            : requiresAttachments() && !imageFiles[index] && !singleFile && imageFiles.every(f => !f)
-                            ? "border-red-300 bg-red-50 hover:border-red-400"
-                            : "border-gray-300 hover:border-gray-400"
-                        )}
-                        onMouseEnter={(e) => {
-                          if (!imageFiles[index] && !requiresAttachments()) {
-                            e.currentTarget.style.borderColor = '#2bb9cd'
-                            e.currentTarget.style.backgroundColor = 'rgba(43, 185, 205, 0.05)'
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!imageFiles[index] && !requiresAttachments()) {
-                            e.currentTarget.style.borderColor = ''
-                            e.currentTarget.style.backgroundColor = ''
-                          }
-                        }}
+                        <div
+                          className={cn(
+                            'border-2 border-dashed rounded-lg p-1.5 text-center transition-all duration-200 h-20',
+                            imageFiles[index]
+                              ? 'border-green-300 bg-green-50'
+                              : requiresAttachments() &&
+                                  !imageFiles[index] &&
+                                  !singleFile &&
+                                  imageFiles.every((f) => !f)
+                                ? 'border-red-300 bg-red-50 hover:border-red-400'
+                                : 'border-gray-300 hover:border-gray-400',
+                          )}
+                          onMouseEnter={(e) => {
+                            if (!imageFiles[index] && !requiresAttachments()) {
+                              e.currentTarget.style.borderColor = '#2bb9cd';
+                              e.currentTarget.style.backgroundColor =
+                                'rgba(43, 185, 205, 0.05)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!imageFiles[index] && !requiresAttachments()) {
+                              e.currentTarget.style.borderColor = '';
+                              e.currentTarget.style.backgroundColor = '';
+                            }
+                          }}
                         >
                           {imageFiles[index] ? (
                             <div className="h-full flex flex-col">
@@ -3360,14 +4142,15 @@ export default function MailPage() {
                                   {imageFiles[index]?.name}
                                 </p>
                                 <p className="text-[8px] text-gray-500 mb-1">
-                                  {imageFiles[index] && formatFileSize(imageFiles[index].size)}
+                                  {imageFiles[index] &&
+                                    formatFileSize(imageFiles[index].size)}
                                 </p>
                                 <button
                                   type="button"
                                   onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    handleRemoveImageFile(index)
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleRemoveImageFile(index);
                                   }}
                                   className="mx-auto p-0.5 hover:bg-red-100 active:bg-red-200 rounded transition-colors"
                                   aria-label="Remove image"
@@ -3420,7 +4203,10 @@ export default function MailPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}>
+      <Dialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}
+      >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <div className="flex items-center gap-3 mb-2">
@@ -3434,7 +4220,8 @@ export default function MailPage() {
             <DialogDescription className="text-base text-gray-600 pt-2">
               {deleteDialog.type === 'all' ? (
                 <>
-                  Are you sure you want to delete <strong>all {deleteDialog.count} email(s)</strong>?
+                  Are you sure you want to delete{' '}
+                  <strong>all {deleteDialog.count} email(s)</strong>?
                   <br />
                   <span className="text-red-600 font-medium mt-2 block">
                     This action cannot be undone.
@@ -3442,7 +4229,8 @@ export default function MailPage() {
                 </>
               ) : (
                 <>
-                  Are you sure you want to delete <strong>{deleteDialog.count} selected email(s)</strong>?
+                  Are you sure you want to delete{' '}
+                  <strong>{deleteDialog.count} selected email(s)</strong>?
                   <br />
                   <span className="text-red-600 font-medium mt-2 block">
                     This action cannot be undone.
@@ -3454,14 +4242,20 @@ export default function MailPage() {
           <DialogFooter className="gap-2 sm:gap-0">
             <Button
               variant="outline"
-              onClick={() => setDeleteDialog({ open: false, type: 'selected', count: 0 })}
+              onClick={() =>
+                setDeleteDialog({ open: false, type: 'selected', count: 0 })
+              }
               disabled={deleting}
             >
               Cancel
             </Button>
             <Button
               variant="destructive"
-              onClick={deleteDialog.type === 'all' ? confirmDeleteAll : confirmDeleteSelected}
+              onClick={
+                deleteDialog.type === 'all'
+                  ? confirmDeleteAll
+                  : confirmDeleteSelected
+              }
               disabled={deleting}
               className="gap-2"
             >
@@ -3480,7 +4274,6 @@ export default function MailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </div>
-  )
+  );
 }
