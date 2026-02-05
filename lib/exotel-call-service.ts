@@ -574,14 +574,48 @@ export async function initiateExotelCall(config: {
       response: parsedResponse,
     };
   } catch (error: any) {
-    console.error('[Call Initiation] ❌ Error:', error.message);
+    // Capture detailed error from Exotel API response
+    let errorMessage = error.message || 'Failed to initiate call';
+    let errorDetails: any = {
+      message: error.message,
+      code: error.code,
+    };
+
+    // If it's an axios error with response, extract the actual error from Exotel
+    if (error.response) {
+      console.error('[Call Initiation] ❌ Exotel API Error:');
+      console.error('   Status:', error.response.status);
+      console.error('   Data:', typeof error.response.data === 'string'
+        ? error.response.data.substring(0, 500)
+        : JSON.stringify(error.response.data));
+
+      errorDetails.status = error.response.status;
+      errorDetails.responseData = error.response.data;
+
+      // Try to parse XML error response from Exotel
+      if (typeof error.response.data === 'string' && error.response.data.includes('RestException')) {
+        try {
+          const parser = new xml2js.Parser();
+          const parsed = await parser.parseStringPromise(error.response.data);
+          const restException = parsed?.TwilioResponse?.RestException?.[0];
+          if (restException) {
+            errorMessage = restException.Message?.[0] || errorMessage;
+            errorDetails.exotelCode = restException.Code?.[0];
+            errorDetails.exotelMessage = restException.Message?.[0];
+            console.error('   Exotel Error:', errorMessage);
+          }
+        } catch (parseError) {
+          // Ignore parse errors
+        }
+      }
+    } else {
+      console.error('[Call Initiation] ❌ Error:', error.message);
+    }
+
     return {
       success: false,
-      error: error.message || 'Failed to initiate call',
-      details: {
-        message: error.message,
-        code: error.code,
-      },
+      error: errorMessage,
+      details: errorDetails,
     };
   }
 }
