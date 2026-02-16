@@ -1,36 +1,16 @@
-import { PrismaClient } from "@prisma/client";
+/**
+ * Lazy Prisma Client
+ *
+ * All imports and instantiation are deferred to first property access via a Proxy.
+ * This ensures the module can be safely imported during `next build` even when
+ * @prisma/client is not generated or the database is unreachable.
+ * At runtime the real PrismaClient is created once and cached in globalThis.
+ */
 
 const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
+  prisma: any | undefined;
   prismaVersion?: string;
 };
-
-// In development, clear cached Prisma client if schema has changed
-// This ensures new enum values are picked up without server restart
-if (process.env.NODE_ENV === "development") {
-  const currentSchemaVersion = "1.0.4"; // Increment this when schema changes (added Email model)
-  const existingPrisma = globalForPrisma.prisma;
-  if (existingPrisma && globalForPrisma.prismaVersion !== currentSchemaVersion) {
-    console.log("[Prisma] Schema changed, recreating Prisma client...");
-    existingPrisma.$disconnect().catch(() => {
-      // Ignore disconnect errors
-    });
-    globalForPrisma.prisma = undefined;
-  }
-  // Force clear if Email model doesn't exist
-  const currentPrisma = globalForPrisma.prisma;
-  if (currentPrisma) {
-    const hasEmailModel = 'email' in currentPrisma;
-    if (!hasEmailModel) {
-      console.log("[Prisma] Email model missing, recreating Prisma client...");
-      (currentPrisma as PrismaClient).$disconnect().catch(() => {
-        // Ignore disconnect errors
-      });
-      globalForPrisma.prisma = undefined;
-    }
-  }
-  globalForPrisma.prismaVersion = currentSchemaVersion;
-}
 
 /**
  * Construct DATABASE_URL from individual DB_* environment variables if available
@@ -80,9 +60,24 @@ export function getDatabaseUrl(): string {
     : `${databaseUrl}?${connectionParams}`;
 }
 
-function createPrismaClient(): PrismaClient {
-  try {
-    return new PrismaClient({
+function getOrCreatePrismaClient(): any {
+  if (globalForPrisma.prisma) {
+    return globalForPrisma.prisma;
+  }
+
+  const { PrismaClient } = require('@prisma/client');
+
+  // In development, clear cached Prisma client if schema has changed
+  if (process.env.NODE_ENV === "development") {
+    const currentSchemaVersion = "1.0.4";
+    if (globalForPrisma.prismaVersion !== currentSchemaVersion) {
+      globalForPrisma.prisma = undefined;
+    }
+    globalForPrisma.prismaVersion = currentSchemaVersion;
+  }
+
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = new PrismaClient({
       log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
       errorFormat: "pretty",
       datasources: {
@@ -91,27 +86,25 @@ function createPrismaClient(): PrismaClient {
         },
       },
     });
-  } catch (e) {
-    console.warn('[Prisma] Failed to create PrismaClient during build:', e);
-    // Return a bare PrismaClient so the module can still be imported at build time.
-    // Any actual query at runtime will fail with a clear connection error.
-    return new PrismaClient();
   }
+
+  if (process.env.NODE_ENV !== "production") {
+    // Keep reference in globalThis so it's reused across hot reloads
+    globalForPrisma.prisma = globalForPrisma.prisma;
+  }
+
+  return globalForPrisma.prisma;
 }
 
-export const prisma: PrismaClient =
-  globalForPrisma.prisma ?? createPrismaClient();
-
-// Verify Email model exists (for development debugging)
-if (process.env.NODE_ENV === "development" && prisma && (prisma as any).email === undefined) {
-  try {
-    console.warn("[Prisma] Email model not found in Prisma Client. Please restart the server after running: npx prisma generate");
-  } catch {
-    // Ignore
+// Export a Proxy so that `import { prisma } from './prisma'` never triggers
+// PrismaClient loading at module evaluation time. The real client is created
+// only when a property (e.g. prisma.user) is first accessed at request time.
+export const prisma: import("@prisma/client").PrismaClient = new Proxy(
+  {} as any,
+  {
+    get(_target, prop) {
+      const client = getOrCreatePrismaClient();
+      return client[prop];
+    },
   }
-}
-
-// Prisma connects lazily on first query, so we don't need to call $connect() here
-// Connection errors will be handled at the query level
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+);
