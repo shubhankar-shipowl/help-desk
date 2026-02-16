@@ -1,6 +1,5 @@
 import { prisma } from './prisma'
 import { sendEmail, renderEmailTemplate } from './email'
-import { Ticket_status, Ticket_priority, User_role } from '@prisma/client'
 import { getAppUrl } from './utils'
 import fs from 'fs'
 import path from 'path'
@@ -56,14 +55,14 @@ export async function autoAssignTicket(ticketId: string) {
   const agents = await prisma.user.findMany({
     where: {
       tenantId: ticket.tenantId, // Multi-tenant: Only assign to agents from same tenant
-      role: User_role.AGENT,
+      role: 'AGENT',
       isActive: true,
     },
     include: {
       Ticket_Ticket_assignedAgentIdToUser: {
         where: {
           status: {
-            in: [Ticket_status.NEW, Ticket_status.OPEN, Ticket_status.PENDING],
+            in: ['NEW', 'OPEN', 'PENDING'],
           },
         },
       },
@@ -144,7 +143,7 @@ export async function autoResolveInactiveTickets(daysInactive: number = 7, tenan
 
   const where: any = {
     status: {
-      in: [Ticket_status.OPEN, Ticket_status.PENDING],
+      in: ['OPEN', 'PENDING'],
     },
     updatedAt: {
       lt: cutoffDate,
@@ -197,7 +196,7 @@ export async function autoResolveInactiveTickets(daysInactive: number = 7, tenan
     await prisma.ticket.update({
       where: { id: ticket.id },
       data: {
-        status: Ticket_status.RESOLVED,
+        status: 'RESOLVED',
         resolvedAt: new Date(),
       },
     })

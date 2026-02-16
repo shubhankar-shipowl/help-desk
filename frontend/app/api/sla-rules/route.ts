@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { Ticket_priority } from '@prisma/client'
 import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
@@ -79,7 +78,7 @@ export async function POST(req: NextRequest) {
       where: {
         teamId_priority: {
           teamId: teamId || null,
-          priority: priority as Ticket_priority,
+          priority: priority as any,
         },
       },
     })
@@ -112,7 +111,7 @@ export async function POST(req: NextRequest) {
         data: {
           id: crypto.randomUUID(),
           teamId: teamId || null,
-          priority: priority as Ticket_priority,
+          priority: priority as any,
           responseTime,
           resolutionTime,
           isActive: isActive !== undefined ? isActive : true,

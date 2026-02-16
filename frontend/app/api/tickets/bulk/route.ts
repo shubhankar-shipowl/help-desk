@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { Ticket_status, Ticket_priority } from '@prisma/client'
 import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
@@ -71,7 +70,7 @@ export async function PATCH(req: NextRequest) {
     const activityLogs: Array<{ ticketId: string; action: string; description: string; metadata?: any }> = []
 
     if (updates.status) {
-      updateData.status = updates.status as Ticket_status
+      updateData.status = updates.status
       tickets.forEach((ticket: any) => {
         activityLogs.push({
           ticketId: ticket.id,
@@ -83,7 +82,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (updates.priority) {
-      updateData.priority = updates.priority as Ticket_priority
+      updateData.priority = updates.priority
       tickets.forEach((ticket: any) => {
         activityLogs.push({
           ticketId: ticket.id,

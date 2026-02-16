@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { Ticket_status } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,21 +69,21 @@ export async function GET(req: NextRequest) {
       prisma.ticket.count({
         where: {
           ...baseWhere,
-          status: { in: [Ticket_status.NEW, Ticket_status.OPEN, Ticket_status.IN_PROGRESS] },
+          status: { in: ['NEW', 'OPEN', 'IN_PROGRESS'] },
         },
       }),
       prisma.ticket.count({
         where: {
           ...baseWhere,
           assignedAgentId: session.user.id,
-          status: { in: [Ticket_status.NEW, Ticket_status.OPEN, Ticket_status.IN_PROGRESS] },
+          status: { in: ['NEW', 'OPEN', 'IN_PROGRESS'] },
         },
       }),
       prisma.ticket.count({
         where: {
           ...baseWhere,
           assignedAgentId: session.user.id,
-          status: Ticket_status.RESOLVED,
+          status: 'RESOLVED',
           resolvedAt: {
             gte: new Date(new Date().setHours(0, 0, 0, 0)),
           },
@@ -97,14 +96,14 @@ export async function GET(req: NextRequest) {
         where: {
           ...baseWhere,
           priority: 'URGENT',
-          status: { in: [Ticket_status.NEW, Ticket_status.OPEN, Ticket_status.IN_PROGRESS] },
+          status: { in: ['NEW', 'OPEN', 'IN_PROGRESS'] },
         },
       }),
       prisma.ticket.findMany({
         where: {
           ...baseWhere,
           assignedAgentId: session.user.id,
-          status: Ticket_status.RESOLVED,
+          status: 'RESOLVED',
           resolvedAt: { not: null },
         },
         select: {
