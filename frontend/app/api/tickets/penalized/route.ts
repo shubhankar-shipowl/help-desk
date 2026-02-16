@@ -221,7 +221,7 @@ export async function GET(req: NextRequest) {
         })
       : []
 
-    const penalizedByUsersMap = new Map(
+    const penalizedByUsersMap = new Map<string, any>(
       penalizedByUsers.map((user: any) => [user.id, user])
     )
 
