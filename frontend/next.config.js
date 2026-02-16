@@ -15,7 +15,7 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '10mb',
     },
-    serverComponentsExternalPackages: ['megajs'],
+    serverComponentsExternalPackages: ['megajs', '@prisma/client', 'bcryptjs', 'nodemailer'],
   },
   async rewrites() {
     return [
