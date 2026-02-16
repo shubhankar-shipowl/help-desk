@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
       })
       
       const settingsMap: Record<string, string> = {}
-      directSettings.forEach((s) => {
+      directSettings.forEach((s: any) => {
         if (!settingsMap[s.key]) {
           settingsMap[s.key] = s.value
         }
