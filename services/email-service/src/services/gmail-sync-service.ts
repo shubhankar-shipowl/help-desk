@@ -159,12 +159,12 @@ export class GmailSyncService {
         select: { id: true, messageId: true },
       })
 
-      const deletedEmails = dbEmails.filter(email => !gmailMessageIds.has(email.messageId))
+      const deletedEmails = dbEmails.filter((email: any) => !gmailMessageIds.has(email.messageId))
 
       if (deletedEmails.length > 0) {
         console.log(`[Gmail Sync] Found ${deletedEmails.length} deleted emails to remove`)
         await prisma.email.deleteMany({
-          where: { id: { in: deletedEmails.map(e => e.id) } },
+          where: { id: { in: deletedEmails.map((e: any) => e.id) } },
         })
         console.log(`[Gmail Sync] Removed ${deletedEmails.length} deleted emails`)
       }

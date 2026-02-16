@@ -53,7 +53,7 @@ emailReplyRouter.post('/:id/reply', authMiddleware, requireAgentOrAdmin, async (
       }
     }
 
-    originalEmail.EmailReply_EmailReply_originalEmailIdToEmail.forEach(reply => {
+    originalEmail.EmailReply_EmailReply_originalEmailIdToEmail.forEach((reply: any) => {
       if (reply.references) {
         String(reply.references).split(/\s+/).filter(Boolean).forEach(ref => {
           const normalized = ref.replace(/^<|>$/g, '').trim();

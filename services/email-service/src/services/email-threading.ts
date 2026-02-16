@@ -277,7 +277,7 @@ export async function updateEmailThreadId(
       select: { id: true },
     })
 
-    relatedEmails.forEach(relatedEmail => {
+    relatedEmails.forEach((relatedEmail: any) => {
       updatePromises.push(
         prisma.email.update({
           where: { id: relatedEmail.id },

@@ -26,7 +26,7 @@ async function getSmtpConfig(tenantId?: string, storeId?: string | null) {
 
         if (storeSettings.length > 0) {
           const settingsMap: Record<string, string> = {}
-          storeSettings.forEach((setting) => {
+          storeSettings.forEach((setting: any) => {
             settingsMap[setting.key] = setting.value
           })
 
@@ -43,7 +43,7 @@ async function getSmtpConfig(tenantId?: string, storeId?: string | null) {
         })
 
         const settingsMap: Record<string, string> = {}
-        tenantSettings.forEach((setting) => {
+        tenantSettings.forEach((setting: any) => {
           settingsMap[setting.key] = setting.value
         })
 

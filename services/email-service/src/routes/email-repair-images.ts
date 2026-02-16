@@ -55,8 +55,8 @@ emailRepairImagesRouter.post('/:id/repair-images', authMiddleware, async (req: R
       },
     });
 
-    const hasImapEmail = settings.some(s => s.key === 'IMAP_EMAIL');
-    const hasImapPassword = settings.some(s => s.key === 'IMAP_APP_PASSWORD');
+    const hasImapEmail = settings.some((s: any) => s.key === 'IMAP_EMAIL');
+    const hasImapPassword = settings.some((s: any) => s.key === 'IMAP_APP_PASSWORD');
 
     if ((!hasImapEmail || !hasImapPassword) && email.storeId) {
       const tenantSettings = await prisma.systemSettings.findMany({
@@ -66,14 +66,14 @@ emailRepairImagesRouter.post('/:id/repair-images', authMiddleware, async (req: R
           key: { in: ['IMAP_EMAIL', 'IMAP_APP_PASSWORD'] },
         },
       });
-      const existingKeys = new Set(settings.map(s => s.key));
-      tenantSettings.forEach(s => {
+      const existingKeys = new Set(settings.map((s: any) => s.key));
+      tenantSettings.forEach((s: any) => {
         if (!existingKeys.has(s.key)) settings.push(s);
       });
     }
 
     const configMap: Record<string, string> = {};
-    settings.forEach(s => { configMap[s.key] = s.value; });
+    settings.forEach((s: any) => { configMap[s.key] = s.value; });
 
     const imapEmail = configMap.IMAP_EMAIL;
     const imapAppPassword = configMap.IMAP_APP_PASSWORD;
@@ -136,7 +136,7 @@ emailRepairImagesRouter.post('/:id/repair-images', authMiddleware, async (req: R
         const uploadedImages = result.uploadedImages;
 
         // Create EmailAttachment records
-        const existingUrls = new Set(email.EmailAttachment.map(a => a.fileUrl).filter(Boolean));
+        const existingUrls = new Set(email.EmailAttachment.map((a: any) => a.fileUrl).filter(Boolean));
         const newAttachments: typeof uploadedImages = [];
 
         for (const img of uploadedImages) {

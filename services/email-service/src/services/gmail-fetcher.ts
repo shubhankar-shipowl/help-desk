@@ -468,7 +468,7 @@ export async function fetchAndStoreGmailEmails(
       select: { messageId: true, id: true, htmlContent: true, EmailAttachment: { select: { mimeType: true, fileUrl: true } } },
     });
 
-    const existingSet = new Set(existingEmails.map((e) => e.messageId));
+    const existingSet = new Set(existingEmails.map((e: any) => e.messageId));
     const newEmails = fetchedEmails.filter((email) => !existingSet.has(email.messageId));
 
     console.log(`[IMAP] ${existingSet.size} already exist, ${newEmails.length} new`);

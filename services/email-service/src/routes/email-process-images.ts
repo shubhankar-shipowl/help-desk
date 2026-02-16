@@ -21,7 +21,7 @@ emailProcessImagesRouter.post('/:id/process-images', authMiddleware, async (req:
     const hasDataUris = email.htmlContent?.includes('data:image/') || email.htmlContent?.includes('data:video/');
     const hasCidReferences = email.htmlContent?.includes('cid:') || false;
 
-    const existingImageAttachments = email.EmailAttachment?.filter(att =>
+    const existingImageAttachments = email.EmailAttachment?.filter((att: any) =>
       att.mimeType?.startsWith('image/') || att.mimeType?.startsWith('video/')
     ) || [];
 
@@ -35,7 +35,7 @@ emailProcessImagesRouter.post('/:id/process-images', authMiddleware, async (req:
 
     // Handle CID references
     if (hasCidReferences && !hasDataUris) {
-      const imageAttachments = existingImageAttachments.filter(att => att.fileUrl);
+      const imageAttachments = existingImageAttachments.filter((att: any) => att.fileUrl);
 
       if (imageAttachments.length > 0 && email.htmlContent) {
         let processedHtml = email.htmlContent;
@@ -44,13 +44,13 @@ emailProcessImagesRouter.post('/:id/process-images', authMiddleware, async (req:
         const cidRegex = /<(img|video)[^>]+src=["']cid:([^"']+)["'][^>]*>/gi;
         const cidMatches = Array.from(processedHtml.matchAll(cidRegex));
 
-        cidMatches.forEach((match, index) => {
+        cidMatches.forEach((match: any, index: number) => {
           const fullMatch = match[0];
           const tagType = match[1];
           let attachment: typeof imageAttachments[0] | undefined = imageAttachments[index];
 
           if (!attachment) {
-            attachment = imageAttachments.find(att => {
+            attachment = imageAttachments.find((att: any) => {
               const isRightType = tagType === 'video'
                 ? att.mimeType?.startsWith('video/')
                 : att.mimeType?.startsWith('image/');
@@ -91,7 +91,7 @@ emailProcessImagesRouter.post('/:id/process-images', authMiddleware, async (req:
     const newAttachments = [];
     for (const image of uploadedImages) {
       if (!image.fileUrl || !image.fileHandle) continue;
-      const existing = existingImageAttachments.find(att => att.fileUrl === image.fileUrl);
+      const existing = existingImageAttachments.find((att: any) => att.fileUrl === image.fileUrl);
       if (!existing) {
         try {
           await prisma.emailAttachment.create({

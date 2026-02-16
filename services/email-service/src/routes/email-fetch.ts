@@ -52,21 +52,21 @@ emailFetchRouter.post('/', authMiddleware, requireAgentOrAdmin, async (req: Requ
       where: { tenantId, storeId: storeId || null, key: { in: ['IMAP_EMAIL', 'IMAP_APP_PASSWORD'] } },
     });
 
-    const hasImapEmail = settings.some(s => s.key === 'IMAP_EMAIL');
-    const hasImapPassword = settings.some(s => s.key === 'IMAP_APP_PASSWORD');
+    const hasImapEmail = settings.some((s: any) => s.key === 'IMAP_EMAIL');
+    const hasImapPassword = settings.some((s: any) => s.key === 'IMAP_APP_PASSWORD');
 
     if ((!hasImapEmail || !hasImapPassword) && storeId) {
       const tenantSettings = await prisma.systemSettings.findMany({
         where: { tenantId, storeId: null, key: { in: ['IMAP_EMAIL', 'IMAP_APP_PASSWORD'] } },
       });
-      const existingKeys = new Set(settings.map(s => s.key));
-      tenantSettings.forEach(setting => {
+      const existingKeys = new Set(settings.map((s: any) => s.key));
+      tenantSettings.forEach((setting: any) => {
         if (!existingKeys.has(setting.key)) settings.push(setting);
       });
     }
 
     const configMap: Record<string, string> = {};
-    settings.forEach(s => { configMap[s.key] = s.value; });
+    settings.forEach((s: any) => { configMap[s.key] = s.value; });
 
     const imapEmail = configMap.IMAP_EMAIL;
     const imapAppPassword = configMap.IMAP_APP_PASSWORD;
