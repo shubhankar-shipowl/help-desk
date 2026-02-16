@@ -209,7 +209,7 @@ export async function GET(req: NextRequest) {
     const penalizedByUserIds = tickets
       .filter((t: any) => t.penalizedBy)
       .map((t: any) => t.penalizedBy)
-      .filter((id): id is string => id !== null)
+      .filter((id: any): id is string => id !== null)
 
     const penalizedByUsers = penalizedByUserIds.length > 0
       ? await prisma.user.findMany({
