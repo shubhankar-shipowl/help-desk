@@ -7,6 +7,8 @@ import { autoAssignTicket, sendTicketAcknowledgment } from '@/lib/automation'
 import { triggerTicketCreated } from '@/lib/notification-client'
 import crypto from 'crypto'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)

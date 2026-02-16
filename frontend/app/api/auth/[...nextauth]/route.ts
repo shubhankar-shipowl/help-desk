@@ -5,7 +5,14 @@ import { authOptions } from '@/lib/auth'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const handler = NextAuth(authOptions)
+// Defer handler creation to request time to avoid build-time failures
+// when environment variables (NEXTAUTH_SECRET, DATABASE_URL) are not available
+export async function GET(...args: any[]) {
+  const handler = NextAuth(authOptions)
+  return handler(...args)
+}
 
-export { handler as GET, handler as POST }
-
+export async function POST(...args: any[]) {
+  const handler = NextAuth(authOptions)
+  return handler(...args)
+}

@@ -7,6 +7,8 @@ import { triggerNewReply } from '@/lib/notification-client'
 import { uploadFileToMega } from '@/lib/storage/mega'
 import crypto from 'crypto'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> | { id: string } }

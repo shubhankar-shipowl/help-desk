@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { triggerNewReply } from '@/lib/notification-client'
 import { findOrCreateThreadId } from '@/lib/email-threading'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 

@@ -6,6 +6,8 @@ import { generateTicketNumber } from '@/lib/utils'
 import { autoAssignTicket, sendTicketAcknowledgment } from '@/lib/automation'
 import { triggerTicketCreated } from '@/lib/notification-client'
 import { uploadFileToMega } from '@/lib/storage/mega'
+
+export const dynamic = 'force-dynamic'
 import crypto from 'crypto'
 
 export async function POST(req: NextRequest) {
