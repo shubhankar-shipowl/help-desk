@@ -190,7 +190,7 @@ export default async function AdminIntegrationsPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {recentNotifications.map((fbNotification) => (
+              {recentNotifications.map((fbNotification: any) => (
                 <div
                   key={fbNotification.id}
                   className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"

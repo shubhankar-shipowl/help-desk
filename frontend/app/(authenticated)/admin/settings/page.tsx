@@ -82,7 +82,7 @@ export default async function AdminSettingsPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {categories.map((category) => (
+                  {categories.map((category: any) => (
                     <div
                       key={category.id}
                       className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"

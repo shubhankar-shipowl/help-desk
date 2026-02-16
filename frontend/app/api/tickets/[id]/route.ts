@@ -374,7 +374,7 @@ export async function DELETE(
 
     // Unlink Facebook notifications and clean up their metadata
     // This allows the user to re-convert the notification if needed
-    const linkedFacebookNotifications = await prisma.facebookNotification.findMany({
+    const linkedFacebookNotifications: any[] = await prisma.facebookNotification.findMany({
       where: { convertedTicketId: ticket.id },
     include: { Notification: true }
     })
