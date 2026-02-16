@@ -1,5 +1,11 @@
 import { prisma } from '../config/database'
-import { Notification_type } from '@prisma/client'
+
+// Define locally to avoid build failures when @prisma/client types are not yet generated
+type Notification_type =
+  | 'TICKET_ASSIGNED' | 'TICKET_UPDATED' | 'TICKET_REPLY'
+  | 'TICKET_STATUS_CHANGED' | 'TICKET_MENTION'
+  | 'SLA_BREACH' | 'PRIORITY_ESCALATION'
+  | 'FACEBOOK_MESSAGE' | 'FACEBOOK_COMMENT' | 'FACEBOOK_POST'
 import { publishNotification } from './pubsub'
 import { queueEmailNotification, queuePushNotification, queueFacebookNotification } from './queues'
 import { getIO } from './websocket'
@@ -253,7 +259,7 @@ export class NotificationService {
                 })
 
                 const messageIds: string[] = [ticket.originalEmailMessageId]
-                previousEmails.forEach(log => {
+                previousEmails.forEach((log: any) => {
                   if (log.messageId && !messageIds.includes(log.messageId)) {
                     messageIds.push(log.messageId)
                   }
@@ -464,7 +470,7 @@ export class NotificationService {
       where: { userId },
     })
 
-    return preferences.map(p => ({
+    return preferences.map((p: any) => ({
       inAppEnabled: p.inAppEnabled,
       emailEnabled: p.emailEnabled,
       pushEnabled: p.pushEnabled,
@@ -621,7 +627,7 @@ export class NotificationService {
       }),
     ])
 
-    const enhancedNotifications = notifications.map(notification => {
+    const enhancedNotifications = notifications.map((notification: any) => {
       const metadata = notification.metadata as any || {}
       const facebookNotification = notification.FacebookNotification
 

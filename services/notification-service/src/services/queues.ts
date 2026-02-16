@@ -1,5 +1,11 @@
 import Queue from 'bull'
-import { Notification_type } from '@prisma/client'
+
+// Define locally to avoid build failures when @prisma/client types are not yet generated
+type Notification_type =
+  | 'TICKET_ASSIGNED' | 'TICKET_UPDATED' | 'TICKET_REPLY'
+  | 'TICKET_STATUS_CHANGED' | 'TICKET_MENTION'
+  | 'SLA_BREACH' | 'PRIORITY_ESCALATION'
+  | 'FACEBOOK_MESSAGE' | 'FACEBOOK_COMMENT' | 'FACEBOOK_POST'
 import { getRedisUrl } from '../config/redis'
 
 const redisUrl = getRedisUrl()

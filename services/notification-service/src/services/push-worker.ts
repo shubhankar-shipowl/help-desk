@@ -55,7 +55,7 @@ pushQueue.process(
       })
 
       const results = await Promise.allSettled(
-        subscriptions.map(subscription =>
+        subscriptions.map((subscription: any) =>
           webpush.sendNotification(
             {
               endpoint: subscription.endpoint,

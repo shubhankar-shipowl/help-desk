@@ -85,8 +85,8 @@ export function initializeWebSocket(httpServer: HTTPServer) {
         return next(new Error('User not found'))
       }
 
-      socket.data.userId = user.id
-      socket.data.role = user.role
+      socket.data.userId = (user as any).id
+      socket.data.role = (user as any).role
       socket.data.user = user
 
       next()
