@@ -1,7 +1,6 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import type { FacebookIntegration } from '@prisma/client'
 import { redirect } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -72,7 +71,7 @@ export default async function AdminIntegrationsPage() {
               </div>
           ) : (
             <div className="space-y-4">
-              {facebookIntegrations.map((integration: FacebookIntegration) => (
+              {facebookIntegrations.map((integration: any) => (
                 <div
                   key={integration.id}
                   className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
