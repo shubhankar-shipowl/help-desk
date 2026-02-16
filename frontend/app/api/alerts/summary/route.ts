@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +9,7 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(req: NextRequest) {
   try {
+    const { authOptions } = await import('@/lib/auth')
     const session = await getServerSession(authOptions)
 
     if (!session) {
