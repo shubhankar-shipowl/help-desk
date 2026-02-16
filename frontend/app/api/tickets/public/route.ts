@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
 
     // Trigger notifications via notification service (non-blocking)
     // This also emits ticket:created WebSocket event to agents/admins
-    triggerTicketCreated(ticket.id).catch(err => console.error('[Public Ticket] Notification trigger failed:', err))
+    triggerTicketCreated(ticket.id).catch((err: any) => console.error('[Public Ticket] Notification trigger failed:', err))
 
     // Track uploaded files for response
     let uploadedFiles: Array<{ filename: string; url: string; size: number; type: string }> = []
@@ -281,7 +281,7 @@ export async function POST(req: NextRequest) {
     })() : Promise.resolve()
 
     // Send acknowledgment email (non-blocking - don't await)
-    const emailPromise = sendTicketAcknowledgment(ticket.id).catch(error => {
+    const emailPromise = sendTicketAcknowledgment(ticket.id).catch((error: any) => {
       console.error('[Public Ticket] Error sending acknowledgment email:', error)
     })
 

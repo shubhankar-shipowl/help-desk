@@ -661,7 +661,7 @@ function EmailContent({
           }
         }
       })
-      .catch((error) => {
+      .catch((error: any) => {
         if (error?.name !== 'AbortError') {
           console.error(
             '[EmailContent] Error processing inline images:',
@@ -1504,7 +1504,7 @@ export default function MailPage() {
             })),
           );
         })
-        .catch((error) => {
+        .catch((error: any) => {
           console.error('Error fetching categories:', error);
           setCategories([]);
         });

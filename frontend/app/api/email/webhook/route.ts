@@ -459,7 +459,7 @@ export async function POST(req: NextRequest) {
 
     // Trigger notification via notification service (non-blocking)
     triggerNewReply(ticket.id, comment.id)
-      .catch(err => console.error('[Email Webhook] New reply notification failed:', err))
+      .catch((err: any) => console.error('[Email Webhook] New reply notification failed:', err))
 
     console.log('[Email Webhook] ✅ Reply added to ticket:', {
       ticketId: ticket.id,

@@ -89,7 +89,7 @@ export default function AgentNewTicketPage() {
         })
         setCategories(uniqueCategories)
       })
-      .catch((error) => {
+      .catch((error: any) => {
         console.error('Error fetching categories:', error)
         setCategories([])
       })

@@ -224,12 +224,12 @@ export async function PATCH(
     // Trigger notifications via notification service (non-blocking)
     if (status && status !== ticket.status) {
       triggerStatusChanged(updatedTicket.id, ticket.status, session.user.id)
-        .catch(err => console.error('[Tickets] Status change notification failed:', err))
+        .catch((err: any) => console.error('[Tickets] Status change notification failed:', err))
     }
 
     if (assignedAgentId !== undefined && assignedAgentId !== ticket.assignedAgentId) {
       triggerTicketAssigned(updatedTicket.id, session.user.id)
-        .catch(err => console.error('[Tickets] Assignment notification failed:', err))
+        .catch((err: any) => console.error('[Tickets] Assignment notification failed:', err))
     }
 
     // Emit real-time update via WebSocket to all agents and admins

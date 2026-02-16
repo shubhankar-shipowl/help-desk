@@ -181,7 +181,7 @@ export async function POST(
       if (fullComment) {
         // Trigger notification via notification service (non-blocking)
         triggerNewReply(ticket.id, comment.id)
-          .catch(err => console.error('[Comments] New reply notification failed:', err))
+          .catch((err: any) => console.error('[Comments] New reply notification failed:', err))
       }
 
       // Create EmailReply record if this is an agent reply and ticket was created from email

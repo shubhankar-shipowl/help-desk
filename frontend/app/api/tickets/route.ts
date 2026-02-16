@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
 
     // Trigger notification via notification service (non-blocking)
     // This also emits ticket:created WebSocket event to agents/admins
-    triggerTicketCreated(ticket.id).catch(err => console.error('[Tickets] Notification trigger failed:', err))
+    triggerTicketCreated(ticket.id).catch((err: any) => console.error('[Tickets] Notification trigger failed:', err))
 
     // Send acknowledgment email
     await sendTicketAcknowledgment(ticket.id)

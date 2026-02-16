@@ -134,7 +134,7 @@ export default function PublicNewTicketPage() {
         })
         setCategories(uniqueCategories)
       })
-      .catch((error) => {
+      .catch((error: any) => {
         console.error('Error fetching categories:', error)
         setCategories([])
       })
@@ -150,7 +150,7 @@ export default function PublicNewTicketPage() {
             setSupportEmail(data.supportEmail)
           }
         })
-        .catch((error) => {
+        .catch((error: any) => {
           console.error('Error fetching support email:', error)
         })
     }

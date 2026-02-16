@@ -107,7 +107,7 @@ export async function autoAssignTicket(ticketId: string) {
   if (fullTicket) {
     // Trigger assignment notification via notification service (non-blocking)
     const { triggerTicketAssigned } = await import('./notification-client')
-    triggerTicketAssigned(ticketId).catch(err => console.error('[Automation] Assignment notification failed:', err))
+    triggerTicketAssigned(ticketId).catch((err: any) => console.error('[Automation] Assignment notification failed:', err))
   }
 
   // Send email notification
@@ -337,7 +337,7 @@ export async function sendTicketAcknowledgment(ticketId: string, options?: { inR
     await prisma.ticket.update({
       where: { id: ticket.id },
       data: { originalEmailMessageId: result.messageId },
-    }).catch((error) => {
+    }).catch((error: any) => {
       console.error('Error storing email Message-ID:', error)
       // Don't fail the whole operation if storing Message-ID fails
     })
