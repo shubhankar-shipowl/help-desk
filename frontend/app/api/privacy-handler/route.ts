@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
         })
         
         if (settings.length > 0) {
-          settings.forEach(setting => {
+          settings.forEach((setting: any) => {
             if (setting.value && !verifyTokens.includes(setting.value)) {
               verifyTokens.push(setting.value)
             }
