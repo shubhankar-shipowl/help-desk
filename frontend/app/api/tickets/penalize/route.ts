@@ -50,12 +50,12 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    const unresolvedTickets = tickets.filter((t) => t.status !== 'RESOLVED')
+    const unresolvedTickets = tickets.filter((t: any) => t.status !== 'RESOLVED')
     if (unresolvedTickets.length > 0) {
       return NextResponse.json(
         {
           error: 'Only resolved tickets can be marked as penalized',
-          unresolvedTickets: unresolvedTickets.map((t) => t.ticketNumber),
+          unresolvedTickets: unresolvedTickets.map((t: any) => t.ticketNumber),
         },
         { status: 400 }
       )

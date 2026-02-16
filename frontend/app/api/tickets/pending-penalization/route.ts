@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
       prisma.ticket.count({ where }),
     ])
 
-    const formattedTickets = tickets.map((ticket) => ({
+    const formattedTickets = tickets.map((ticket: any) => ({
       id: ticket.id,
       ticketNumber: ticket.ticketNumber,
       customerName: ticket.User_Ticket_customerIdToUser?.name || ticket.User_Ticket_customerIdToUser?.email,

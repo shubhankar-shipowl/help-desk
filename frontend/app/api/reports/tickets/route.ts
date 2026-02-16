@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
     // Group tickets by date
     const groupedData: Record<string, any> = {}
     
-    tickets.forEach((ticket) => {
+    tickets.forEach((ticket: any) => {
       const date = new Date(ticket.createdAt)
       let key: string
       let displayDate: string
@@ -126,10 +126,10 @@ export async function GET(req: NextRequest) {
     )
 
     // Calculate average resolution time
-    const resolvedTickets = tickets.filter((t) => t.resolvedAt)
+    const resolvedTickets = tickets.filter((t: any) => t.resolvedAt)
     let avgResolutionTime = 0
     if (resolvedTickets.length > 0) {
-      const totalTime = resolvedTickets.reduce((sum, ticket) => {
+      const totalTime = resolvedTickets.reduce((sum: number, ticket: any) => {
         if (ticket.resolvedAt) {
           return (
             sum +

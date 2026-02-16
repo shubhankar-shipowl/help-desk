@@ -110,7 +110,7 @@ export async function GET(req: NextRequest) {
         where: {
           tenantId,
           storeId,
-          customerId: { in: users.map(u => u.id) },
+          customerId: { in: users.map((u: any) => u.id) },
         },
         select: {
           customerId: true,
@@ -118,8 +118,8 @@ export async function GET(req: NextRequest) {
         distinct: ['customerId'],
       })
       
-      const customerIds = new Set(customersWithTickets.map(t => t.customerId))
-      users = users.filter(u => customerIds.has(u.id))
+      const customerIds = new Set(customersWithTickets.map((t: any) => t.customerId))
+      users = users.filter((u: any) => customerIds.has(u.id))
     }
 
     // Transform users to use frontend-friendly field names

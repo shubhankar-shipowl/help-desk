@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
 
     // Remove duplicates by ID (most reliable)
     const seenIds = new Set<string>()
-    const uniqueCategories = allCategories.filter((category) => {
+    const uniqueCategories = allCategories.filter((category: any) => {
       if (seenIds.has(category.id)) {
         return false // Skip duplicate ID
       }
@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
 
     // Also remove duplicates by name (case-insensitive)
     const seenNames = new Set<string>()
-    const finalCategories = uniqueCategories.filter((category) => {
+    const finalCategories = uniqueCategories.filter((category: any) => {
       const nameLower = category.name.toLowerCase().trim()
       if (seenNames.has(nameLower)) {
         return false // Skip duplicate name

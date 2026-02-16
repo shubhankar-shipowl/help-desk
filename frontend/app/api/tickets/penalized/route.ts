@@ -106,9 +106,9 @@ export async function GET(req: NextRequest) {
 
     // Get order tracking data for tickets to filter by vendor (pickupWarehouse)
     const customerPhones = tickets
-      .map(t => t.User_Ticket_customerIdToUser.phone)
-      .filter((phone): phone is string => phone !== null && phone !== undefined)
-      .map(phone => phone.replace(/[\s\-\(\)]/g, ''))
+      .map((t: any) => t.User_Ticket_customerIdToUser.phone)
+      .filter((phone: any): phone is string => phone !== null && phone !== undefined)
+      .map((phone: string) => phone.replace(/[\s\-\(\)]/g, ''))
 
     // Build order tracking where clause with storeId filter
     const orderTrackingWhere: any = {
@@ -131,7 +131,7 @@ export async function GET(req: NextRequest) {
 
     // Create a map of phone -> vendor (pickupWarehouse)
     const phoneToVendorMap = new Map<string, string | null>()
-    orderTrackingData.forEach(ot => {
+    orderTrackingData.forEach((ot: any) => {
       const normalizedPhone = ot.consigneeContact.replace(/[\s\-\(\)]/g, '')
       phoneToVendorMap.set(normalizedPhone, ot.pickupWarehouse)
     })
@@ -139,7 +139,7 @@ export async function GET(req: NextRequest) {
     // Filter tickets by vendor (pickupWarehouse) if vendor filter is provided
     let filteredTickets = tickets
     if (vendor) {
-      filteredTickets = tickets.filter(ticket => {
+      filteredTickets = tickets.filter((ticket: any) => {
         if (!ticket.User_Ticket_customerIdToUser?.phone) return false
         const normalizedPhone = ticket.User_Ticket_customerIdToUser.phone.replace(/[\s\-\(\)]/g, '')
         const ticketVendor = phoneToVendorMap.get(normalizedPhone)
@@ -166,9 +166,9 @@ export async function GET(req: NextRequest) {
       
       // Get normalized phone numbers
     const allCustomerPhones = allTicketsForCount
-      .map(t => t.User_Ticket_customerIdToUser.phone)
-        .filter((phone): phone is string => phone !== null && phone !== undefined)
-        .map(phone => phone.replace(/[\s\-\(\)]/g, ''))
+      .map((t: any) => t.User_Ticket_customerIdToUser.phone)
+        .filter((phone: any): phone is string => phone !== null && phone !== undefined)
+        .map((phone: string) => phone.replace(/[\s\-\(\)]/g, ''))
 
       // Build order tracking where clause with storeId and vendor filter
       const vendorOrderTrackingWhere: any = {
@@ -192,11 +192,11 @@ export async function GET(req: NextRequest) {
 
       // Create set of phone numbers that have this vendor
       const vendorPhoneSet = new Set(
-        vendorOrderTracking.map(ot => ot.consigneeContact.replace(/[\s\-\(\)]/g, ''))
+        vendorOrderTracking.map((ot: any) => ot.consigneeContact.replace(/[\s\-\(\)]/g, ''))
       )
       
       // Count tickets that match the vendor
-      total = allTicketsForCount.filter(t => {
+      total = allTicketsForCount.filter((t: any) => {
         if (!t.User_Ticket_customerIdToUser.phone) return false
         const normalizedPhone = t.User_Ticket_customerIdToUser.phone.replace(/[\s\-\(\)]/g, '')
         return vendorPhoneSet.has(normalizedPhone)
@@ -207,8 +207,8 @@ export async function GET(req: NextRequest) {
 
     // Fetch penalizedBy user data separately if needed
     const penalizedByUserIds = tickets
-      .filter((t) => t.penalizedBy)
-      .map((t) => t.penalizedBy)
+      .filter((t: any) => t.penalizedBy)
+      .map((t: any) => t.penalizedBy)
       .filter((id): id is string => id !== null)
 
     const penalizedByUsers = penalizedByUserIds.length > 0
@@ -222,10 +222,10 @@ export async function GET(req: NextRequest) {
       : []
 
     const penalizedByUsersMap = new Map(
-      penalizedByUsers.map((user) => [user.id, user])
+      penalizedByUsers.map((user: any) => [user.id, user])
     )
 
-    const formattedTickets = filteredTickets.map((ticket) => {
+    const formattedTickets = filteredTickets.map((ticket: any) => {
       const penalizedByUser = ticket.penalizedBy
         ? penalizedByUsersMap.get(ticket.penalizedBy)
         : null

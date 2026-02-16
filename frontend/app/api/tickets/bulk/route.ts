@@ -56,7 +56,7 @@ export async function PATCH(req: NextRequest) {
     // For agents, verify they have access
     if (session.user.role === 'AGENT') {
       const unauthorizedTickets = tickets.filter(
-        t => t.assignedAgentId !== session.user.id && t.assignedAgentId !== null
+        (t: any) => t.assignedAgentId !== session.user.id && t.assignedAgentId !== null
       )
       if (unauthorizedTickets.length > 0) {
         return NextResponse.json(
@@ -72,7 +72,7 @@ export async function PATCH(req: NextRequest) {
 
     if (updates.status) {
       updateData.status = updates.status as Ticket_status
-      tickets.forEach(ticket => {
+      tickets.forEach((ticket: any) => {
         activityLogs.push({
           ticketId: ticket.id,
           action: 'status_changed',
@@ -84,7 +84,7 @@ export async function PATCH(req: NextRequest) {
 
     if (updates.priority) {
       updateData.priority = updates.priority as Ticket_priority
-      tickets.forEach(ticket => {
+      tickets.forEach((ticket: any) => {
         activityLogs.push({
           ticketId: ticket.id,
           action: 'priority_changed',
@@ -96,7 +96,7 @@ export async function PATCH(req: NextRequest) {
 
     if (updates.assignedAgentId !== undefined) {
       updateData.assignedAgentId = updates.assignedAgentId
-      tickets.forEach(ticket => {
+      tickets.forEach((ticket: any) => {
         activityLogs.push({
           ticketId: ticket.id,
           action: 'assigned',
@@ -110,7 +110,7 @@ export async function PATCH(req: NextRequest) {
 
     if (updates.assignedTeamId !== undefined) {
       updateData.assignedTeamId = updates.assignedTeamId
-      tickets.forEach(ticket => {
+      tickets.forEach((ticket: any) => {
         activityLogs.push({
           ticketId: ticket.id,
           action: 'team_assigned',

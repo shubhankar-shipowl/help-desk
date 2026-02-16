@@ -438,7 +438,7 @@ export async function DELETE(
     })
 
     // 5. Delete comment attachments
-    for (const comment of ticket.Comment || []) {
+    for (const comment of (ticket.Comment || []) as any[]) {
       await prisma.attachment.deleteMany({
         where: { commentId: comment.id },
       })

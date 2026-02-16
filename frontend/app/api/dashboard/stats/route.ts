@@ -118,7 +118,7 @@ export async function GET(req: NextRequest) {
     // Calculate average resolution time in hours
     let averageResolutionTime: number | undefined = undefined
     if (resolvedTicketsForAvgResult.length > 0) {
-      const totalHours = resolvedTicketsForAvgResult.reduce((sum, ticket) => {
+      const totalHours = resolvedTicketsForAvgResult.reduce((sum: number, ticket: any) => {
         if (ticket.resolvedAt && ticket.createdAt) {
           const hours = (ticket.resolvedAt.getTime() - ticket.createdAt.getTime()) / (1000 * 60 * 60)
           return sum + hours
@@ -155,7 +155,7 @@ export async function GET(req: NextRequest) {
     })
 
     const ticketVolumeData = await Promise.all(
-      last7Days.map(async (date) => {
+      last7Days.map(async (date: string) => {
         try {
           const startOfDay = new Date(date)
           startOfDay.setHours(0, 0, 0, 0)
@@ -200,11 +200,11 @@ export async function GET(req: NextRequest) {
     })
 
     const categories = await prisma.category.findMany({
-      where: { id: { in: categoryData.map((c) => c.categoryId).filter(Boolean) as string[] } },
+      where: { id: { in: categoryData.map((c: any) => c.categoryId).filter(Boolean) as string[] } },
     })
 
-    const categoryChartData = categoryData.map((item) => {
-      const category = categories.find((c) => c.id === item.categoryId)
+    const categoryChartData = categoryData.map((item: any) => {
+      const category = categories.find((c: any) => c.id === item.categoryId)
       return {
         name: category?.name || 'Uncategorized',
         value: item._count,

@@ -90,9 +90,9 @@ export async function GET(req: NextRequest) {
 
     // Get order tracking data to fetch vendor (pickupWarehouse) information
     const customerPhones = tickets
-      .map(t => t.User_Ticket_customerIdToUser.phone)
-      .filter((phone): phone is string => phone !== null && phone !== undefined)
-      .map(phone => phone.replace(/[\s\-\(\)]/g, ''))
+      .map((t: any) => t.User_Ticket_customerIdToUser.phone)
+      .filter((phone: any): phone is string => phone !== null && phone !== undefined)
+      .map((phone: string) => phone.replace(/[\s\-\(\)]/g, ''))
 
     // Build order tracking where clause with storeId filter
     const orderTrackingWhere: any = {
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
 
     // Create a map of phone -> vendor (pickupWarehouse)
     const phoneToVendorMap = new Map<string, string>()
-    orderTrackingData.forEach(ot => {
+    orderTrackingData.forEach((ot: any) => {
       const normalizedPhone = ot.consigneeContact.replace(/[\s\-\(\)]/g, '')
       phoneToVendorMap.set(normalizedPhone, ot.pickupWarehouse)
     })
@@ -138,7 +138,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Format data for Excel
-    const excelData = tickets.map((ticket) => {
+    const excelData = tickets.map((ticket: any) => {
       const awbNumber = extractTrackingId(ticket.description)
       
       // Get vendor (pickupWarehouse) from order tracking

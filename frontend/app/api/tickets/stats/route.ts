@@ -85,51 +85,51 @@ export async function GET(req: NextRequest) {
 
     // Calculate statistics
     const totalTickets = tickets.length
-    const openTickets = tickets.filter(t => ['NEW', 'OPEN', 'IN_PROGRESS'].includes(t.status)).length
-    const resolvedTickets = tickets.filter(t => t.status === 'RESOLVED').length
-    const closedTickets = tickets.filter(t => t.status === 'CLOSED').length
+    const openTickets = tickets.filter((t: any) => ['NEW', 'OPEN', 'IN_PROGRESS'].includes(t.status)).length
+    const resolvedTickets = tickets.filter((t: any) => t.status === 'RESOLVED').length
+    const closedTickets = tickets.filter((t: any) => t.status === 'CLOSED').length
 
     // By status
     const byStatus = {
-      NEW: tickets.filter(t => t.status === 'NEW').length,
-      OPEN: tickets.filter(t => t.status === 'OPEN').length,
-      IN_PROGRESS: tickets.filter(t => t.status === 'IN_PROGRESS').length,
-      PENDING: tickets.filter(t => t.status === 'PENDING').length,
+      NEW: tickets.filter((t: any) => t.status === 'NEW').length,
+      OPEN: tickets.filter((t: any) => t.status === 'OPEN').length,
+      IN_PROGRESS: tickets.filter((t: any) => t.status === 'IN_PROGRESS').length,
+      PENDING: tickets.filter((t: any) => t.status === 'PENDING').length,
       RESOLVED: resolvedTickets,
       CLOSED: closedTickets,
     }
 
     // By priority
     const byPriority = {
-      URGENT: tickets.filter(t => t.priority === 'URGENT').length,
-      HIGH: tickets.filter(t => t.priority === 'HIGH').length,
-      NORMAL: tickets.filter(t => t.priority === 'NORMAL').length,
-      LOW: tickets.filter(t => t.priority === 'LOW').length,
+      URGENT: tickets.filter((t: any) => t.priority === 'URGENT').length,
+      HIGH: tickets.filter((t: any) => t.priority === 'HIGH').length,
+      NORMAL: tickets.filter((t: any) => t.priority === 'NORMAL').length,
+      LOW: tickets.filter((t: any) => t.priority === 'LOW').length,
     }
 
     // By source
     const bySource = {
-      EMAIL: tickets.filter(t => t.source === 'EMAIL').length,
-      FACEBOOK_POST: tickets.filter(t => t.source === 'FACEBOOK_POST').length,
-      FACEBOOK_COMMENT: tickets.filter(t => t.source === 'FACEBOOK_COMMENT').length,
-      FACEBOOK_MESSAGE: tickets.filter(t => t.source === 'FACEBOOK_MESSAGE').length,
-      MANUAL: tickets.filter(t => t.source === 'MANUAL').length,
-      API: tickets.filter(t => t.source === 'API').length,
+      EMAIL: tickets.filter((t: any) => t.source === 'EMAIL').length,
+      FACEBOOK_POST: tickets.filter((t: any) => t.source === 'FACEBOOK_POST').length,
+      FACEBOOK_COMMENT: tickets.filter((t: any) => t.source === 'FACEBOOK_COMMENT').length,
+      FACEBOOK_MESSAGE: tickets.filter((t: any) => t.source === 'FACEBOOK_MESSAGE').length,
+      MANUAL: tickets.filter((t: any) => t.source === 'MANUAL').length,
+      API: tickets.filter((t: any) => t.source === 'API').length,
     }
 
     // Calculate average response time (in minutes)
-    const ticketsWithFirstResponse = tickets.filter(t => t.firstResponseAt && t.createdAt)
+    const ticketsWithFirstResponse = tickets.filter((t: any) => t.firstResponseAt && t.createdAt)
     const avgResponseTime = ticketsWithFirstResponse.length > 0
-      ? ticketsWithFirstResponse.reduce((sum, t) => {
+      ? ticketsWithFirstResponse.reduce((sum: number, t: any) => {
           const responseTime = (new Date(t.firstResponseAt!).getTime() - new Date(t.createdAt).getTime()) / (1000 * 60)
           return sum + responseTime
         }, 0) / ticketsWithFirstResponse.length
       : 0
 
     // Calculate average resolution time (in minutes)
-    const resolvedTicketsWithTime = tickets.filter(t => t.resolvedAt && t.createdAt)
+    const resolvedTicketsWithTime = tickets.filter((t: any) => t.resolvedAt && t.createdAt)
     const avgResolutionTime = resolvedTicketsWithTime.length > 0
-      ? resolvedTicketsWithTime.reduce((sum, t) => {
+      ? resolvedTicketsWithTime.reduce((sum: number, t: any) => {
           const resolutionTime = (new Date(t.resolvedAt!).getTime() - new Date(t.createdAt).getTime()) / (1000 * 60)
           return sum + resolutionTime
         }, 0) / resolvedTicketsWithTime.length
@@ -137,7 +137,7 @@ export async function GET(req: NextRequest) {
 
     // Overdue tickets
     const now = new Date()
-    const overdueTickets = tickets.filter(t => {
+    const overdueTickets = tickets.filter((t: any) => {
       if (!t.resolvedAt && ['NEW', 'OPEN', 'IN_PROGRESS'].includes(t.status)) {
         // Check if ticket has a due date and is past due
         // This would require fetching full tickets with dueDate
@@ -153,7 +153,7 @@ export async function GET(req: NextRequest) {
       return date.toISOString().split('T')[0]
     })
 
-    const ticketsByDay = last30Days.map(date => {
+    const ticketsByDay = last30Days.map((date: string) => {
       const dayStart = new Date(date)
       dayStart.setHours(0, 0, 0, 0)
       const dayEnd = new Date(date)
@@ -161,7 +161,7 @@ export async function GET(req: NextRequest) {
 
       return {
         date,
-        count: tickets.filter(t => {
+        count: tickets.filter((t: any) => {
           const ticketDate = new Date(t.createdAt)
           return ticketDate >= dayStart && ticketDate <= dayEnd
         }).length,
