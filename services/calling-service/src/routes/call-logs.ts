@@ -122,7 +122,7 @@ router.get('/', authMiddleware, requireAgentOrAdmin, async (req: Request, res: R
       }),
     ]);
 
-    const formattedLogs = callLogs.map((log) => {
+    const formattedLogs = callLogs.map((log: any) => {
       const minutes = Math.floor(log.duration / 60);
       const seconds = log.duration % 60;
       const durationFormatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -152,7 +152,7 @@ router.get('/', authMiddleware, requireAgentOrAdmin, async (req: Request, res: R
     });
 
     const datesWithData = new Set<string>();
-    allCallLogs.forEach((log) => {
+    allCallLogs.forEach((log: any) => {
       if (log.startedAt) {
         const dateStr = log.startedAt.toISOString().split('T')[0];
         datesWithData.add(dateStr);
