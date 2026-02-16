@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import nodemailer from 'nodemailer'
 import crypto from 'crypto'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Get Email/SMTP configuration from SystemSettings
  */

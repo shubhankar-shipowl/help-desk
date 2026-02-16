@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import crypto from 'crypto'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Get General Settings (Company Name, Support Email, Timezone, Business Hours)
  */

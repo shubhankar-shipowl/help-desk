@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autoAssignTicket } from '@/lib/automation'
 
+export const dynamic = 'force-dynamic'
+
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY
 
 export async function POST(

@@ -57,10 +57,15 @@ export function getDatabaseUrl(): string {
   const dbName = process.env.DB_NAME;
 
   // Validate required variables
+  // During Next.js build, database env vars may not be available.
+  // Return a placeholder URL so PrismaClient can be constructed without throwing.
+  // Prisma connects lazily on first query, so this won't cause issues at build time.
   if (!dbUser || !dbPassword || !dbName) {
-    throw new Error(
-      'Database configuration missing. Please set either DATABASE_URL or all of: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME'
+    console.warn(
+      '[Prisma] Database configuration missing. Using placeholder URL for build. ' +
+      'Set DATABASE_URL or DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME at runtime.'
     );
+    return 'mysql://placeholder:placeholder@localhost:3306/placeholder';
   }
 
   // URL encode password to handle special characters

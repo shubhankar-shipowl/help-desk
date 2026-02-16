@@ -4,10 +4,12 @@ import { authOptions } from '@/lib/auth'
 import { downloadFileFromMega, getFileMetadata } from '@/lib/storage/mega'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Serve files from MEGA storage (authenticated, private)
  * This endpoint ensures only authenticated users can access files
- * 
+ *
  * IMPORTANT: MEGA is used as private storage, NOT as CDN
  * All file access must go through this authenticated endpoint
  */
