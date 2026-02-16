@@ -6,9 +6,12 @@ This application uses MEGA cloud storage for storing ticket attachments (images 
 
 Files are organized in the following structure:
 ```
-/help-desk/
-  ├── images/     (for image files)
-  └── videos/     (for video files)
+/app-backups/
+  └── help-desk/
+        ├── images/              (for image files)
+        ├── videos/              (for video files)
+        ├── email-attachments/   (for email attachment files)
+        └── call-recordings/     (for call recording files)
 ```
 
 ## Environment Variables
@@ -27,9 +30,11 @@ MEGA_PASSWORD=your-mega-password
    - Files are never uploaded directly from frontend to MEGA
 
 2. **Storage**:
-   - Images go to `/help-desk/images/`
-   - Videos go to `/help-desk/videos/`
-   - Files are organized by ticket ID in filename
+   - Images go to `/app-backups/help-desk/images/`
+   - Videos go to `/app-backups/help-desk/videos/`
+   - Email attachments go to `/app-backups/help-desk/email-attachments/`
+   - Call recordings go to `/app-backups/help-desk/call-recordings/`
+   - Files are organized by ticket/email ID in filename
 
 3. **Database**:
    - Only metadata is stored (file handle, filename, size, MIME type)

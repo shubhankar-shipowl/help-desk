@@ -1,0 +1,245 @@
+import { notificationService } from './notification-service'
+import { prisma } from '../config/database'
+
+const APP_URL = process.env.APP_URL || 'http://localhost:3002'
+
+export class TicketNotificationTriggers {
+  async onTicketCreated(ticket: any) {
+    await notificationService.createNotification({
+      type: 'TICKET_UPDATED',
+      title: 'Ticket Created Successfully',
+      message: `Your ticket ${ticket.ticketNumber} has been created and will be reviewed soon`,
+      userId: ticket.customerId,
+      ticketId: ticket.id,
+      actorId: ticket.customerId,
+      metadata: {
+        ticketNumber: ticket.ticketNumber,
+        ticketSubject: ticket.subject,
+        ticketPriority: ticket.priority,
+        ticketCategory: ticket.category?.name || ticket.Category?.name || 'General',
+      },
+      channels: ['IN_APP'],
+    })
+
+    const admins = await prisma.user.findMany({
+      where: { role: 'ADMIN', isActive: true },
+    })
+
+    for (const admin of admins) {
+      await notificationService.createNotification({
+        type: 'TICKET_UPDATED',
+        title: 'New Ticket Created',
+        message: `New ${ticket.priority} priority ticket ${ticket.ticketNumber} has been created${ticket.assignedAgentId ? ` and assigned to ${ticket.assignedAgent?.name || ticket.User_Ticket_assignedAgentIdToUser?.name || 'an agent'}` : ''}`,
+        userId: admin.id,
+        ticketId: ticket.id,
+        actorId: ticket.customerId,
+        metadata: {
+          ticketNumber: ticket.ticketNumber,
+          ticketSubject: ticket.subject,
+          ticketPriority: ticket.priority,
+          ticketCategory: ticket.category?.name || ticket.Category?.name || 'General',
+          customerName: ticket.customer?.name || ticket.User_Ticket_customerIdToUser?.name || ticket.customer?.email,
+          assignedAgentName: ticket.assignedAgent?.name || ticket.User_Ticket_assignedAgentIdToUser?.name || null,
+        },
+        channels: ['IN_APP', 'EMAIL'],
+      })
+    }
+  }
+
+  async onTicketAssigned(ticket: any, assignedBy?: any) {
+    if (!ticket.assignedAgentId) return
+
+    await notificationService.createNotification({
+      type: 'TICKET_ASSIGNED',
+      title: 'Ticket Assigned to You',
+      message: `Ticket ${ticket.ticketNumber} has been assigned to you`,
+      userId: ticket.assignedAgentId,
+      ticketId: ticket.id,
+      actorId: assignedBy?.id || null,
+      metadata: {
+        ticketNumber: ticket.ticketNumber,
+        ticketSubject: ticket.subject,
+        ticketPriority: ticket.priority,
+        assignedBy: assignedBy?.name || 'System',
+      },
+      channels: ['IN_APP', 'EMAIL', 'PUSH'],
+    })
+  }
+
+  async onNewReply(comment: any, ticket: any) {
+    if (comment.isInternal) {
+      const mentions = this.extractMentions(comment.content)
+
+      for (const mentionedUserId of mentions) {
+        await notificationService.createNotification({
+          type: 'TICKET_MENTION',
+          title: 'You were mentioned',
+          message: `${comment.User?.name || comment.User?.email} mentioned you in ticket ${ticket.ticketNumber}`,
+          userId: mentionedUserId,
+          ticketId: ticket.id,
+          actorId: comment.authorId,
+          metadata: {
+            ticketNumber: ticket.ticketNumber,
+            commentPreview: comment.content.substring(0, 100),
+          },
+          channels: ['IN_APP', 'EMAIL'],
+        })
+      }
+    } else {
+      if (comment.User?.role === 'CUSTOMER') {
+        if (ticket.assignedAgentId) {
+          await notificationService.createNotification({
+            type: 'TICKET_REPLY',
+            title: 'New Customer Reply',
+            message: `${comment.User?.name || comment.User?.email} replied to ticket ${ticket.ticketNumber}`,
+            userId: ticket.assignedAgentId,
+            ticketId: ticket.id,
+            actorId: comment.authorId,
+            metadata: {
+              ticketNumber: ticket.ticketNumber,
+              replyPreview: comment.content.substring(0, 100),
+            },
+            channels: ['IN_APP', 'EMAIL', 'PUSH'],
+          })
+        }
+      } else {
+        const customer = ticket.customer || ticket.User_Ticket_customerIdToUser
+
+        let customerEmail = customer?.email
+        if (!customerEmail && ticket.customerId) {
+          const fetchedCustomer = await prisma.user.findUnique({
+            where: { id: ticket.customerId },
+            select: { email: true, name: true },
+          })
+          customerEmail = fetchedCustomer?.email
+        }
+
+        if (!customerEmail) {
+          console.error('[TicketTriggers] Cannot notify customer: No email address found', {
+            customerId: ticket.customerId,
+          })
+          return
+        }
+
+        await notificationService.createNotification({
+          type: 'TICKET_REPLY',
+          title: 'New Reply on Your Ticket',
+          message: `${comment.User?.name || 'An agent'} replied to your ticket ${ticket.ticketNumber}`,
+          userId: ticket.customerId,
+          ticketId: ticket.id,
+          actorId: comment.authorId,
+          metadata: {
+            ticketNumber: ticket.ticketNumber,
+            ticketSubject: ticket.subject,
+            replyContent: comment.content,
+            replyPreview: comment.content.substring(0, 100),
+            agentName: comment.User?.name || 'Support Agent',
+            agentEmail: comment.User?.email || '',
+          },
+          channels: ['IN_APP', 'EMAIL'],
+        })
+      }
+    }
+  }
+
+  async onStatusChanged(ticket: any, oldStatus: string, changedBy: any) {
+    await notificationService.createNotification({
+      type: 'TICKET_STATUS_CHANGED',
+      title: 'Ticket Status Updated',
+      message: `Your ticket ${ticket.ticketNumber} status changed from ${oldStatus} to ${ticket.status}`,
+      userId: ticket.customerId,
+      ticketId: ticket.id,
+      actorId: changedBy?.id || null,
+      metadata: {
+        ticketNumber: ticket.ticketNumber,
+        oldStatus,
+        newStatus: ticket.status,
+      },
+      channels: ['IN_APP'],
+    })
+
+    if (changedBy && changedBy.role === 'AGENT') {
+      const admins = await prisma.user.findMany({
+        where: { role: 'ADMIN', isActive: true },
+      })
+
+      for (const admin of admins) {
+        await notificationService.createNotification({
+          type: 'TICKET_STATUS_CHANGED',
+          title: 'Ticket Status Changed by Agent',
+          message: `${changedBy.name || changedBy.email} changed ticket ${ticket.ticketNumber} status from ${oldStatus} to ${ticket.status}`,
+          userId: admin.id,
+          ticketId: ticket.id,
+          actorId: changedBy.id,
+          metadata: {
+            ticketNumber: ticket.ticketNumber,
+            ticketSubject: ticket.subject,
+            oldStatus,
+            newStatus: ticket.status,
+            changedBy: changedBy.name || changedBy.email,
+            agentName: changedBy.name || 'Agent',
+          },
+          channels: ['IN_APP'],
+        })
+      }
+    }
+
+    if (ticket.status === 'RESOLVED') {
+      await this.onTicketResolved(ticket, changedBy)
+    }
+  }
+
+  async onTicketResolved(ticket: any, resolvedBy: any) {
+    const resolutionTime = this.calculateResolutionTime(ticket)
+
+    await notificationService.createNotification({
+      type: 'TICKET_STATUS_CHANGED',
+      title: 'Your Ticket Has Been Resolved',
+      message: `Your ticket ${ticket.ticketNumber} has been marked as resolved. How was your experience?`,
+      userId: ticket.customerId,
+      ticketId: ticket.id,
+      actorId: resolvedBy?.id || null,
+      metadata: {
+        ticketNumber: ticket.ticketNumber,
+        resolutionTime,
+        agentName: ticket.assignedAgent?.name || ticket.User_Ticket_assignedAgentIdToUser?.name || 'Support Team',
+        csatSurveyUrl: `${APP_URL}/tickets/${ticket.id}/rate`,
+      },
+      channels: ['IN_APP'],
+    })
+  }
+
+  private extractMentions(content: string): string[] {
+    const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)|@(\w+)/g
+    const mentions: string[] = []
+    let match
+
+    while ((match = mentionRegex.exec(content)) !== null) {
+      const userId = match[2] || match[3]
+      if (userId) {
+        mentions.push(userId)
+      }
+    }
+
+    return mentions
+  }
+
+  private calculateResolutionTime(ticket: any): string {
+    if (!ticket.resolvedAt || !ticket.createdAt) {
+      return 'N/A'
+    }
+
+    const created = new Date(ticket.createdAt)
+    const resolved = new Date(ticket.resolvedAt)
+    const hours = Math.floor((resolved.getTime() - created.getTime()) / (1000 * 60 * 60))
+
+    if (hours < 1) return 'less than 1 hour'
+    if (hours === 1) return '1 hour'
+    if (hours < 24) return `${hours} hours`
+
+    const days = Math.floor(hours / 24)
+    return `${days} day${days > 1 ? 's' : ''}`
+  }
+}
+
+export const ticketNotificationTriggers = new TicketNotificationTriggers()

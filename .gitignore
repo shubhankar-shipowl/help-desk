@@ -1,36 +1,30 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
-/.pnp
+**/node_modules
+.pnp
 .pnp.js
 
 # testing
-/coverage
+coverage/
 
 # next.js
-/.next/
-/out/
+frontend/.next/
+frontend/out/
 
 # production
-/build
+frontend/build
 
 # misc
 .DS_Store
-*.pem
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# local env files
-.env*.local
-.env
-.env.production
 
 # SSL certificates
-certbot/
 *.pem
 *.key
 *.crt
@@ -40,10 +34,9 @@ certbot/
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
 
 # prisma
-/prisma/migrations
+packages/shared/prisma/migrations
 
 # PM2
 .pm2/
@@ -52,3 +45,6 @@ logs/
 
 # Config files with sensitive data (Google Cloud service account, etc.)
 config/*.json
+
+# Build artifacts
+**/dist
