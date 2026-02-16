@@ -233,7 +233,7 @@ export async function GET(req: NextRequest) {
       : (process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || 'facebook_2026')
     
     // Save each page as an integration
-    for (const page of pages) {
+    for (const page of pages as any[]) {
       console.log('[Facebook OAuth Callback] 💾 Saving integration for page:', page.id, page.name)
       
       await prisma.facebookIntegration.upsert({

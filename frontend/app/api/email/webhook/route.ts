@@ -252,7 +252,7 @@ export async function POST(req: NextRequest) {
               }
               
               // Store inline images as EmailAttachment records
-              for (const image of uploadedImages) {
+              for (const image of uploadedImages as any[]) {
                 try {
                   await prisma.emailAttachment.create({
                     data: {

@@ -257,7 +257,7 @@ export async function DELETE(
       // Hard delete: Remove store associations and delete the store
       // Use a transaction to ensure all operations complete atomically and use a single connection
       // Sequential execution within transaction to avoid connection pool exhaustion
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: any) => {
         // Set storeId to null for all related records (sequential execution)
         await tx.user.updateMany({
           where: { storeId: storeId },

@@ -192,7 +192,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Save each page as an integration
-      for (const page of pages) {
+      for (const page of pages as any[]) {
         const webhookToken = tenantId 
           ? (await getSystemSetting('FACEBOOK_WEBHOOK_VERIFY_TOKEN', tenantId) || process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || 'facebook_2026')
           : (process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || 'facebook_2026')

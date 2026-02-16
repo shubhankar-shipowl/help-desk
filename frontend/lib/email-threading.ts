@@ -217,7 +217,7 @@ export async function findOrCreateThreadId(
     })
 
     // Filter by normalized subject and check for common participants
-    for (const recentEmail of recentEmails) {
+    for (const recentEmail of recentEmails as any[]) {
       const recentNormalizedSubject = normalizeSubject(recentEmail.subject)
       if (recentNormalizedSubject === normalizedSubject) {
         const recentParticipants = [
@@ -303,7 +303,7 @@ export async function updateEmailThreadId(
       select: { id: true },
     })
 
-    relatedEmails.forEach(relatedEmail => {
+    relatedEmails.forEach((relatedEmail: any) => {
       updatePromises.push(
         prisma.email.update({
           where: { id: relatedEmail.id },

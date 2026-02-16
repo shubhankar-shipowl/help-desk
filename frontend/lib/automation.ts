@@ -174,7 +174,7 @@ export async function autoResolveInactiveTickets(daysInactive: number = 7, tenan
     },
   })
 
-  for (const ticket of inactiveTickets) {
+  for (const ticket of inactiveTickets as any[]) {
     // Send warning email first
     if (ticket.User_Ticket_customerIdToUser.email) {
       await sendEmail({
