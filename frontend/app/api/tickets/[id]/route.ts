@@ -415,7 +415,7 @@ export async function DELETE(
       where: { ticketId: ticket.id },
       select: { id: true },
     })
-    const notificationIds = ticketNotifications.map((n) => n.id)
+    const notificationIds = ticketNotifications.map((n: any) => n.id)
     if (notificationIds.length > 0) {
       await prisma.notificationDeliveryLog.deleteMany({
         where: { notificationId: { in: notificationIds } },
