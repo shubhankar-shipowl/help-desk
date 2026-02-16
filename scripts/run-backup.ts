@@ -12,7 +12,7 @@ import { resolve } from 'path'
 // Load .env file from project root (using process.cwd() which is more reliable)
 config({ path: resolve(process.cwd(), '.env') })
 
-import { backupDatabase } from '../lib/backup/database-backup'
+import { backupDatabase } from '../frontend/lib/backup/database-backup'
 
 async function main() {
   try {

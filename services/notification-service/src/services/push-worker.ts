@@ -2,12 +2,21 @@ import webpush from 'web-push'
 import { prisma } from '../config/database'
 import { pushQueue } from './queues'
 
-if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
-  webpush.setVapidDetails(
-    `mailto:${process.env.SMTP_USER || 'noreply@example.com'}`,
-    process.env.VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
-  )
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY
+  && process.env.VAPID_PUBLIC_KEY !== 'your-vapid-public-key'
+  && process.env.VAPID_PRIVATE_KEY !== 'your-vapid-private-key') {
+  try {
+    webpush.setVapidDetails(
+      `mailto:${process.env.SMTP_USER || 'noreply@example.com'}`,
+      process.env.VAPID_PUBLIC_KEY,
+      process.env.VAPID_PRIVATE_KEY
+    )
+    console.log('[Push Worker] VAPID keys configured successfully')
+  } catch (err) {
+    console.warn('[Push Worker] Invalid VAPID keys, push notifications disabled:', (err as Error).message)
+  }
+} else {
+  console.warn('[Push Worker] VAPID keys not configured, push notifications disabled')
 }
 
 pushQueue.process(

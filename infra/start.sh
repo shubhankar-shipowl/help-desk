@@ -64,6 +64,15 @@ npx prisma generate || {
 }
 echo -e "${GREEN}Prisma client generated${NC}"
 
+# Build shared package (services require compiled CJS output)
+echo ""
+echo "Building shared package..."
+npm run build || {
+    echo -e "${RED}Failed to build shared package${NC}"
+    exit 1
+}
+echo -e "${GREEN}Shared package built${NC}"
+
 # Build frontend
 echo ""
 echo "Building frontend..."
@@ -72,7 +81,9 @@ if [ -z "$NEXT_PUBLIC_WS_URL" ]; then
     export NEXT_PUBLIC_WS_URL="${APP_URL:-http://localhost:3002}"
     echo -e "${YELLOW}Setting NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}${NC}"
 fi
-npm install && npm run build || {
+# Install with dev dependencies, then build with NODE_ENV=production
+# (next build requires NODE_ENV=production to avoid React dev/prod bundle conflicts)
+npm install && NODE_ENV=production npm run build || {
     echo -e "${RED}Frontend build failed${NC}"
     exit 1
 }

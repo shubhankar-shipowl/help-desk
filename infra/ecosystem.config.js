@@ -149,5 +149,27 @@ module.exports = {
       exp_backoff_restart_delay: 1000,
       kill_timeout: 15000,
     },
+
+    // Database Backup Worker (Daily at 2:00 AM IST to MEGA)
+    {
+      name: 'backup-worker',
+      script: './scripts/start-backup-worker.sh',
+      interpreter: 'bash',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+      },
+      error_file: './logs/backup-worker-error.log',
+      out_file: './logs/backup-worker-out.log',
+      time: true,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '256M',
+      min_uptime: '10s',
+      max_restarts: 5,
+      exp_backoff_restart_delay: 1000,
+      kill_timeout: 15000,
+    },
   ],
 };

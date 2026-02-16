@@ -9,29 +9,33 @@
     "prisma:generate": "prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "^5.9.1",
-    "express": "^4.21.0",
-    "cors": "^2.8.5",
-    "cookie-parser": "^1.4.6",
-    "jose": "^5.9.0",
+    "@customer-support/shared": "file:../../packages/shared",
     "@panva/hkdf": "^1.2.0",
-    "socket.io": "^4.8.1",
+    "@prisma/client": "^5.9.1",
     "bull": "^4.12.0",
-    "ioredis": "^5.3.2",
-    "web-push": "^3.6.7",
-    "nodemailer": "^7.0.7",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.3",
+    "express": "^4.21.0",
     "helmet": "^8.0.0",
+    "ioredis": "^5.3.2",
+    "jose": "^5.9.0",
     "morgan": "^1.10.0",
-    "@customer-support/shared": "file:../../packages/shared"
+    "nodemailer": "^7.0.7",
+    "socket.io": "^4.8.1",
+    "web-push": "^3.6.7"
+  },
+  "prisma": {
+    "schema": "../../packages/shared/prisma/schema.prisma"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
-    "@types/cors": "^2.8.17",
     "@types/cookie-parser": "^1.4.7",
-    "@types/web-push": "^3.6.4",
-    "@types/nodemailer": "^6.4.14",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/morgan": "^1.9.10",
     "@types/node": "^20.11.5",
+    "@types/nodemailer": "^6.4.14",
+    "@types/web-push": "^3.6.4",
     "prisma": "^5.9.1",
     "tsx": "^4.7.1",
     "typescript": "^5.3.3"

@@ -12,12 +12,6 @@ const execAsync = promisify(exec)
  * Creates MySQL database backup and uploads to MEGA storage
  */
 
-interface BackupConfig {
-  databaseUrl: string
-  megaEmail: string
-  megaPassword: string
-  backupFolder: string
-}
 
 /**
  * Parse DATABASE_URL to extract connection details
@@ -231,9 +225,23 @@ async function cleanupFiles(filePaths: string[]): Promise<void> {
 /**
  * Main backup function
  */
+function getDatabaseUrl(): string {
+  if (process.env.DATABASE_URL) {
+    return process.env.DATABASE_URL
+  }
+  const dbHost = process.env.DB_HOST || 'localhost'
+  const dbPort = process.env.DB_PORT || '3306'
+  const dbUser = process.env.DB_USER
+  const dbPassword = process.env.DB_PASSWORD
+  const dbName = process.env.DB_NAME
+  if (!dbUser || !dbPassword || !dbName) {
+    throw new Error('Database configuration is missing. Set DATABASE_URL or DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME')
+  }
+  const encodedPassword = encodeURIComponent(dbPassword)
+  return `mysql://${dbUser}:${encodedPassword}@${dbHost}:${dbPort}/${dbName}`
+}
+
 export async function backupDatabase(): Promise<void> {
-  // Use getDatabaseUrl() to support both DATABASE_URL and individual DB_* variables
-  const { getDatabaseUrl } = await import('@/lib/prisma')
   const databaseUrl = getDatabaseUrl()
   const megaEmail = process.env.MEGA_EMAIL
   const megaPassword = process.env.MEGA_PASSWORD

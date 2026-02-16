@@ -61,7 +61,7 @@ router.get('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const tokenData = await tokenResponse.json();
+    const tokenData = await tokenResponse.json() as { access_token: string };
     const accessToken = tokenData.access_token;
 
     const pagesResponse = await fetch(
@@ -74,7 +74,7 @@ router.get('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const pagesData = await pagesResponse.json();
+    const pagesData = await pagesResponse.json() as { data?: any[] };
     const pages = pagesData.data || [];
 
     if (pages.length === 0) {
