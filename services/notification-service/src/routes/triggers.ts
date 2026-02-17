@@ -210,7 +210,7 @@ router.post('/create-notification', async (req: Request, res: Response) => {
       return;
     }
 
-    await notificationService.createNotification({
+    const notification = await notificationService.createNotification({
       type,
       title,
       message,
@@ -221,7 +221,7 @@ router.post('/create-notification', async (req: Request, res: Response) => {
       channels,
     });
 
-    res.json({ success: true });
+    res.json({ success: true, notification: { id: notification.id } });
   } catch (error: any) {
     console.error('[Triggers] Error creating notification:', error);
     res.status(500).json({ error: error.message || 'Failed to create notification' });
