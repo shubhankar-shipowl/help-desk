@@ -3,7 +3,7 @@ import { authMiddleware, requireAgentOrAdmin } from '../middleware/auth';
 import { prisma } from '../config/database';
 import { convertFacebookNotificationToTicket } from '../services/facebook-converter';
 import { createNotification } from '../services/notification-client';
-import { Notification_type } from '@prisma/client';
+import { Notification_type } from '../types/prisma-enums';
 
 const router = Router();
 

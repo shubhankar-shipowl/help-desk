@@ -1,5 +1,5 @@
 import { prisma } from '../config/database';
-import { Ticket_source, Ticket_priority, Ticket_status } from '@prisma/client';
+import { Ticket_source, Ticket_priority, Ticket_status } from '../types/prisma-enums';
 import crypto from 'crypto';
 
 async function generateTicketNumberWithSequence(): Promise<string> {

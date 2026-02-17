@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../config/database';
-import { Notification_type } from '@prisma/client';
+import { Notification_type } from '../types/prisma-enums';
 import { createNotification } from '../services/notification-client';
 import crypto from 'crypto';
 
