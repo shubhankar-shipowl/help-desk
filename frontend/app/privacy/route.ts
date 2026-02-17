@@ -68,30 +68,33 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Handle POST requests for webhook events
+// Handle POST requests for webhook events - forward directly to facebook-service
 export async function POST(req: NextRequest) {
   try {
     const body = await req.text()
-    const headers: HeadersInit = {}
-    
-    req.headers.forEach((value, key) => {
-      if (key.toLowerCase() !== 'host') {
-        headers[key] = value
-      }
-    })
-    
-    const host = req.headers.get('host') || ''
-    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
-    const webhookUrl = `${protocol}://${host}/webhooks/facebook`
-    
+    const FACEBOOK_SERVICE_URL = process.env.FACEBOOK_SERVICE_URL || 'http://localhost:4006'
+    const webhookUrl = `${FACEBOOK_SERVICE_URL}/webhooks/facebook`
+
+    const headers: HeadersInit = {
+      'Content-Type': req.headers.get('content-type') || 'application/json',
+    }
+
+    // Forward the signature header (critical for webhook validation)
+    const signature = req.headers.get('x-hub-signature-256')
+    if (signature) {
+      headers['x-hub-signature-256'] = signature
+    }
+
+    console.log('[Privacy Route] Forwarding webhook POST to:', webhookUrl)
+
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers,
       body,
     })
-    
+
     const responseText = await response.text()
-    
+
     return new NextResponse(responseText, {
       status: response.status,
       headers: {
@@ -99,7 +102,8 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (error: any) {
-    console.error('[Privacy Route] Error forwarding webhook POST:', error)
-    return NextResponse.json({ error: 'Failed to process webhook' }, { status: 500 })
+    console.error('[Privacy Route] Error forwarding webhook POST:', error.message)
+    // Return 200 so Facebook doesn't keep retrying
+    return NextResponse.json({ success: false }, { status: 200 })
   }
 }
