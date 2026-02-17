@@ -7,12 +7,52 @@ import crypto from 'crypto';
 const router = Router();
 
 /**
+ * Get the Facebook App Secret from SystemSettings (DB) or environment variable.
+ * Caches the DB result for 5 minutes to avoid hitting the database on every webhook.
+ */
+let _cachedAppSecret: string | null = null;
+let _cachedAppSecretTime = 0;
+const APP_SECRET_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getAppSecret(): Promise<string | null> {
+  // Check env var first (if it's a real value, not a placeholder)
+  const envSecret = process.env.FACEBOOK_APP_SECRET;
+  if (envSecret && !envSecret.includes('your-') && envSecret.length > 10) {
+    return envSecret;
+  }
+
+  // Check cache
+  if (_cachedAppSecret && (Date.now() - _cachedAppSecretTime) < APP_SECRET_CACHE_TTL) {
+    return _cachedAppSecret;
+  }
+
+  // Fetch from SystemSettings
+  try {
+    const settings = await prisma.systemSettings.findMany({
+      where: { key: 'FACEBOOK_APP_SECRET' },
+      orderBy: { updatedAt: 'desc' },
+      take: 1,
+    });
+
+    if (settings.length > 0 && settings[0].value) {
+      _cachedAppSecret = settings[0].value;
+      _cachedAppSecretTime = Date.now();
+      return _cachedAppSecret;
+    }
+  } catch (error: any) {
+    console.warn('[Facebook Webhook] Could not fetch app secret from SystemSettings:', error.message);
+  }
+
+  return envSecret || null;
+}
+
+/**
  * Middleware to validate Facebook webhook signature (X-Hub-Signature-256).
  * Facebook signs all POST webhook payloads with HMAC-SHA256 using the app secret.
  */
-function validateFacebookSignature(req: Request, res: Response, next: NextFunction): void {
+async function validateFacebookSignature(req: Request, res: Response, next: NextFunction): Promise<void> {
   const signature = req.headers['x-hub-signature-256'] as string | undefined;
-  const appSecret = process.env.FACEBOOK_APP_SECRET;
+  const appSecret = await getAppSecret();
 
   if (!appSecret) {
     console.warn('[Facebook Webhook] FACEBOOK_APP_SECRET not configured - skipping signature validation');
