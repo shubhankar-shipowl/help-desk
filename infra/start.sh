@@ -118,11 +118,6 @@ pm2 stop infra/ecosystem.config.js 2>/dev/null || true
 pm2 delete infra/ecosystem.config.js 2>/dev/null || true
 echo -e "${GREEN}Cleaned up existing processes${NC}"
 
-# Update PM2 if needed
-echo ""
-echo "Updating PM2..."
-pm2 update || true
-
 # Make sure wrapper scripts are executable
 chmod +x scripts/start-server.sh 2>/dev/null || true
 
