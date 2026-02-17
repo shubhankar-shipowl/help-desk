@@ -29,7 +29,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   // Fetch stores when user is admin
   useEffect(() => {
-    if (session?.user?.role === 'ADMIN') {
+    if (session?.user?.role === 'ADMIN' || session?.user?.role === 'AGENT') {
       fetchStores()
     } else {
       setLoading(false)

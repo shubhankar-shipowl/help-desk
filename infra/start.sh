@@ -64,25 +64,6 @@ npx prisma generate || {
 }
 echo -e "${GREEN}Prisma client generated${NC}"
 
-# Copy generated Prisma client to each service's node_modules
-# (prisma generate outputs to packages/shared/node_modules, but each service
-# resolves @prisma/client from its own node_modules)
-echo ""
-echo "Syncing Prisma client to all services..."
-GENERATED_PRISMA="$PROJECT_ROOT/packages/shared/node_modules/.prisma"
-SERVICES_TO_SYNC=("email-service" "notification-service" "calling-service" "facebook-service" "order-tracking-service")
-for SVC in "${SERVICES_TO_SYNC[@]}"; do
-    SVC_PRISMA="$PROJECT_ROOT/services/${SVC}/node_modules/.prisma"
-    if [ -d "$SVC_PRISMA" ]; then
-        rm -rf "$SVC_PRISMA"
-    fi
-    if [ -d "$GENERATED_PRISMA" ]; then
-        cp -r "$GENERATED_PRISMA" "$SVC_PRISMA"
-        echo -e "  ${GREEN}Synced to ${SVC}${NC}"
-    fi
-done
-echo -e "${GREEN}Prisma client synced to all services${NC}"
-
 # Build shared package (services require compiled CJS output)
 echo ""
 echo "Building shared package..."
@@ -97,7 +78,7 @@ echo ""
 echo "Building frontend..."
 cd "$PROJECT_ROOT/frontend"
 if [ -z "$NEXT_PUBLIC_WS_URL" ]; then
-    export NEXT_PUBLIC_WS_URL="${APP_URL:-http://localhost:3002}"
+    export NEXT_PUBLIC_WS_URL="${APP_URL:-http://localhost:4002}"
     echo -e "${YELLOW}Setting NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}${NC}"
 fi
 # Install with dev dependencies, then build with NODE_ENV=production
@@ -124,6 +105,33 @@ done
 
 cd "$PROJECT_ROOT"
 
+# Sync generated Prisma client to all services and frontend
+# (prisma generate outputs to packages/shared/node_modules, but each service
+# resolves @prisma/client from its own node_modules)
+# This MUST run after all npm install + builds to avoid being overwritten
+echo ""
+echo "Syncing Prisma client to all services..."
+GENERATED_PRISMA="$PROJECT_ROOT/packages/shared/node_modules/.prisma"
+PRISMA_TARGETS=(
+    "$PROJECT_ROOT/services/email-service/node_modules/.prisma"
+    "$PROJECT_ROOT/services/notification-service/node_modules/.prisma"
+    "$PROJECT_ROOT/services/calling-service/node_modules/.prisma"
+    "$PROJECT_ROOT/services/facebook-service/node_modules/.prisma"
+    "$PROJECT_ROOT/services/order-tracking-service/node_modules/.prisma"
+    "$PROJECT_ROOT/frontend/node_modules/.prisma"
+)
+for TARGET in "${PRISMA_TARGETS[@]}"; do
+    if [ -d "$TARGET" ]; then
+        rm -rf "$TARGET"
+    fi
+    if [ -d "$GENERATED_PRISMA" ]; then
+        cp -r "$GENERATED_PRISMA" "$TARGET"
+        LABEL=$(echo "$TARGET" | sed "s|$PROJECT_ROOT/||" | sed 's|/node_modules/.prisma||')
+        echo -e "  ${GREEN}Synced to ${LABEL}${NC}"
+    fi
+done
+echo -e "${GREEN}Prisma client synced to all services${NC}"
+
 # Create logs directory
 echo ""
 echo "Creating logs directory..."
@@ -133,20 +141,12 @@ echo -e "${GREEN}Logs directory created${NC}"
 # Stop existing PM2 processes if running
 echo ""
 echo "Stopping existing PM2 processes..."
-pm2 stop infra/ecosystem.config.js 2>/dev/null || true
-pm2 delete infra/ecosystem.config.js 2>/dev/null || true
-sleep 2
-
-# Kill any orphaned processes still holding service ports
-echo "Freeing service ports..."
-for PORT in 3002 3003 3004 3005 3006 3007; do
-    PID=$(lsof -ti:$PORT 2>/dev/null || true)
-    if [ -n "$PID" ]; then
-        echo -e "  ${YELLOW}Killing process on port $PORT (PID: $PID)${NC}"
-        kill -9 $PID 2>/dev/null || true
-    fi
+OUR_PROCS=("support-portal" "email-service" "notification-service" "calling-service" "facebook-service" "order-tracking-service" "backup-worker")
+for PROC in "${OUR_PROCS[@]}"; do
+    pm2 stop "$PROC" 2>/dev/null || true
+    pm2 delete "$PROC" 2>/dev/null || true
 done
-sleep 1
+sleep 3
 echo -e "${GREEN}Cleaned up existing processes${NC}"
 
 # Make sure wrapper scripts are executable
@@ -184,21 +184,21 @@ echo "  pm2 logs order-tracking-service - View order tracking logs"
 echo "  pm2 monit                       - Real-time monitoring"
 echo ""
 echo "Service Ports:"
-echo "  Frontend (Next.js):      3002"
-echo "  Email Service:           3003"
-echo "  Notification Service:    3004 (WebSocket + Push/Email workers)"
-echo "  Calling Service:         3005"
-echo "  Facebook Service:        3006"
-echo "  Order Tracking Service:  3007"
+echo "  Frontend (Next.js):      4002"
+echo "  Email Service:           4003"
+echo "  Notification Service:    4004 (WebSocket + Push/Email workers)"
+echo "  Calling Service:         4005"
+echo "  Facebook Service:        4006"
+echo "  Order Tracking Service:  4007"
 echo "  Nginx HTTP:              80"
 echo "  Nginx HTTPS:             443"
 echo ""
 echo "Health Checks:"
-echo "  curl http://localhost:3003/health"
-echo "  curl http://localhost:3004/health"
-echo "  curl http://localhost:3005/health"
-echo "  curl http://localhost:3006/health"
-echo "  curl http://localhost:3007/health"
+echo "  curl http://localhost:4003/health"
+echo "  curl http://localhost:4004/health"
+echo "  curl http://localhost:4005/health"
+echo "  curl http://localhost:4006/health"
+echo "  curl http://localhost:4007/health"
 echo ""
 echo "Auto-start on reboot:"
 echo "  pm2 startup"

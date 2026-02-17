@@ -7,7 +7,7 @@ const dev = process.env.NODE_ENV !== 'production'
 // Use '0.0.0.0' to allow access from other devices on the same network
 // Set HOSTNAME=localhost in .env if you want to restrict to localhost only
 const hostname = process.env.HOSTNAME || '0.0.0.0'
-const port = parseInt(process.env.PORT || '3002', 10)
+const port = parseInt(process.env.PORT || '4002', 10)
 
 const app = next({ dev, hostname, port })
 const handle = app.getRequestHandler()

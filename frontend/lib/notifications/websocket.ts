@@ -2,12 +2,12 @@
  * WebSocket event emission proxy for microservice architecture.
  *
  * In the monolith, Socket.IO ran inside the Next.js process.
- * Now Socket.IO runs in the notification-service (port 3004).
+ * Now Socket.IO runs in the notification-service (port 4004).
  * These functions call the notification-service's /internal/emit-event
  * endpoint to emit WebSocket events to connected clients.
  */
 
-const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004'
+const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4004'
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || ''
 
 async function emitEvent(event: string, data: any, rooms: string[]): Promise<void> {

@@ -1,4 +1,4 @@
-const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004';
+const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4004';
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || '';
 
 const MAX_RETRIES = 3;

@@ -1,7 +1,7 @@
 import { createHttpClient } from '@customer-support/shared';
 
-const MONOLITH_URL = process.env.MONOLITH_URL || 'http://localhost:3002';
-const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004';
+const MONOLITH_URL = process.env.MONOLITH_URL || 'http://localhost:4002';
+const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4004';
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || '';
 
 const client = createHttpClient({

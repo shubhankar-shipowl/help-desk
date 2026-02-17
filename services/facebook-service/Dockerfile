@@ -10,6 +10,6 @@ RUN npx prisma generate
 
 COPY services/facebook-service/ .
 
-EXPOSE 3006
+EXPOSE 4006
 
 CMD ["npm", "run", "dev"]

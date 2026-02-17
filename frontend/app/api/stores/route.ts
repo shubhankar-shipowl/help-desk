@@ -13,14 +13,13 @@ export async function GET(req: NextRequest) {
     const session = await getServerSession(authOptions)
 
     if (!session) {
+      console.log('[Stores API] No session found, returning 401')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Only ADMIN can access stores
-    if (session.user.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    console.log('[Stores API] Session user:', { role: session.user.role, email: session.user.email, id: session.user.id })
 
+    // Any authenticated user can list stores
     const tenantId = (session.user as any).tenantId
     if (!tenantId) {
       return NextResponse.json(

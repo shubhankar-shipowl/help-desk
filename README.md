@@ -98,7 +98,7 @@ npm run db:seed
 npm run dev
 ```
 
-10. Open [http://localhost:3002](http://localhost:3002) in your browser.
+10. Open [http://localhost:4002](http://localhost:4002) in your browser.
 
 ## Default Users
 

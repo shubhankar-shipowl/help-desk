@@ -10,6 +10,6 @@ RUN npx prisma generate
 
 COPY services/calling-service/ .
 
-EXPOSE 3005
+EXPOSE 4005
 
 CMD ["npm", "run", "dev"]

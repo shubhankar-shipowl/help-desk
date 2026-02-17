@@ -11,7 +11,7 @@ import { queueEmailNotification, queuePushNotification, queueFacebookNotificatio
 import { getIO } from './websocket'
 import crypto from 'crypto'
 
-const APP_URL = process.env.APP_URL || 'http://localhost:3002'
+const APP_URL = process.env.APP_URL || 'http://localhost:4002'
 
 export type DeliveryChannel = 'IN_APP' | 'EMAIL' | 'PUSH' | 'SMS' | 'FACEBOOK'
 

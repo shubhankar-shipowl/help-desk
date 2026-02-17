@@ -136,7 +136,7 @@ export async function GET(req: NextRequest) {
         if (facebookBaseUrl.startsWith('http://')) {
           facebookBaseUrl = facebookBaseUrl.replace('http://', 'https://')
         }
-        if (facebookBaseUrl.includes('localhost') || facebookBaseUrl.includes(':3002') || facebookBaseUrl.includes('srv512766.hstgr.cloud')) {
+        if (facebookBaseUrl.includes('localhost') || facebookBaseUrl.includes(':4002') || facebookBaseUrl.includes('srv512766.hstgr.cloud')) {
           facebookBaseUrl = 'https://support.shopperskart.shop'
         }
       }

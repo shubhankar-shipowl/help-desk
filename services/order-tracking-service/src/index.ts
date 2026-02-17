@@ -23,12 +23,12 @@ import { deleteRouter } from './routes/delete';
 validateEnv();
 
 const app = express();
-const PORT = process.env.PORT || 3007;
+const PORT = process.env.PORT || 4007;
 
 app.use(helmet());
 app.use(morgan('[:date[iso]] :method :url :status :response-time ms'));
 app.use(cors({
-  origin: process.env.APP_URL || 'http://localhost:3002',
+  origin: process.env.APP_URL || 'http://localhost:4002',
   credentials: true,
 }));
 app.use(express.json({ limit: '50mb' }));

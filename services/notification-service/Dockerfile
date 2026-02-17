@@ -14,7 +14,7 @@ RUN npx prisma generate
 COPY services/notification-service/ .
 
 # Expose port
-EXPOSE 3004
+EXPOSE 4004
 
 # Start the application
 CMD ["npm", "run", "dev"]

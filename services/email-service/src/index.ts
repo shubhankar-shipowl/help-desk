@@ -31,13 +31,13 @@ import { emailRepairImagesRouter } from './routes/email-repair-images';
 validateEnv();
 
 const app = express();
-const PORT = process.env.PORT || 3003;
+const PORT = process.env.PORT || 4003;
 
 // Middleware
 app.use(helmet());
 app.use(morgan('[:date[iso]] :method :url :status :response-time ms'));
 app.use(cors({
-  origin: process.env.MONOLITH_URL || 'http://localhost:3002',
+  origin: process.env.MONOLITH_URL || 'http://localhost:4002',
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));

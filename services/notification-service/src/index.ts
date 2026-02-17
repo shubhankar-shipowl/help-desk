@@ -34,14 +34,14 @@ import './services/push-worker';
 validateEnv();
 
 const app = express();
-const PORT = process.env.PORT || 3004;
+const PORT = process.env.PORT || 4004;
 
 // Middleware
 app.use(helmet());
 app.use(morgan('[:date[iso]] :method :url :status :response-time ms'));
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
-    ? (process.env.APP_URL || 'http://localhost:3002')
+    ? (process.env.APP_URL || 'http://localhost:4002')
     : true, // Allow all origins in development
   credentials: true,
 }));

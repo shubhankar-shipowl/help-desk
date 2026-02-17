@@ -12,7 +12,7 @@ router.get('/', async (req: Request, res: Response) => {
     const state = req.query.state as string | undefined;
     const error = req.query.error as string | undefined;
 
-    const appUrl = process.env.APP_URL || 'http://localhost:3002';
+    const appUrl = process.env.APP_URL || 'http://localhost:4002';
 
     if (error) {
       res.redirect(`${appUrl}/admin/integrations?error=${encodeURIComponent(error)}`);
@@ -135,7 +135,7 @@ router.get('/', async (req: Request, res: Response) => {
     res.redirect(`${appUrl}/admin/integrations?success=connected`);
   } catch (error: any) {
     console.error('Error in Facebook callback:', error);
-    const appUrl = process.env.APP_URL || 'http://localhost:3002';
+    const appUrl = process.env.APP_URL || 'http://localhost:4002';
     res.redirect(`${appUrl}/admin/integrations?error=${encodeURIComponent(error.message || 'unknown_error')}`);
   }
 });

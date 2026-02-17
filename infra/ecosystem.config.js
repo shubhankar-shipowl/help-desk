@@ -9,11 +9,11 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
-        PORT: 3002,
+        PORT: 4002,
       },
       env_production: {
         NODE_ENV: 'production',
-        PORT: 3002,
+        PORT: 4002,
       },
       error_file: './logs/pm2-error.log',
       out_file: './logs/pm2-out.log',
@@ -40,7 +40,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
-        PORT: 3003,
+        PORT: 4003,
       },
       error_file: '../../logs/email-service-error.log',
       out_file: '../../logs/email-service-out.log',
@@ -64,7 +64,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
-        PORT: 3004,
+        PORT: 4004,
       },
       error_file: '../../logs/notification-service-error.log',
       out_file: '../../logs/notification-service-out.log',
@@ -88,7 +88,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
-        PORT: 3005,
+        PORT: 4005,
       },
       error_file: '../../logs/calling-service-error.log',
       out_file: '../../logs/calling-service-out.log',
@@ -112,7 +112,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
-        PORT: 3006,
+        PORT: 4006,
       },
       error_file: '../../logs/facebook-service-error.log',
       out_file: '../../logs/facebook-service-out.log',
@@ -136,7 +136,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
-        PORT: 3007,
+        PORT: 4007,
       },
       error_file: '../../logs/order-tracking-service-error.log',
       out_file: '../../logs/order-tracking-service-out.log',

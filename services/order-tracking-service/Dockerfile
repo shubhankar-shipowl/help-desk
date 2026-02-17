@@ -10,6 +10,6 @@ RUN npx prisma generate
 
 COPY services/order-tracking-service/ .
 
-EXPOSE 3007
+EXPOSE 4007
 
 CMD ["npm", "run", "dev"]

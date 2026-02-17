@@ -1,7 +1,7 @@
 import { notificationService } from './notification-service'
 import { prisma } from '../config/database'
 
-const APP_URL = process.env.APP_URL || 'http://localhost:3002'
+const APP_URL = process.env.APP_URL || 'http://localhost:4002'
 
 export class TicketNotificationTriggers {
   async onTicketCreated(ticket: any) {

@@ -72,7 +72,7 @@ router.post('/:ticketId', authMiddleware, requireAgentOrAdmin, async (req: Reque
     const serverUrl =
       process.env.SERVER_URL ||
       process.env.APP_URL ||
-      'http://localhost:3002';
+      'http://localhost:4002';
 
     const cleanServerUrl = serverUrl.replace(/\/$/, '');
     const statusCallbackUrl = `${cleanServerUrl}/api/exotel/status-callback`;

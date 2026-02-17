@@ -14,7 +14,7 @@ RUN npx prisma generate
 COPY frontend/ .
 
 # Expose port
-EXPOSE 3002
+EXPOSE 4002
 
 # Start the application
 CMD ["npm", "run", "dev"]

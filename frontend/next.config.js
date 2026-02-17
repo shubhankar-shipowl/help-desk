@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
-const EMAIL_SERVICE_URL = process.env.EMAIL_SERVICE_URL || 'http://localhost:3003';
-const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004';
-const CALLING_SERVICE_URL = process.env.CALLING_SERVICE_URL || 'http://localhost:3005';
-const FACEBOOK_SERVICE_URL = process.env.FACEBOOK_SERVICE_URL || 'http://localhost:3006';
-const ORDER_TRACKING_SERVICE_URL = process.env.ORDER_TRACKING_SERVICE_URL || 'http://localhost:3007';
+const EMAIL_SERVICE_URL = process.env.EMAIL_SERVICE_URL || 'http://localhost:4003';
+const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4004';
+const CALLING_SERVICE_URL = process.env.CALLING_SERVICE_URL || 'http://localhost:4005';
+const FACEBOOK_SERVICE_URL = process.env.FACEBOOK_SERVICE_URL || 'http://localhost:4006';
+const ORDER_TRACKING_SERVICE_URL = process.env.ORDER_TRACKING_SERVICE_URL || 'http://localhost:4007';
 
 const nextConfig = {
   reactStrictMode: true,

@@ -133,11 +133,24 @@ function createAuthOptions(): NextAuthOptions {
 // Cache the auth options after first creation
 let _authOptions: NextAuthOptions | null = null;
 
+function ensureAuthOptions(): NextAuthOptions {
+  if (!_authOptions) {
+    _authOptions = createAuthOptions();
+  }
+  return _authOptions;
+}
+
 export const authOptions: NextAuthOptions = new Proxy({} as NextAuthOptions, {
   get(_target, prop) {
-    if (!_authOptions) {
-      _authOptions = createAuthOptions();
-    }
-    return (_authOptions as any)[prop];
+    return (ensureAuthOptions() as any)[prop];
+  },
+  has(_target, prop) {
+    return prop in ensureAuthOptions();
+  },
+  ownKeys(_target) {
+    return Reflect.ownKeys(ensureAuthOptions());
+  },
+  getOwnPropertyDescriptor(_target, prop) {
+    return Object.getOwnPropertyDescriptor(ensureAuthOptions(), prop);
   },
 });

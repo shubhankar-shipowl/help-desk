@@ -46,7 +46,7 @@ export function initializeWebSocket(httpServer: HTTPServer) {
   const appUrl = process.env.APP_URL
   if (appUrl) allowedOrigins.push(appUrl)
   if (process.env.NODE_ENV !== 'production') {
-    allowedOrigins.push('http://localhost:3002', 'http://127.0.0.1:3002')
+    allowedOrigins.push('http://localhost:4002', 'http://127.0.0.1:4002')
   }
 
   io = new SocketIOServer(httpServer, {

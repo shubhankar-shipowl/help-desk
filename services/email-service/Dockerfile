@@ -14,7 +14,7 @@ RUN npx prisma generate
 COPY services/email-service/ .
 
 # Expose port
-EXPOSE 3003
+EXPOSE 4003
 
 # Start the application
 CMD ["npm", "run", "dev"]

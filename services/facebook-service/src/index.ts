@@ -28,12 +28,12 @@ import { configRouter } from './routes/config';
 validateEnv();
 
 const app = express();
-const PORT = process.env.PORT || 3006;
+const PORT = process.env.PORT || 4006;
 
 app.use(helmet());
 app.use(morgan('[:date[iso]] :method :url :status :response-time ms'));
 app.use(cors({
-  origin: process.env.APP_URL || 'http://localhost:3002',
+  origin: process.env.APP_URL || 'http://localhost:4002',
   credentials: true,
 }));
 // Capture raw body for webhook signature validation

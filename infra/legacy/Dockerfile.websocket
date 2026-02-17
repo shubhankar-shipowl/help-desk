@@ -33,7 +33,7 @@ COPY --from=builder /app/package.json ./package.json
 
 USER nextjs
 
-EXPOSE 3002
+EXPOSE 4002
 
 # Start WebSocket server
 CMD ["node", "--loader", "tsx/esm", "lib/notifications/websocket-server.ts"]
