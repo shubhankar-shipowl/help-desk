@@ -66,7 +66,7 @@ router.get('/', async (req: Request, res: Response) => {
       where: { key: 'FACEBOOK_WEBHOOK_VERIFY_TOKEN' },
     });
 
-    settings.forEach(setting => {
+    settings.forEach((setting: { value: string }) => {
       if (setting.value && !verifyTokens.includes(setting.value)) {
         verifyTokens.push(setting.value);
       }

@@ -36,7 +36,7 @@ router.get('/', authMiddleware, requireAdmin, async (req: Request, res: Response
       });
 
       const settingsMap: Record<string, string> = {};
-      directSettings.forEach((s) => {
+      directSettings.forEach((s: { key: string; value: string }) => {
         if (!settingsMap[s.key]) {
           settingsMap[s.key] = s.value;
         }

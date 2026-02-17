@@ -28,7 +28,7 @@ router.get('/', authMiddleware, requireAdmin, async (req: Request, res: Response
     });
 
     const config: Record<string, string> = {};
-    settings.forEach((setting) => {
+    settings.forEach((setting: { key: string; value: string }) => {
       config[setting.key] = setting.value;
     });
 
