@@ -64,6 +64,25 @@ npx prisma generate || {
 }
 echo -e "${GREEN}Prisma client generated${NC}"
 
+# Copy generated Prisma client to each service's node_modules
+# (prisma generate outputs to packages/shared/node_modules, but each service
+# resolves @prisma/client from its own node_modules)
+echo ""
+echo "Syncing Prisma client to all services..."
+GENERATED_PRISMA="$PROJECT_ROOT/packages/shared/node_modules/.prisma"
+SERVICES_TO_SYNC=("email-service" "notification-service" "calling-service" "facebook-service" "order-tracking-service")
+for SVC in "${SERVICES_TO_SYNC[@]}"; do
+    SVC_PRISMA="$PROJECT_ROOT/services/${SVC}/node_modules/.prisma"
+    if [ -d "$SVC_PRISMA" ]; then
+        rm -rf "$SVC_PRISMA"
+    fi
+    if [ -d "$GENERATED_PRISMA" ]; then
+        cp -r "$GENERATED_PRISMA" "$SVC_PRISMA"
+        echo -e "  ${GREEN}Synced to ${SVC}${NC}"
+    fi
+done
+echo -e "${GREEN}Prisma client synced to all services${NC}"
+
 # Build shared package (services require compiled CJS output)
 echo ""
 echo "Building shared package..."
@@ -116,6 +135,18 @@ echo ""
 echo "Stopping existing PM2 processes..."
 pm2 stop infra/ecosystem.config.js 2>/dev/null || true
 pm2 delete infra/ecosystem.config.js 2>/dev/null || true
+sleep 2
+
+# Kill any orphaned processes still holding service ports
+echo "Freeing service ports..."
+for PORT in 3002 3003 3004 3005 3006 3007; do
+    PID=$(lsof -ti:$PORT 2>/dev/null || true)
+    if [ -n "$PID" ]; then
+        echo -e "  ${YELLOW}Killing process on port $PORT (PID: $PID)${NC}"
+        kill -9 $PID 2>/dev/null || true
+    fi
+done
+sleep 1
 echo -e "${GREEN}Cleaned up existing processes${NC}"
 
 # Make sure wrapper scripts are executable
