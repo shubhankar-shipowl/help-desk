@@ -30,8 +30,8 @@ router.get('/', authMiddleware, requireAgentOrAdmin, async (req: Request, res: R
     });
 
     const vendors = orderTrackingData
-      .map(ot => ot.pickupWarehouse)
-      .filter((w): w is string => w !== null && w.trim() !== '')
+      .map((ot: { pickupWarehouse: string }) => ot.pickupWarehouse)
+      .filter((w: string): w is string => w !== null && w.trim() !== '')
       .sort();
 
     res.json({ vendors });

@@ -67,7 +67,7 @@ router.get('/', optionalAuthMiddleware, async (req: Request, res: Response) => {
 
     res.json({
       found: true,
-      data: records.map(record => ({
+      data: records.map((record: { channelOrderNumber: string | null; orderId: string | null; waybillNumber: string; consigneeContact: string; channelOrderDate: Date | null; deliveredDate: Date | null; pickupWarehouse: string; vendor: string | null }) => ({
         orderId: record.channelOrderNumber || record.orderId || '',
         channelOrderNumber: record.channelOrderNumber || record.orderId || '',
         trackingId: record.waybillNumber,
