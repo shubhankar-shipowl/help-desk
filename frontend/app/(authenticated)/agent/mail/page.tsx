@@ -2818,9 +2818,13 @@ export default function MailPage() {
                       if (!email.read) {
                         markAsRead(email.id);
                       }
-                      // Only fetch content for the clicked email
-                      if (!email.htmlContent && !email.textContent) {
-                        fetchEmailDetails([email.id]);
+                      // Fetch details for all thread emails to get replies for the conversation
+                      const unfetchedIds = thread.emailIds.filter(id => {
+                        const e = emails.find(em => em.id === id);
+                        return e && !e.htmlContent && !e.textContent;
+                      });
+                      if (unfetchedIds.length > 0) {
+                        fetchEmailDetails(unfetchedIds);
                       }
                     }}
                     className={cn(
@@ -2971,6 +2975,28 @@ export default function MailPage() {
                 )
               : [selectedEmail];
 
+            // Build merged timeline: incoming emails + outgoing replies sorted chronologically
+            type ConversationItem =
+              | { type: 'email'; email: Email }
+              | { type: 'reply'; reply: any; parentEmail: Email };
+
+            const conversationTimeline: ConversationItem[] = [];
+            for (const email of conversationEmails) {
+              conversationTimeline.push({ type: 'email', email });
+              // Add replies for this email if loaded
+              if (email.replies && email.replies.length > 0) {
+                for (const reply of email.replies) {
+                  conversationTimeline.push({ type: 'reply', reply, parentEmail: email });
+                }
+              }
+            }
+            // Sort by date (emails by createdAt, replies by sentAt)
+            conversationTimeline.sort((a, b) => {
+              const dateA = a.type === 'email' ? new Date(a.email.createdAt) : new Date(a.reply.sentAt || 0);
+              const dateB = b.type === 'email' ? new Date(b.email.createdAt) : new Date(b.reply.sentAt || 0);
+              return dateA.getTime() - dateB.getTime();
+            });
+
             return (
               <div className="bg-white rounded-xl shadow-sm border border-slate-200">
                 {/* Back Button Header */}
@@ -3002,9 +3028,52 @@ export default function MailPage() {
                   ) : null;
                 })()}
 
-                {/* Display all emails in chronological order (oldest to newest) */}
+                {/* Display all messages in chronological order (oldest to newest) */}
                 <div className="divide-y divide-slate-200">
-                  {conversationEmails.map((email, index) => {
+                  {conversationTimeline.map((item, index) => {
+                    // Outgoing reply from agent
+                    if (item.type === 'reply') {
+                      const { reply } = item;
+                      return (
+                        <div key={`reply-${reply.id}`} className="p-6 bg-green-50/50">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-start space-x-4">
+                              <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
+                                <Send className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h2 className="text-xl font-bold text-slate-800">You</h2>
+                                  <Badge className="text-xs bg-green-100 text-green-700 border-green-300">Sent</Badge>
+                                </div>
+                                <p className="text-sm text-slate-500">
+                                  to {item.parentEmail.fromEmail}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-sm text-slate-400">
+                              {reply.sentAt ? format(new Date(reply.sentAt), 'MMM d, yyyy h:mm a') : 'Pending'}
+                            </span>
+                          </div>
+                          <div className="prose max-w-none email-content-wrapper mb-4" style={{ wordBreak: 'break-word' }}>
+                            {reply.bodyHtml ? (
+                              <EmailContent
+                                htmlContent={reply.bodyHtml}
+                                attachments={[]}
+                                emailId={reply.id}
+                              />
+                            ) : (
+                              <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                                {reply.bodyText || 'No content'}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // Incoming email
+                    const { email } = item;
                     const isSelectedEmail = email.id === selectedEmail.id;
                     const isExpanded = expandedThreadEmailIds.has(email.id);
 
@@ -3314,50 +3383,7 @@ export default function MailPage() {
                   })}
                 </div>
 
-                {/* Replies Section (agent outbound) - Show at bottom after all emails */}
-                {selectedEmail.replies && selectedEmail.replies.length > 0 && (
-                  <div className="p-6 border-t border-slate-200 bg-green-50">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Send className="w-4 h-4 text-green-600" />
-                      <span className="text-sm font-medium text-green-700">
-                        Your Replies ({selectedEmail.replies.length})
-                      </span>
-                    </div>
-                    <div className="space-y-3">
-                      {selectedEmail.replies.map((reply: any) => (
-                        <div
-                          key={reply.id}
-                          className="p-4 bg-white rounded-lg border border-green-200"
-                        >
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xs text-slate-500">
-                              {reply.sentAt
-                                ? format(
-                                    new Date(reply.sentAt),
-                                    'MMM d, yyyy h:mm a',
-                                  )
-                                : 'Pending'}
-                            </span>
-                          </div>
-                          {/* Use EmailContent component to render HTML with images */}
-                          {reply.bodyHtml ? (
-                            <div className="email-content-wrapper">
-                              <EmailContent
-                                htmlContent={reply.bodyHtml}
-                                attachments={[]}
-                                emailId={reply.id}
-                              />
-                            </div>
-                          ) : (
-                            <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                              {reply.bodyText || 'No content'}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* Agent replies are now shown interleaved in the conversation timeline above */}
 
                 {/* Action Buttons - Only show when reply is not open */}
                 {!showInlineReply && selectedEmail && (
