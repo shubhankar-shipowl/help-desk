@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useStore } from '@/lib/store-context'
+import { useNotificationSocket } from '@/lib/notifications/client'
 import { DashboardStats } from '@/components/dashboard/dashboard-stats'
 import { TicketVolumeChart } from '@/components/charts/ticket-volume-chart'
 import { CategoryPieChart } from '@/components/charts/category-pie-chart'
@@ -24,6 +25,7 @@ interface DashboardData {
 
 export function DashboardContent() {
   const { selectedStoreId } = useStore()
+  const socket = useNotificationSocket()
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<DashboardData>({
     openTickets: 0,
@@ -37,24 +39,18 @@ export function DashboardContent() {
     categoryChartData: [],
   })
 
-  useEffect(() => {
-    fetchDashboardData()
-  }, [selectedStoreId])
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async (showLoading = true) => {
     try {
-      setLoading(true)
-      // Only include storeId in URL if a specific store is selected
-      // If selectedStoreId is null, don't pass it (shows all tickets)
+      if (showLoading) setLoading(true)
       const url = selectedStoreId
         ? `/api/dashboard/stats?storeId=${selectedStoreId}`
         : '/api/dashboard/stats'
-      
+
       const response = await fetch(url)
       if (!response.ok) {
         throw new Error('Failed to fetch dashboard data')
       }
-      
+
       const dashboardData = await response.json()
       setData(dashboardData)
     } catch (error) {
@@ -62,7 +58,36 @@ export function DashboardContent() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedStoreId])
+
+  useEffect(() => {
+    fetchDashboardData()
+  }, [fetchDashboardData])
+
+  // Real-time updates: refresh dashboard when ticket events fire
+  useEffect(() => {
+    if (!socket) return
+
+    let debounceTimer: NodeJS.Timeout
+
+    const refreshDashboard = () => {
+      clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        fetchDashboardData(false) // silent refresh (no loading spinner)
+      }, 300)
+    }
+
+    socket.on('ticket:created', refreshDashboard)
+    socket.on('ticket:updated', refreshDashboard)
+    socket.on('ticket:deleted', refreshDashboard)
+
+    return () => {
+      clearTimeout(debounceTimer)
+      socket.off('ticket:created', refreshDashboard)
+      socket.off('ticket:updated', refreshDashboard)
+      socket.off('ticket:deleted', refreshDashboard)
+    }
+  }, [socket, fetchDashboardData])
 
   if (loading) {
     return (

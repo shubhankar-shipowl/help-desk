@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useStore } from '@/lib/store-context'
+import { useNotificationSocket } from '@/lib/notifications/client'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,6 +36,7 @@ export default function AdminUsersPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { selectedStoreId, loading: storeLoading } = useStore()
+  const socket = useNotificationSocket()
   const [users, setUsers] = useState<UserWithStats[]>([])
   const [roleCounts, setRoleCounts] = useState({
     ADMIN: 0,
@@ -134,6 +136,31 @@ export default function AdminUsersPage() {
       setLoading(false)
     }
   }
+
+  // Real-time updates: refresh user stats when ticket events fire
+  useEffect(() => {
+    if (!socket || !selectedStoreId) return
+
+    let debounceTimer: NodeJS.Timeout
+
+    const refreshUsers = () => {
+      clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        fetchUsers()
+      }, 300)
+    }
+
+    socket.on('ticket:created', refreshUsers)
+    socket.on('ticket:updated', refreshUsers)
+    socket.on('ticket:deleted', refreshUsers)
+
+    return () => {
+      clearTimeout(debounceTimer)
+      socket.off('ticket:created', refreshUsers)
+      socket.off('ticket:updated', refreshUsers)
+      socket.off('ticket:deleted', refreshUsers)
+    }
+  }, [socket, selectedStoreId])
 
   const roleColors: Record<string, string> = {
     ADMIN: 'bg-red-100 text-red-700',

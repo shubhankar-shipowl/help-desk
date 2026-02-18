@@ -1,15 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store-context'
+import { useNotificationSocket } from '@/lib/notifications/client'
 import { AdminDashboard } from '@/components/admin/admin-dashboard'
 
 export default function AdminPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const { selectedStoreId, loading: storeLoading } = useStore()
+  const socket = useNotificationSocket()
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     totalTickets: 0,
@@ -113,6 +115,31 @@ export default function AdminPage() {
       setLoading(false)
     }
   }
+
+  // Real-time updates: refresh admin dashboard when ticket events fire
+  useEffect(() => {
+    if (!socket || !selectedStoreId) return
+
+    let debounceTimer: NodeJS.Timeout
+
+    const refreshDashboard = () => {
+      clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        fetchDashboardData()
+      }, 300)
+    }
+
+    socket.on('ticket:created', refreshDashboard)
+    socket.on('ticket:updated', refreshDashboard)
+    socket.on('ticket:deleted', refreshDashboard)
+
+    return () => {
+      clearTimeout(debounceTimer)
+      socket.off('ticket:created', refreshDashboard)
+      socket.off('ticket:updated', refreshDashboard)
+      socket.off('ticket:deleted', refreshDashboard)
+    }
+  }, [socket, selectedStoreId])
 
   if (status === 'loading' || storeLoading || loading) {
     return (

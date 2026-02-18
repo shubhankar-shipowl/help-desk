@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { useStore } from '@/lib/store-context'
@@ -72,21 +72,32 @@ export default function CustomerTicketsPage() {
     }
   }, [session, selectedStoreId, storeLoading])
 
-  // Listen for ticket deletion via WebSocket
+  // Real-time updates: refresh when ticket events fire
   useEffect(() => {
     if (!socket) return
 
+    let debounceTimer: NodeJS.Timeout
+
     const handleTicketDelete = (data: { ticketId: string }) => {
       const { ticketId } = data
-      setTickets((prevTickets) => {
-        const updatedTickets = prevTickets.filter((t) => t.id !== ticketId)
-        return updatedTickets
-      })
+      setTickets((prevTickets) => prevTickets.filter((t) => t.id !== ticketId))
     }
 
+    const refreshTickets = () => {
+      clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        fetchTickets()
+      }, 300)
+    }
+
+    socket.on('ticket:created', refreshTickets)
+    socket.on('ticket:updated', refreshTickets)
     socket.on('ticket:deleted', handleTicketDelete)
 
     return () => {
+      clearTimeout(debounceTimer)
+      socket.off('ticket:created', refreshTickets)
+      socket.off('ticket:updated', refreshTickets)
       socket.off('ticket:deleted', handleTicketDelete)
     }
   }, [socket])
