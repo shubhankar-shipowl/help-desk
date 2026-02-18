@@ -210,7 +210,7 @@ model EmailReply {
   subject                                 String
   bodyText                                String?           @db.Text
   bodyHtml                                String?           @db.MediumText
-  inReplyTo                               String?
+  inReplyTo                               String?           @db.Text
   references                              String?           @db.Text
   status                                  EmailReply_status @default(PENDING)
   errorMessage                            String?           @db.Text

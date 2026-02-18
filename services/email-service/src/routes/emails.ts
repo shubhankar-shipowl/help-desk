@@ -66,6 +66,10 @@ emailsRouter.get('/', authMiddleware, async (req: Request, res: Response) => {
       hasAttachments: true, createdAt: true, updatedAt: true,
       Ticket: { select: { id: true, ticketNumber: true, subject: true, status: true } },
       EmailAttachment: { select: { id: true, filename: true, mimeType: true, size: true, fileUrl: true } },
+      EmailReply_EmailReply_originalEmailIdToEmail: {
+        select: { id: true, sentAt: true },
+        orderBy: { sentAt: 'asc' as const },
+      },
     } : {
       id: true, tenantId: true, storeId: true, messageId: true, threadId: true,
       gmailId: true, fromEmail: true, fromName: true, toEmail: true, ccEmail: true,
@@ -105,12 +109,18 @@ emailsRouter.get('/', authMiddleware, async (req: Request, res: Response) => {
     );
     const readCount = totalAll - unreadCount;
 
-    const transformedEmails = emails.map((email: any) => ({
-      ...email,
-      ticket: email.Ticket || null,
-      hasAttachments: email.EmailAttachment && email.EmailAttachment.length > 0,
-      replies: email.EmailReply_EmailReply_originalEmailIdToEmail || [],
-    }));
+    const transformedEmails = emails.map((email: any) => {
+      const replies = email.EmailReply_EmailReply_originalEmailIdToEmail || [];
+      const latestReplyAt = replies.length > 0 ? replies[replies.length - 1]?.sentAt : null;
+      return {
+        ...email,
+        ticket: email.Ticket || null,
+        hasAttachments: email.EmailAttachment && email.EmailAttachment.length > 0,
+        replies: compact ? undefined : replies,
+        replyCount: replies.length,
+        latestReplyAt,
+      };
+    });
 
     res.json({ emails: transformedEmails, total, unreadCount, readCount, totalAll, page, totalPages: Math.ceil(total / limit) });
   } catch (error: any) {

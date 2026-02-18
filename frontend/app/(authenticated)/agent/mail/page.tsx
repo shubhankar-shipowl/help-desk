@@ -95,6 +95,8 @@ interface Email {
   ticketId: string | null;
   hasAttachments: boolean;
   EmailAttachment?: EmailAttachment[];
+  replyCount?: number;
+  latestReplyAt?: Date | string | null;
   replies?: Array<{
     id: string;
     subject: string;
@@ -117,6 +119,8 @@ type EmailThread = {
   emailIds: string[];
   unread: boolean;
   count: number;
+  totalCount: number; // emails + replies
+  lastActivityAt: Date; // latest of email or reply time
 };
 
 function normalizeSubject(subject: string): string {
@@ -401,6 +405,20 @@ function buildEmailThreads(emails: Email[]): EmailThread[] {
     const threadKey =
       latest.threadId || latest.messageId || `thread-${sorted[0].id}`;
 
+    // Count replies across all emails in thread
+    const threadReplyCount = sorted.reduce((sum, e) => sum + (e.replyCount || 0), 0);
+
+    // Find the latest activity time (latest email or latest reply)
+    let lastActivityAt = new Date(latest.createdAt);
+    for (const e of sorted) {
+      if (e.latestReplyAt) {
+        const replyTime = new Date(e.latestReplyAt);
+        if (replyTime > lastActivityAt) {
+          lastActivityAt = replyTime;
+        }
+      }
+    }
+
     threads.push({
       threadKey,
       latest,
@@ -408,14 +426,14 @@ function buildEmailThreads(emails: Email[]): EmailThread[] {
       emailIds,
       unread,
       count: sorted.length,
+      totalCount: sorted.length + threadReplyCount,
+      lastActivityAt,
     });
   });
 
-  // Sort threads by latest message time (newest first)
+  // Sort threads by latest activity time (newest first) — includes reply timestamps
   threads.sort(
-    (a, b) =>
-      new Date(b.latest.createdAt).getTime() -
-      new Date(a.latest.createdAt).getTime(),
+    (a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime(),
   );
   return threads;
 }
@@ -1142,13 +1160,28 @@ export default function MailPage() {
       const sorted = [...currentEmails].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
+
+      // Recalculate reply counts and last activity from current email data
+      const threadReplyCount = sorted.reduce((sum, e) => sum + (e.replyCount || 0), 0);
+      let lastActivityAt = new Date(sorted[0].createdAt);
+      for (const e of sorted) {
+        if (e.latestReplyAt) {
+          const replyTime = new Date(e.latestReplyAt);
+          if (replyTime > lastActivityAt) {
+            lastActivityAt = replyTime;
+          }
+        }
+      }
+
       return {
         ...thread,
         emails: sorted,
         latest: sorted[0],
         unread: sorted.some(e => !e.read),
+        totalCount: sorted.length + threadReplyCount,
+        lastActivityAt,
       };
-    });
+    }).sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
   }, [threadStructure, emails]);
 
   // Show exactly pageSize threads (client-side pagination of threads)
@@ -2095,6 +2128,17 @@ export default function MailPage() {
         description: 'Email reply sent successfully',
       });
 
+      // Optimistically update the email's reply count and latest reply time
+      // so the thread immediately moves to top and count updates
+      const now = new Date();
+      setEmails((prev) =>
+        prev.map((e) =>
+          e.id === emailId
+            ? { ...e, replyCount: (e.replyCount || 0) + 1, latestReplyAt: now }
+            : e,
+        ),
+      );
+
       // Close inline reply form or modal
       setShowInlineReply(false);
       closeReplyModal();
@@ -2817,9 +2861,9 @@ export default function MailPage() {
                                 New
                               </span>
                             )}
-                            {thread.count > 1 && (
+                            {thread.totalCount > 1 && (
                               <span className="px-2 py-0.5 bg-slate-200 text-slate-700 text-xs rounded-full font-medium">
-                                {thread.count}
+                                {thread.totalCount}
                               </span>
                             )}
                             {email.ticket && (
@@ -2844,9 +2888,9 @@ export default function MailPage() {
                           <p className="text-sm font-medium text-slate-600">
                             {email.subject || '(No Subject)'}
                           </p>
-                          {thread.count > 1 && (
+                          {thread.totalCount > 1 && (
                             <span className="text-xs text-slate-400">
-                              ({thread.count} messages)
+                              ({thread.totalCount} messages)
                             </span>
                           )}
                         </div>
@@ -2946,14 +2990,17 @@ export default function MailPage() {
                 </div>
 
                 {/* Thread subject header */}
-                {conversationEmails.length > 1 && (
-                  <div className="px-6 py-3 border-b border-slate-200 bg-white">
-                    <h2 className="text-lg font-semibold text-slate-800">
-                      {selectedEmail.subject || '(No Subject)'}
-                    </h2>
-                    <p className="text-sm text-slate-500">{conversationEmails.length} messages in conversation</p>
-                  </div>
-                )}
+                {(() => {
+                  const threadTotalCount = currentThread ? currentThread.totalCount : 1;
+                  return threadTotalCount > 1 ? (
+                    <div className="px-6 py-3 border-b border-slate-200 bg-white">
+                      <h2 className="text-lg font-semibold text-slate-800">
+                        {selectedEmail.subject || '(No Subject)'}
+                      </h2>
+                      <p className="text-sm text-slate-500">{threadTotalCount} messages in conversation</p>
+                    </div>
+                  ) : null;
+                })()}
 
                 {/* Display all emails in chronological order (oldest to newest) */}
                 <div className="divide-y divide-slate-200">
