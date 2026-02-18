@@ -50,3 +50,12 @@ export function createPrismaClient(): PrismaClient {
 }
 
 export const prisma = createPrismaClient();
+
+// Graceful shutdown - close DB connections when process exits
+process.on('SIGTERM', async () => {
+  await prisma.$disconnect();
+});
+
+process.on('SIGINT', async () => {
+  await prisma.$disconnect();
+});

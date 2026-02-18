@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useStore } from '@/lib/store-context';
 import {
@@ -85,6 +85,7 @@ interface Email {
   fromName: string | null;
   toEmail: string;
   subject: string;
+  snippet?: string | null;
   textContent: string | null;
   htmlContent: string | null;
   headers?: Record<string, any> | null;
@@ -230,16 +231,12 @@ function buildEmailThreads(emails: Email[]): EmailThread[] {
     }
   });
 
-  // Connect emails with same threadId
+  // Connect emails with same threadId (chain instead of all-pairs to avoid O(m²))
   threadIdMap.forEach((threadEmails) => {
-    threadEmails.forEach((email1) => {
-      threadEmails.forEach((email2) => {
-        if (email1 !== email2) {
-          emailGraph.get(email1)!.add(email2);
-          emailGraph.get(email2)!.add(email1);
-        }
-      });
-    });
+    for (let i = 1; i < threadEmails.length; i++) {
+      emailGraph.get(threadEmails[i - 1])!.add(threadEmails[i]);
+      emailGraph.get(threadEmails[i])!.add(threadEmails[i - 1]);
+    }
   });
 
   // Step 2: Build connections using In-Reply-To and References headers
@@ -271,14 +268,21 @@ function buildEmailThreads(emails: Email[]): EmailThread[] {
   }
 
   // Step 3: Build connections using normalized subject + participants (Gmail-style)
-  // This is important for emails without proper headers
-  const subjectGroups = new Map<string, Email[]>();
+  // Only for emails NOT already connected via threadId or headers (Steps 1-2)
+  // This avoids O(n²) comparisons for emails that are already threaded
+  const alreadyConnected = new Set<string>();
+  emailGraph.forEach((connections, email) => {
+    if (connections.size > 1) {
+      alreadyConnected.add(email.id);
+    }
+  });
 
+  const subjectGroups = new Map<string, Email[]>();
   emails.forEach((email) => {
+    // Skip emails already connected via threadId or headers
+    if (alreadyConnected.has(email.id)) return;
     const normalizedSubj = normalizeSubject(email.subject || '');
     if (normalizedSubj && normalizedSubj.length > 0) {
-      // Group by normalized subject only (more flexible like Gmail)
-      // Participants will be checked later for better matching
       if (!subjectGroups.has(normalizedSubj)) {
         subjectGroups.set(normalizedSubj, []);
       }
@@ -286,81 +290,35 @@ function buildEmailThreads(emails: Email[]): EmailThread[] {
     }
   });
 
-  // Connect emails with same normalized subject
-  // Gmail-style: If normalized subject matches and they're close in time, group them
+  // Connect unthreaded emails with same normalized subject within 7-day window
   subjectGroups.forEach((groupEmails) => {
-    if (groupEmails.length > 1) {
-      // Sort by date
-      const sortedByDate = [...groupEmails].sort(
-        (a, b) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      );
+    if (groupEmails.length <= 1 || groupEmails.length > 50) return; // Skip huge groups to avoid O(n²) explosion
 
-      // Connect ALL emails with same normalized subject if they're within 7 days
-      // Gmail groups by subject + time proximity, participants help but aren't required
-      for (let i = 0; i < sortedByDate.length; i++) {
-        for (let j = i + 1; j < sortedByDate.length; j++) {
-          const email1 = sortedByDate[i];
-          const email2 = sortedByDate[j];
+    const sortedByDate = [...groupEmails].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
 
-          // Check time window (7 days)
-          const timeDiff = Math.abs(
-            new Date(email2.createdAt).getTime() -
-              new Date(email1.createdAt).getTime(),
-          );
-          const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
+    for (let i = 0; i < sortedByDate.length; i++) {
+      for (let j = i + 1; j < sortedByDate.length; j++) {
+        const email1 = sortedByDate[i];
+        const email2 = sortedByDate[j];
 
-          if (daysDiff > 7) continue; // Skip if too far apart
+        const timeDiff = Math.abs(
+          new Date(email2.createdAt).getTime() - new Date(email1.createdAt).getTime(),
+        );
+        if (timeDiff / (1000 * 60 * 60 * 24) > 7) continue;
 
-          // For same normalized subject within time window, connect them if:
-          // 1. They share at least one participant (most common case), OR
-          // 2. One is clearly replying to the other (from matches to), OR
-          // 3. They're from the same sender (check both email and name)
-          const email1From = (email1.fromEmail || '').toLowerCase();
-          const email1FromName = (email1.fromName || '').toLowerCase();
-          const email1To = (email1.toEmail || '').toLowerCase();
-          const email2From = (email2.fromEmail || '').toLowerCase();
-          const email2FromName = (email2.fromName || '').toLowerCase();
-          const email2To = (email2.toEmail || '').toLowerCase();
+        const email1From = (email1.fromEmail || '').toLowerCase();
+        const email1To = (email1.toEmail || '').toLowerCase();
+        const email2From = (email2.fromEmail || '').toLowerCase();
+        const email2To = (email2.toEmail || '').toLowerCase();
 
-          // Check participant overlap (by email or name)
-          const hasOverlap =
-            email1From === email2From ||
-            email1From === email2To ||
-            email1To === email2From ||
-            email1To === email2To ||
-            (email1FromName && email1FromName === email2FromName) ||
-            (email1FromName && email1FromName === email2To) ||
-            (email2FromName && email2FromName === email1To);
+        const sameSender = email1From === email2From && email1From.length > 0;
+        const hasOverlap = sameSender || email1From === email2To || email1To === email2From || email1To === email2To;
 
-          // Check if it's a reply pattern (one sender matches other's recipient)
-          const isReplyPattern =
-            email1From === email2To ||
-            email2From === email1To ||
-            (email1FromName && email1FromName === email2To) ||
-            (email2FromName && email2FromName === email1To);
-
-          // Check if same sender (by email or name - common in support/helpdesk scenarios)
-          const sameSender =
-            (email1From === email2From && email1From.length > 0) ||
-            (email1FromName &&
-              email1FromName === email2FromName &&
-              email1FromName.length > 0);
-
-          // Connect if there's overlap, reply pattern, or same sender
-          // This is more aggressive like Gmail
-          // CRITICAL: For same normalized subject within 7 days, ALWAYS connect if same sender
-          // This handles the common case: "subject" and "Re: subject" from same person
-          // Gmail groups these even without proper headers
-          if (sameSender) {
-            // Same sender + same normalized subject = definitely same thread
-            emailGraph.get(email1)!.add(email2);
-            emailGraph.get(email2)!.add(email1);
-          } else if (hasOverlap || isReplyPattern) {
-            // Also connect if there's participant overlap or reply pattern
-            emailGraph.get(email1)!.add(email2);
-            emailGraph.get(email2)!.add(email1);
-          }
+        if (hasOverlap) {
+          emailGraph.get(email1)!.add(email2);
+          emailGraph.get(email2)!.add(email1);
         }
       }
     }
@@ -966,7 +924,11 @@ function EmailContent({
     return cleaned;
   };
 
-  let fixedDisplayHtml = displayHtml ? cleanEmailHtml(displayHtml) : displayHtml;
+  const fixedDisplayHtml = useMemo(
+    () => (displayHtml ? cleanEmailHtml(displayHtml) : displayHtml),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [displayHtml, attachments],
+  );
 
   // Detect broken images (placeholders or truncated data URIs)
   useEffect(() => {
@@ -1133,6 +1095,7 @@ export default function MailPage() {
   const [readCount, setReadCount] = useState(0); // Count of read emails
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
+  const [expandedThreadEmailIds, setExpandedThreadEmailIds] = useState<Set<string>>(new Set());
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<{
@@ -1147,25 +1110,46 @@ export default function MailPage() {
   const [pageSize, setPageSize] = useState(10); // Threads per page
   const [totalThreadPages, setTotalThreadPages] = useState(1);
 
-  // Group emails into Gmail-style threads for the list view
-  const allThreads = useMemo(() => {
+  // Stable key that only changes when the SET of emails changes (not their properties)
+  // This prevents the expensive O(n²) buildEmailThreads from re-running on read/content updates
+  const emailIdsKey = useMemo(() => {
+    const ids = emails.map(e => e.id);
+    ids.sort();
+    return ids.join(',');
+  }, [emails]);
+
+  // Cache the thread STRUCTURE (expensive O(n²) computation) — only recomputes when email IDs change
+  const threadStructure = useMemo(() => {
     const result = buildEmailThreads(emails);
-    // Debug logging (remove in production)
     if (process.env.NODE_ENV === 'development') {
-      console.log('[Email Threading]', {
+      console.log('[Email Threading] Structure computed', {
         totalEmails: emails.length,
         totalThreads: result.length,
-        threadsWithMultipleEmails: result.filter((t) => t.count > 1).length,
-        sampleThreads: result.slice(0, 3).map((t) => ({
-          key: t.threadKey,
-          count: t.count,
-          subject: t.latest.subject,
-          normalizedSubject: normalizeSubject(t.latest.subject),
-        })),
       });
     }
     return result;
-  }, [emails]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailIdsKey]);
+
+  // Derive display-ready threads from cached structure + current email data (O(n) — fast)
+  const allThreads = useMemo(() => {
+    const emailMap = new Map(emails.map(e => [e.id, e]));
+    return threadStructure.map(thread => {
+      const currentEmails = thread.emailIds
+        .map(id => emailMap.get(id))
+        .filter(Boolean) as Email[];
+      if (currentEmails.length === 0) return thread;
+      const sorted = [...currentEmails].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+      return {
+        ...thread,
+        emails: sorted,
+        latest: sorted[0],
+        unread: sorted.some(e => !e.read),
+      };
+    });
+  }, [threadStructure, emails]);
 
   // Show exactly pageSize threads (client-side pagination of threads)
   const threads = useMemo(() => {
@@ -1554,14 +1538,15 @@ export default function MailPage() {
   }, [selectedStoreId]);
 
   // Auto-refresh emails when sync is running (silent - no loading spinner)
+  // Skip refresh while user is viewing an email detail to avoid interrupting/freezing
   useEffect(() => {
-    if (syncRunning && selectedStoreId) {
+    if (syncRunning && selectedStoreId && !expandedEmailId) {
       const interval = setInterval(() => {
         fetchEmails(true); // Pass silent=true to avoid showing loading spinner
       }, 15000); // Refresh every 15 seconds when sync is running
       return () => clearInterval(interval);
     }
-  }, [syncRunning, selectedStoreId, filter, currentPage]);
+  }, [syncRunning, selectedStoreId, filter, currentPage, expandedEmailId]);
 
   const checkSyncStatus = async () => {
     if (!selectedStoreId) return;
@@ -1667,6 +1652,7 @@ export default function MailPage() {
       const params = new URLSearchParams();
       params.append('page', currentPage.toString());
       params.append('limit', fetchLimit.toString());
+      params.append('compact', 'true'); // Exclude htmlContent/textContent for fast list loading
 
       if (filter === 'unread') {
         params.append('read', 'false');
@@ -1695,20 +1681,9 @@ export default function MailPage() {
       setTotalCount(data.totalAll || data.total || 0);
       setReadCount(data.readCount || 0);
 
-      // Estimate total thread-based pages from the email-to-thread ratio
-      const threadCount = buildEmailThreads(fetchedEmails).length;
-      const totalEmails = filter === 'all'
-        ? (data.totalAll || data.total || 0)
-        : filter === 'unread'
-          ? (data.unreadCount || 0)
-          : (data.readCount || 0);
-      if (threadCount > 0 && fetchedEmails.length > 0) {
-        const avgEmailsPerThread = fetchedEmails.length / threadCount;
-        const estimatedTotalThreads = totalEmails / avgEmailsPerThread;
-        setTotalThreadPages(Math.max(1, Math.ceil(estimatedTotalThreads / pageSize)));
-      } else {
-        setTotalThreadPages(data.totalPages || 1);
-      }
+      // Estimate total thread-based pages using the data directly
+      // (avoid redundant buildEmailThreads call - it already runs in the allThreads useMemo)
+      setTotalThreadPages(data.totalPages || 1);
       setTotalPages(data.totalPages || 1);
     } catch (error: any) {
       console.error('Error fetching emails:', error);
@@ -1720,19 +1695,77 @@ export default function MailPage() {
     }
   };
 
-  const markAsRead = async (emailId: string) => {
-    try {
-      await fetch(`/api/emails/${emailId}`, { method: 'PATCH' });
-      setEmails((prev) =>
-        prev.map((email) =>
-          email.id === emailId
-            ? { ...email, read: true, readAt: new Date() }
-            : email,
-        ),
+  const markAsRead = (emailId: string) => {
+    // Optimistic update — set state immediately, fire API in background
+    setEmails((prev) =>
+      prev.map((email) =>
+        email.id === emailId
+          ? { ...email, read: true, readAt: new Date() }
+          : email,
+      ),
+    );
+    setUnreadCount((prev) => Math.max(0, prev - 1));
+    fetch(`/api/emails/${emailId}`, { method: 'PATCH' }).catch((error) =>
+      console.error('Error marking email as read:', error),
+    );
+  };
+
+  // Batch mark multiple emails as read in a single state update to prevent
+  // cascading re-renders (each re-render re-runs buildEmailThreads + cleanEmailHtml)
+  const markThreadAsRead = (threadEmails: Email[]) => {
+    const unreadEmails = threadEmails.filter((e) => !e.read);
+    if (unreadEmails.length === 0) return;
+
+    const unreadIds = new Set(unreadEmails.map((e) => e.id));
+
+    // Single state update for all emails (prevents N separate re-renders)
+    setEmails((prev) =>
+      prev.map((email) =>
+        unreadIds.has(email.id)
+          ? { ...email, read: true, readAt: new Date() }
+          : email,
+      ),
+    );
+    setUnreadCount((prev) => Math.max(0, prev - unreadIds.size));
+
+    // Fire API calls in background (don't await, don't trigger state updates)
+    unreadEmails.forEach((e) => {
+      fetch(`/api/emails/${e.id}`, { method: 'PATCH' }).catch((error) =>
+        console.error('Error marking email as read:', error),
       );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+    });
+  };
+
+  // Fetch full email content (htmlContent, textContent, headers, replies) for detail view.
+  // The list uses compact mode without these heavy fields.
+  // Fetches sequentially (one at a time) to avoid exhausting DB connections.
+  const fetchEmailDetails = async (emailIds: string[]) => {
+    if (emailIds.length === 0) return;
+
+    try {
+      // Fetch emails one at a time to avoid connection pool exhaustion
+      for (const id of emailIds) {
+        try {
+          const response = await fetch(`/api/emails/${id}`);
+          if (!response.ok) continue;
+          const data = await response.json();
+          const fullEmail = data.email as Email;
+          if (!fullEmail) continue;
+
+          // Merge each email into state as it arrives (progressive loading)
+          setEmails((prev) =>
+            prev.map((email) =>
+              email.id === fullEmail.id
+                ? { ...email, htmlContent: fullEmail.htmlContent, textContent: fullEmail.textContent, headers: fullEmail.headers, replies: fullEmail.replies }
+                : email,
+            ),
+          );
+        } catch {
+          // Skip failed individual fetches
+        }
+      }
     } catch (error) {
-      console.error('Error marking email as read:', error);
+      console.error('Error fetching email details:', error);
     }
   };
 
@@ -1809,9 +1842,18 @@ export default function MailPage() {
   };
 
   const getEmailPreview = (email: Email) => {
+    // Prefer snippet (lightweight, always available in compact mode)
+    if (email.snippet) {
+      const text = email.snippet.replace(/<[^>]*>/g, '').trim();
+      return text.substring(0, 150) + (text.length > 150 ? '...' : '');
+    }
     if (email.htmlContent) {
-      // Strip HTML tags for preview
-      const text = email.htmlContent.replace(/<[^>]*>/g, '').trim();
+      // Strip style/script tags first (their text content leaks into preview)
+      let html = email.htmlContent;
+      html = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+      html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+      // Strip remaining HTML tags for preview
+      const text = html.replace(/<[^>]*>/g, '').trim();
       return text.substring(0, 150) + (text.length > 150 ? '...' : '');
     }
     return email.textContent?.substring(0, 150) || 'No content';
@@ -2726,12 +2768,16 @@ export default function MailPage() {
                     key={thread.threadKey}
                     onClick={() => {
                       setExpandedEmailId(email.id);
-                      // Mark all unread emails in this thread as read (best effort)
-                      thread.emails.forEach((e) => {
-                        if (!e.read) {
-                          markAsRead(e.id);
-                        }
-                      });
+                      // Auto-expand only the clicked (latest) email
+                      setExpandedThreadEmailIds(new Set([email.id]));
+                      // Only mark the clicked email as read (not the whole thread)
+                      if (!email.read) {
+                        markAsRead(email.id);
+                      }
+                      // Only fetch content for the clicked email
+                      if (!email.htmlContent && !email.textContent) {
+                        fetchEmailDetails([email.id]);
+                      }
                     }}
                     className={cn(
                       'p-4 border-b border-slate-100 cursor-pointer transition-all hover:bg-slate-50',
@@ -2873,18 +2919,13 @@ export default function MailPage() {
             const selectedEmail = emails.find((e) => e.id === expandedEmailId);
             if (!selectedEmail) return null;
 
-            // Find full thread for this email to show all messages in chronological order
-            const currentThread = threads.find((t) =>
-              t.emailIds.includes(expandedEmailId),
-            );
+            // Show all thread emails but only expand the clicked one's content
+            const currentThread = allThreads.find((t) => t.emailIds.includes(expandedEmailId));
             const conversationEmails = currentThread
               ? [...currentThread.emails].sort(
-                  (a, b) =>
-                    new Date(a.createdAt).getTime() -
-                    new Date(b.createdAt).getTime(),
+                  (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
                 )
               : [selectedEmail];
-            // All emails in chronological order (oldest to newest) - latest reply will be at bottom
 
             return (
               <div className="bg-white rounded-xl shadow-sm border border-slate-200">
@@ -2894,6 +2935,7 @@ export default function MailPage() {
                     variant="outline"
                     onClick={() => {
                       setExpandedEmailId(null);
+                      setExpandedThreadEmailIds(new Set());
                       setShowInlineReply(false);
                     }}
                     className="gap-2"
@@ -2903,10 +2945,63 @@ export default function MailPage() {
                   </Button>
                 </div>
 
+                {/* Thread subject header */}
+                {conversationEmails.length > 1 && (
+                  <div className="px-6 py-3 border-b border-slate-200 bg-white">
+                    <h2 className="text-lg font-semibold text-slate-800">
+                      {selectedEmail.subject || '(No Subject)'}
+                    </h2>
+                    <p className="text-sm text-slate-500">{conversationEmails.length} messages in conversation</p>
+                  </div>
+                )}
+
                 {/* Display all emails in chronological order (oldest to newest) */}
                 <div className="divide-y divide-slate-200">
                   {conversationEmails.map((email, index) => {
                     const isSelectedEmail = email.id === selectedEmail.id;
+                    const isExpanded = expandedThreadEmailIds.has(email.id);
+
+                    // Collapsed email - show compact header only
+                    if (!isExpanded) {
+                      return (
+                        <div
+                          key={email.id}
+                          className="px-6 py-3 cursor-pointer hover:bg-slate-50 transition-colors"
+                          onClick={() => {
+                            setExpandedThreadEmailIds(prev => new Set([...prev, email.id]));
+                            // Mark as read when expanding
+                            if (!email.read) {
+                              markAsRead(email.id);
+                            }
+                            // Fetch content if not loaded
+                            if (!email.htmlContent && !email.textContent) {
+                              fetchEmailDetails([email.id]);
+                            }
+                          }}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                              {(email.fromName || email.fromEmail).charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className={cn("text-sm truncate", !email.read ? "font-semibold text-slate-900" : "text-slate-700")}>
+                                  {email.fromName || email.fromEmail}
+                                </span>
+                                <span className="text-xs text-slate-400 flex-shrink-0">
+                                  {format(new Date(email.createdAt), 'MMM d, h:mm a')}
+                                </span>
+                              </div>
+                              <p className="text-sm text-slate-500 truncate">
+                                {email.textContent?.slice(0, 100) || email.subject || '(No content preview)'}
+                              </p>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                          </div>
+                        </div>
+                      );
+                    }
+
                     return (
                       <div key={email.id} className="p-6">
                         {/* Email Header */}
@@ -2928,6 +3023,22 @@ export default function MailPage() {
                           </div>
 
                           <div className="flex items-center space-x-2">
+                            {/* Collapse button for thread emails (except when it's the only one) */}
+                            {conversationEmails.length > 1 && (
+                              <button
+                                onClick={() => {
+                                  setExpandedThreadEmailIds(prev => {
+                                    const next = new Set(prev);
+                                    next.delete(email.id);
+                                    return next;
+                                  });
+                                }}
+                                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                                title="Collapse"
+                              >
+                                <ChevronUp className="w-4 h-4 text-slate-400" />
+                              </button>
+                            )}
                             {isSelectedEmail && (
                               <>
                                 <button
@@ -2984,7 +3095,13 @@ export default function MailPage() {
                           className="prose max-w-none email-content-wrapper mb-4"
                           style={{ wordBreak: 'break-word' }}
                         >
-                          {email.htmlContent ? (
+                          {!email.htmlContent && !email.textContent ? (
+                            // Content not yet loaded (compact mode) - show loading
+                            <div className="flex items-center gap-2 py-4 text-slate-500">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span className="text-sm">Loading email content...</span>
+                            </div>
+                          ) : email.htmlContent ? (
                             <EmailContent
                               htmlContent={maskPhoneNumbersInText(
                                 email.htmlContent,

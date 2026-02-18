@@ -82,21 +82,27 @@ process.on('unhandledRejection', (reason: any) => {
   console.error('[Email Service] Unhandled rejection:', reason?.message || reason);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('[Email Service] SIGTERM received, shutting down...');
-  server.close(async () => {
+// Graceful shutdown - disconnect DB first, then close server
+async function gracefulShutdown(signal: string) {
+  console.log(`[Email Service] ${signal} received, shutting down...`);
+  try {
     await prisma.$disconnect();
+    console.log('[Email Service] Database connections closed');
+  } catch (err) {
+    console.error('[Email Service] Error disconnecting database:', err);
+  }
+  server.close(() => {
+    console.log('[Email Service] Server closed');
     process.exit(0);
   });
-});
+  // Force exit if server.close hangs (e.g. keep-alive connections)
+  setTimeout(() => {
+    console.log('[Email Service] Forcing exit after timeout');
+    process.exit(0);
+  }, 5000);
+}
 
-process.on('SIGINT', async () => {
-  console.log('[Email Service] SIGINT received, shutting down...');
-  server.close(async () => {
-    await prisma.$disconnect();
-    process.exit(0);
-  });
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export default app;

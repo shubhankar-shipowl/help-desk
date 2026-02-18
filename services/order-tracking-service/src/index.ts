@@ -49,16 +49,18 @@ app.listen(PORT, () => {
   console.log(`[Order Tracking Service] Health check: http://localhost:${PORT}/health`);
 });
 
-process.on('SIGTERM', async () => {
-  console.log('[Order Tracking Service] SIGTERM received, shutting down...');
-  await prisma.$disconnect();
+async function gracefulShutdown(signal: string) {
+  console.log(`[Order Tracking Service] ${signal} received, shutting down...`);
+  try {
+    await prisma.$disconnect();
+    console.log('[Order Tracking Service] Database connections closed');
+  } catch (err) {
+    console.error('[Order Tracking Service] Error disconnecting database:', err);
+  }
   process.exit(0);
-});
+}
 
-process.on('SIGINT', async () => {
-  console.log('[Order Tracking Service] SIGINT received, shutting down...');
-  await prisma.$disconnect();
-  process.exit(0);
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export default app;

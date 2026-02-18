@@ -13,7 +13,7 @@ async function withRetry<T>(operation: () => Promise<T>, maxRetries = 3, baseDel
       lastError = error as Error;
       const msg = (error as Error).message || '';
       if (msg.includes("Can't reach database") || msg.includes('Connection refused') ||
-          msg.includes('ECONNRESET') || msg.includes('ETIMEDOUT')) {
+          msg.includes('ECONNRESET') || msg.includes('ETIMEDOUT') || msg.includes('Too many connections')) {
         if (attempt < maxRetries - 1) {
           await new Promise(r => setTimeout(r, baseDelayMs * Math.pow(2, attempt)));
           continue;
@@ -35,6 +35,7 @@ emailsRouter.get('/', authMiddleware, async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string || '50');
     const read = req.query.read === 'true' ? true : req.query.read === 'false' ? false : undefined;
     const storeId = req.query.storeId as string | undefined;
+    const compact = req.query.compact === 'true'; // When true, exclude heavy fields (htmlContent, textContent, headers) for faster list loading
     const skip = (page - 1) * limit;
 
     const where: any = { tenantId };
@@ -52,33 +53,57 @@ emailsRouter.get('/', authMiddleware, async (req: Request, res: Response) => {
     if (user.role === 'ADMIN' && storeId) baseWhere.storeId = storeId;
     else if (user.role === 'AGENT' && storeId) baseWhere.storeId = storeId;
 
-    const [emails, total, unreadCount, readCount, totalAll] = await withRetry(() =>
+    // In compact mode, exclude heavy fields to reduce response size dramatically
+    // (htmlContent/textContent can be 50-200KB+ per email, causing page freezes)
+    const emailSelect: any = compact ? {
+      id: true, tenantId: true, storeId: true, messageId: true, threadId: true,
+      gmailId: true, fromEmail: true, fromName: true, toEmail: true, ccEmail: true,
+      bccEmail: true, subject: true, snippet: true,
+      headers: true, // Keep headers for email threading (In-Reply-To/References matching)
+      // Exclude: htmlContent, textContent (heavy fields)
+      labelIds: true, internalDate: true, historyId: true, direction: true,
+      read: true, readAt: true, ticketId: true, processed: true, processedAt: true,
+      hasAttachments: true, createdAt: true, updatedAt: true,
+      Ticket: { select: { id: true, ticketNumber: true, subject: true, status: true } },
+      EmailAttachment: { select: { id: true, filename: true, mimeType: true, size: true, fileUrl: true } },
+    } : {
+      id: true, tenantId: true, storeId: true, messageId: true, threadId: true,
+      gmailId: true, fromEmail: true, fromName: true, toEmail: true, ccEmail: true,
+      bccEmail: true, subject: true, snippet: true, textContent: true, htmlContent: true,
+      headers: true, labelIds: true, internalDate: true, historyId: true, direction: true,
+      read: true, readAt: true, ticketId: true, processed: true, processedAt: true,
+      hasAttachments: true, createdAt: true, updatedAt: true,
+      Ticket: { select: { id: true, ticketNumber: true, subject: true, status: true } },
+      EmailAttachment: { select: { id: true, filename: true, mimeType: true, size: true, fileUrl: true } },
+      EmailReply_EmailReply_originalEmailIdToEmail: {
+        select: { id: true, subject: true, bodyText: true, bodyHtml: true, sentAt: true, sentBy: true },
+        orderBy: { sentAt: 'asc' as const },
+      },
+    };
+
+    // Fetch emails and counts sequentially to avoid exhausting DB connection pool
+    // (5 parallel queries × multiple concurrent requests = connection limit exceeded)
+    const emails = await withRetry(() =>
+      prisma.email.findMany({
+        where,
+        select: emailSelect,
+        orderBy: { createdAt: 'desc' },
+        skip, take: limit,
+      })
+    );
+
+    const [total, totalAll] = await withRetry(() =>
       Promise.all([
-        prisma.email.findMany({
-          where,
-          select: {
-            id: true, tenantId: true, storeId: true, messageId: true, threadId: true,
-            gmailId: true, fromEmail: true, fromName: true, toEmail: true, ccEmail: true,
-            bccEmail: true, subject: true, snippet: true, textContent: true, htmlContent: true,
-            headers: true, labelIds: true, internalDate: true, historyId: true, direction: true,
-            read: true, readAt: true, ticketId: true, processed: true, processedAt: true,
-            hasAttachments: true, createdAt: true, updatedAt: true,
-            Ticket: { select: { id: true, ticketNumber: true, subject: true, status: true } },
-            EmailAttachment: { select: { id: true, filename: true, mimeType: true, size: true, fileUrl: true } },
-            EmailReply_EmailReply_originalEmailIdToEmail: {
-              select: { id: true, subject: true, bodyText: true, bodyHtml: true, sentAt: true, sentBy: true },
-              orderBy: { sentAt: 'asc' },
-            },
-          },
-          orderBy: { createdAt: 'desc' },
-          skip, take: limit,
-        }),
         prisma.email.count({ where }),
-        prisma.email.count({ where: { ...baseWhere, read: false } }),
-        prisma.email.count({ where: { ...baseWhere, read: true } }),
         prisma.email.count({ where: baseWhere }),
       ])
     );
+
+    // Derive read/unread counts from totalAll and a single unread query
+    const unreadCount = await withRetry(() =>
+      prisma.email.count({ where: { ...baseWhere, read: false } })
+    );
+    const readCount = totalAll - unreadCount;
 
     const transformedEmails = emails.map((email: any) => ({
       ...email,

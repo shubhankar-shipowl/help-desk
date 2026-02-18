@@ -253,7 +253,7 @@ export default function AdminUsersPage() {
                 Customer
               </Button>
             </div>
-            <AddUserDialog />
+            <AddUserDialog onSuccess={fetchUsers} />
           </div>
         </CardContent>
       </Card>
@@ -362,7 +362,7 @@ export default function AdminUsersPage() {
                         </Badge>
                       </td>
                       <td className="py-4 px-4">
-                        <UserActionsMenu user={user} />
+                        <UserActionsMenu user={user} onRefresh={fetchUsers} />
                       </td>
                     </tr>
                   ))}

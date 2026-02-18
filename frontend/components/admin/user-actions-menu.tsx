@@ -10,7 +10,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MoreVertical, Edit, Trash2, UserX, UserCheck, Mail, Shield, Key } from 'lucide-react'
-import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/use-toast'
 import { EditUserDialog } from './edit-user-dialog'
 import { ChangePasswordDialog } from './change-password-dialog'
@@ -35,10 +34,10 @@ interface UserActionsMenuProps {
     phone?: string | null
     storeId?: string | null
   }
+  onRefresh?: () => void
 }
 
-export function UserActionsMenu({ user }: UserActionsMenuProps) {
-  const router = useRouter()
+export function UserActionsMenu({ user, onRefresh }: UserActionsMenuProps) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
@@ -71,7 +70,7 @@ export function UserActionsMenu({ user }: UserActionsMenuProps) {
           title: 'Success',
           description: `User ${!user.isActive ? 'activated' : 'deactivated'} successfully`,
         })
-        router.refresh()
+        onRefresh?.()
       } else {
         toast({
           title: 'Error',
@@ -105,7 +104,7 @@ export function UserActionsMenu({ user }: UserActionsMenuProps) {
           description: 'User deleted successfully',
         })
         setDeleteDialogOpen(false)
-        router.refresh()
+        onRefresh?.()
       } else {
         toast({
           title: 'Error',
@@ -237,14 +236,14 @@ export function UserActionsMenu({ user }: UserActionsMenuProps) {
         user={user}
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
-        onSuccess={() => router.refresh()}
+        onSuccess={() => onRefresh?.()}
       />
 
       <ChangePasswordDialog
         user={user}
         open={changePasswordDialogOpen}
         onOpenChange={setChangePasswordDialogOpen}
-        onSuccess={() => router.refresh()}
+        onSuccess={() => onRefresh?.()}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

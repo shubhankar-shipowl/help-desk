@@ -51,16 +51,18 @@ app.listen(PORT, () => {
   console.log(`[Calling Service] Health check: http://localhost:${PORT}/health`);
 });
 
-process.on('SIGTERM', async () => {
-  console.log('[Calling Service] SIGTERM received, shutting down...');
-  await prisma.$disconnect();
+async function gracefulShutdown(signal: string) {
+  console.log(`[Calling Service] ${signal} received, shutting down...`);
+  try {
+    await prisma.$disconnect();
+    console.log('[Calling Service] Database connections closed');
+  } catch (err) {
+    console.error('[Calling Service] Error disconnecting database:', err);
+  }
   process.exit(0);
-});
+}
 
-process.on('SIGINT', async () => {
-  console.log('[Calling Service] SIGINT received, shutting down...');
-  await prisma.$disconnect();
-  process.exit(0);
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export default app;

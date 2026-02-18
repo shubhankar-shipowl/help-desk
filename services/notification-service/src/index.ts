@@ -72,19 +72,20 @@ server.listen(PORT, () => {
   console.log(`[Notification Service] Health check: http://localhost:${PORT}/health`);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('[Notification Service] SIGTERM received, shutting down...');
-  await prisma.$disconnect();
-  server.close();
-  process.exit(0);
-});
+// Graceful shutdown - disconnect DB first, then close server
+async function gracefulShutdown(signal: string) {
+  console.log(`[Notification Service] ${signal} received, shutting down...`);
+  try {
+    await prisma.$disconnect();
+    console.log('[Notification Service] Database connections closed');
+  } catch (err) {
+    console.error('[Notification Service] Error disconnecting database:', err);
+  }
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 5000);
+}
 
-process.on('SIGINT', async () => {
-  console.log('[Notification Service] SIGINT received, shutting down...');
-  await prisma.$disconnect();
-  server.close();
-  process.exit(0);
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export default app;
