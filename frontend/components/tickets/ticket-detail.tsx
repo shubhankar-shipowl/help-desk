@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useNotificationSocket } from '@/lib/notifications/client'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -200,6 +201,63 @@ export function TicketDetail({
       })
     }
   }, [ticket])
+
+  // Real-time updates: listen for ticket changes via WebSocket
+  const socket = useNotificationSocket()
+
+  useEffect(() => {
+    if (!socket || !ticket?.id) return
+
+    let debounceTimer: NodeJS.Timeout
+
+    const handleTicketUpdated = (data: any) => {
+      if (data?.ticketId !== ticket.id) return
+
+      // If the event includes the full ticket object, use it directly
+      if (data?.ticket) {
+        setTicketData((prev: any) => ({
+          ...prev,
+          ...data.ticket,
+          subject: data.ticket.subject || prev.subject || 'No subject',
+          customer: {
+            ...prev.customer,
+            ...data.ticket.customer,
+            phone: data.ticket.customer?.phone || prev.customer?.phone || null,
+          },
+          comments: data.ticket.comments || prev.comments || [],
+          attachments: data.ticket.attachments || prev.attachments || [],
+        }))
+        if (onTicketUpdate) {
+          onTicketUpdate(data.ticket)
+        }
+        return
+      }
+
+      // Otherwise, refetch comments as they may have changed
+      clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(async () => {
+        try {
+          const commentsResponse = await fetch(`/api/tickets/${ticket.id}/comments`)
+          if (commentsResponse.ok) {
+            const commentsData = await commentsResponse.json()
+            setTicketData((prev: any) => ({
+              ...prev,
+              comments: commentsData.comments || prev.comments || [],
+            }))
+          }
+        } catch (error) {
+          console.error('Error refreshing ticket comments:', error)
+        }
+      }, 300)
+    }
+
+    socket.on('ticket:updated', handleTicketUpdated)
+
+    return () => {
+      clearTimeout(debounceTimer)
+      socket.off('ticket:updated', handleTicketUpdated)
+    }
+  }, [socket, ticket?.id, onTicketUpdate])
 
   // Fetch customer ticket stats
   useEffect(() => {

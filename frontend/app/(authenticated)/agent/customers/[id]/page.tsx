@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useParams } from 'next/navigation'
 import { useStore } from '@/lib/store-context'
+import { useNotificationSocket } from '@/lib/notifications/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -36,6 +37,7 @@ export default function CustomerDetailPage() {
   const router = useRouter()
   const params = useParams()
   const { selectedStoreId, loading: storeLoading } = useStore()
+  const socket = useNotificationSocket()
   const customerId = params?.id as string
 
   const [customer, setCustomer] = useState<Customer | null>(null)
@@ -173,6 +175,31 @@ export default function CustomerDetailPage() {
       setLoading(false)
     }
   }
+
+  // Real-time updates: refresh customer data when ticket events fire
+  useEffect(() => {
+    if (!socket || !customerId) return
+
+    let debounceTimer: NodeJS.Timeout
+
+    const refreshCustomerData = () => {
+      clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        fetchCustomerData()
+      }, 300)
+    }
+
+    socket.on('ticket:created', refreshCustomerData)
+    socket.on('ticket:updated', refreshCustomerData)
+    socket.on('ticket:deleted', refreshCustomerData)
+
+    return () => {
+      clearTimeout(debounceTimer)
+      socket.off('ticket:created', refreshCustomerData)
+      socket.off('ticket:updated', refreshCustomerData)
+      socket.off('ticket:deleted', refreshCustomerData)
+    }
+  }, [socket, customerId])
 
   if (status === 'loading' || storeLoading || loading) {
     return (
