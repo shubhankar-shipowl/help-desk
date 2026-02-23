@@ -13,7 +13,7 @@ const nextConfig = {
   },
   experimental: {
     serverActions: {
-      bodySizeLimit: '10mb',
+      bodySizeLimit: '200mb',
     },
     serverComponentsExternalPackages: ['megajs', '@prisma/client', 'bcryptjs', 'nodemailer'],
   },

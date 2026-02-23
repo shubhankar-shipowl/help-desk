@@ -17,39 +17,44 @@ export async function getSystemSetting(
     return null
   }
 
-  if (storeId) {
-    const storeCacheKey = getCacheKey(tenantId, storeId, key)
+  try {
+    if (storeId) {
+      const storeCacheKey = getCacheKey(tenantId, storeId, key)
 
-    if (settingsCache.has(storeCacheKey)) {
-      return settingsCache.get(storeCacheKey) || null
+      if (settingsCache.has(storeCacheKey)) {
+        return settingsCache.get(storeCacheKey) || null
+      }
+
+      const storeSetting = await prisma.systemSettings.findFirst({
+        where: { tenantId, storeId, key },
+      })
+
+      if (storeSetting) {
+        settingsCache.set(storeCacheKey, storeSetting.value)
+        return storeSetting.value
+      }
     }
 
-    const storeSetting = await prisma.systemSettings.findFirst({
-      where: { tenantId, storeId, key },
+    const tenantCacheKey = getCacheKey(tenantId, null, key)
+
+    if (settingsCache.has(tenantCacheKey)) {
+      return settingsCache.get(tenantCacheKey) || null
+    }
+
+    const tenantSetting = await prisma.systemSettings.findFirst({
+      where: { tenantId, storeId: null, key },
     })
 
-    if (storeSetting) {
-      settingsCache.set(storeCacheKey, storeSetting.value)
-      return storeSetting.value
+    if (tenantSetting) {
+      settingsCache.set(tenantCacheKey, tenantSetting.value)
+      return tenantSetting.value
     }
+
+    return null
+  } catch (error: any) {
+    console.error(`[SystemSettings] DB error fetching setting '${key}':`, error.message)
+    return null
   }
-
-  const tenantCacheKey = getCacheKey(tenantId, null, key)
-
-  if (settingsCache.has(tenantCacheKey)) {
-    return settingsCache.get(tenantCacheKey) || null
-  }
-
-  const tenantSetting = await prisma.systemSettings.findFirst({
-    where: { tenantId, storeId: null, key },
-  })
-
-  if (tenantSetting) {
-    settingsCache.set(tenantCacheKey, tenantSetting.value)
-    return tenantSetting.value
-  }
-
-  return null
 }
 
 export function clearSystemSettingsCache(tenantId?: string, storeId?: string | null) {

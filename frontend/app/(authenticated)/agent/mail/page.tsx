@@ -540,6 +540,7 @@ function EmailContent({
 
     setIsProcessing(true);
 
+    let isCancelled = false;
     const ac = new AbortController();
 
     fetch(`/api/emails/${emailId}/process-images`, {
@@ -571,6 +572,9 @@ function EmailContent({
         return data;
       })
       .then((data) => {
+        // Skip state updates if component unmounted or email changed
+        if (isCancelled) return;
+
         console.log('[EmailContent] Processing response:', {
           success: data?.success,
           hasProcessedHtml: !!data?.processedHtml,
@@ -638,6 +642,7 @@ function EmailContent({
         }
       })
       .catch((error: any) => {
+        if (isCancelled) return;
         if (error?.name !== 'AbortError') {
           console.error(
             '[EmailContent] Error processing inline images:',
@@ -655,10 +660,15 @@ function EmailContent({
         }
       })
       .finally(() => {
-        setIsProcessing(false);
+        if (!isCancelled) {
+          setIsProcessing(false);
+        }
       });
 
-    return () => ac.abort();
+    return () => {
+      isCancelled = true;
+      ac.abort();
+    };
   }, [htmlContent, emailId]);
 
   useEffect(() => {
@@ -733,7 +743,13 @@ function EmailContent({
             // If it's a data URI, create a blob URL
             if (src.startsWith('data:')) {
               try {
-                const byteString = atob(src.split(',')[1]);
+                const base64Data = src.split(',')[1];
+                // Skip decoding if data is too large (>5MB base64) or missing
+                if (!base64Data || base64Data.length > 5 * 1024 * 1024) {
+                  window.open(src, '_blank', 'noopener,noreferrer');
+                  return;
+                }
+                const byteString = atob(base64Data);
                 const mimeString = src
                   .split(',')[0]
                   .split(':')[1]
@@ -802,7 +818,13 @@ function EmailContent({
           if (src) {
             if (src.startsWith('data:')) {
               try {
-                const byteString = atob(src.split(',')[1]);
+                const base64Data = src.split(',')[1];
+                // Skip decoding if data is too large (>5MB base64) or missing
+                if (!base64Data || base64Data.length > 5 * 1024 * 1024) {
+                  window.open(src, '_blank', 'noopener,noreferrer');
+                  return;
+                }
+                const byteString = atob(base64Data);
                 const mimeString = src
                   .split(',')[0]
                   .split(':')[1]
@@ -851,6 +873,12 @@ function EmailContent({
    */
   const cleanEmailHtml = (html: string): string => {
     if (!html) return html;
+
+    // Skip heavy regex processing for extremely large HTML (>3MB) to prevent memory issues
+    if (html.length > 3 * 1024 * 1024) {
+      console.warn('[EmailContent] HTML too large for cleaning:', (html.length / 1024 / 1024).toFixed(1), 'MB - using truncated version');
+      return html.substring(0, 3 * 1024 * 1024) + '<p style="color:#94a3b8;font-size:13px;margin-top:16px;">[Content truncated due to size]</p>';
+    }
 
     let cleaned = html;
 
@@ -934,7 +962,7 @@ function EmailContent({
     // append them at the end so the user can see them inline.
     if (!cleaned.includes('<img') && imageAttachments.length > 0) {
       const inlineImages = imageAttachments
-        .map((att) => `<img src="${att.fileUrl}" alt="${att.filename}" style="max-width:100%;height:auto;border-radius:4px;margin:8px 0;display:block;" />`)
+        .map((att) => `<img src="${att.fileUrl}" alt="${att.filename || 'Attachment'}" style="max-width:100%;height:auto;border-radius:4px;margin:8px 0;display:block;" />`)
         .join('');
       cleaned += inlineImages;
     }
@@ -943,7 +971,15 @@ function EmailContent({
   };
 
   const fixedDisplayHtml = useMemo(
-    () => (displayHtml ? cleanEmailHtml(displayHtml) : displayHtml),
+    () => {
+      if (!displayHtml) return displayHtml;
+      try {
+        return cleanEmailHtml(displayHtml);
+      } catch (err) {
+        console.error('[EmailContent] cleanEmailHtml crashed, using raw HTML:', err);
+        return displayHtml;
+      }
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [displayHtml, attachments],
   );
@@ -1365,11 +1401,11 @@ export default function MailPage() {
         }
         return;
       }
-      const maxSize = 10 * 1024 * 1024; // 10MB
+      const maxSize = 200 * 1024 * 1024; // 200MB
       if (file.size > maxSize) {
         toast({
           title: 'File too large',
-          description: `${file.name} exceeds 10MB limit`,
+          description: `${file.name} exceeds 200MB limit`,
           variant: 'destructive',
         });
         if (singleFileInputRef.current) {
@@ -2335,16 +2371,10 @@ export default function MailPage() {
 
     // Check if attachments are required for selected category
     if (requiresAttachments()) {
-      // Collect all files: single file + image files + old attachments
-      const allFiles: File[] = [];
-      if (singleFile) allFiles.push(singleFile);
-      imageFiles.forEach((file) => {
-        if (file) allFiles.push(file);
-      });
-      attachments.forEach((file) => allFiles.push(file));
-
-      if (allFiles.length === 0) {
-        errors.attachments = 'Images or videos are required for this category';
+      if (!singleFile) {
+        errors.attachments = 'Video is required for this category';
+      } else if (!imageFiles[0] || !imageFiles[1] || !imageFiles[2]) {
+        errors.attachments = 'All 3 images are required for this category';
       }
     }
 
@@ -2375,59 +2405,28 @@ export default function MailPage() {
       });
       attachments.forEach((file) => allFiles.push(file));
 
-      let response: Response;
-
-      if (allFiles.length > 0) {
-        // Use FormData for file uploads
-        const formDataToSend = new FormData();
-        formDataToSend.append('name', ticketForm.name.trim());
-        formDataToSend.append('email', ticketForm.email.trim());
-        formDataToSend.append('phone', ticketForm.phone.trim());
-        formDataToSend.append('order', ticketForm.order.trim());
-        formDataToSend.append('trackingId', ticketForm.trackingId.trim());
-        formDataToSend.append('subject', ticketForm.subject.trim());
-        formDataToSend.append('description', ticketForm.description.trim());
-        formDataToSend.append('categoryId', ticketForm.categoryId || '');
-        formDataToSend.append('priority', ticketForm.priority);
-        if (ticketForm.assignedAgentId) {
-          formDataToSend.append('assignedAgentId', ticketForm.assignedAgentId);
-        }
-
-        allFiles.forEach((file) => {
-          formDataToSend.append('attachments', file);
-        });
-
-        response = await fetch(
-          `/api/emails/${ticketModal.email.id}/create-ticket`,
-          {
-            method: 'POST',
-            body: formDataToSend,
+      // Always send JSON to the email service (it doesn't support multipart/form-data)
+      const response = await fetch(
+        `/api/emails/${ticketModal.email.id}/create-ticket`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
           },
-        );
-      } else {
-        // Use JSON for no files
-        response = await fetch(
-          `/api/emails/${ticketModal.email.id}/create-ticket`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              name: ticketForm.name.trim(),
-              email: ticketForm.email.trim(),
-              phone: ticketForm.phone.trim(),
-              order: ticketForm.order.trim(),
-              trackingId: ticketForm.trackingId.trim(),
-              subject: ticketForm.subject.trim(),
-              description: ticketForm.description.trim(),
-              categoryId: ticketForm.categoryId || undefined,
-              priority: ticketForm.priority,
-              assignedAgentId: ticketForm.assignedAgentId || undefined,
-            }),
-          },
-        );
-      }
+          body: JSON.stringify({
+            name: ticketForm.name.trim(),
+            email: ticketForm.email.trim(),
+            phone: ticketForm.phone.trim(),
+            order: ticketForm.order.trim(),
+            trackingId: ticketForm.trackingId.trim(),
+            subject: ticketForm.subject.trim(),
+            description: ticketForm.description.trim(),
+            categoryId: ticketForm.categoryId || undefined,
+            priority: ticketForm.priority,
+            assignedAgentId: ticketForm.assignedAgentId || undefined,
+          }),
+        },
+      );
 
       let data;
       try { data = await response.json(); } catch {
@@ -2436,6 +2435,29 @@ export default function MailPage() {
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create ticket');
+      }
+
+      // Upload files separately after ticket creation
+      const ticketId = data.ticket?.id;
+      if (allFiles.length > 0 && ticketId) {
+        try {
+          const formDataToSend = new FormData();
+          allFiles.forEach((file) => {
+            formDataToSend.append('attachments', file);
+          });
+
+          const uploadResponse = await fetch(`/api/tickets/${ticketId}/attachments`, {
+            method: 'POST',
+            body: formDataToSend,
+          });
+
+          if (!uploadResponse.ok) {
+            console.error('File upload failed but ticket was created');
+          }
+        } catch (uploadError) {
+          console.error('Error uploading files:', uploadError);
+          // Don't throw - ticket was already created successfully
+        }
       }
 
       toast({
@@ -3255,7 +3277,7 @@ export default function MailPage() {
                         {(() => {
                           // Filter out inline images (those embedded in email body) from attachments display
                           const regularAttachments = (email.EmailAttachment || []).filter(
-                            (att) => !att.filename.startsWith('inline-image-') && !att.filename.startsWith('inline-video-')
+                            (att) => att && att.filename && !att.filename.startsWith('inline-image-') && !att.filename.startsWith('inline-video-')
                           );
                           return regularAttachments.length > 0 ? (
                           <div className="mt-4 bg-slate-50 rounded-lg border border-slate-200 p-4">
@@ -3292,7 +3314,7 @@ export default function MailPage() {
                                         <div className="w-16 h-16 rounded-lg bg-slate-100 flex-shrink-0 overflow-hidden border border-slate-200 relative">
                                           <img
                                             src={attachment.fileUrl}
-                                            alt={attachment.filename}
+                                            alt={attachment.filename || 'Attachment'}
                                             className="w-full h-full object-cover"
                                             onError={(e) => {
                                               const target =
@@ -3311,11 +3333,11 @@ export default function MailPage() {
                                       )}
                                       <div className="min-w-0 flex-1">
                                         <div className="text-sm font-medium text-slate-900 group-hover:text-blue-600 truncate">
-                                          {attachment.filename}
+                                          {attachment.filename || 'Unnamed file'}
                                         </div>
                                         <div className="text-xs text-slate-500">
-                                          {attachment.mimeType} •{' '}
-                                          {formatFileSize(attachment.size)}
+                                          {attachment.mimeType || 'Unknown type'} •{' '}
+                                          {formatFileSize(attachment.size || 0)}
                                           {isImage && (
                                             <span className="ml-1 text-blue-600">
                                               (Image)
@@ -3337,11 +3359,11 @@ export default function MailPage() {
                                       </div>
                                       <div>
                                         <div className="text-sm font-medium text-slate-900">
-                                          {attachment.filename}
+                                          {attachment.filename || 'Unnamed file'}
                                         </div>
                                         <div className="text-xs text-amber-600">
                                           Processing... •{' '}
-                                          {formatFileSize(attachment.size)}
+                                          {formatFileSize(attachment.size || 0)}
                                         </div>
                                       </div>
                                     </div>
@@ -4187,7 +4209,7 @@ export default function MailPage() {
                 </Label>
                 {requiresAttachments() && (
                   <p className="text-xs text-gray-600">
-                    Images or videos are required for this category
+                    1 video and 3 images are required for this category
                   </p>
                 )}
                 {ticketFormErrors.attachments && (
@@ -4276,7 +4298,7 @@ export default function MailPage() {
                             Tap to upload video
                           </p>
                           <p className="text-[10px] text-gray-500 px-2">
-                            Video files only, 10MB max
+                            Video files only, 200MB max
                           </p>
                         </>
                       )}
@@ -4302,10 +4324,7 @@ export default function MailPage() {
                             'border-2 border-dashed rounded-lg p-1.5 text-center transition-all duration-200 h-20',
                             imageFiles[index]
                               ? 'border-green-300 bg-green-50'
-                              : requiresAttachments() &&
-                                  !imageFiles[index] &&
-                                  !singleFile &&
-                                  imageFiles.every((f) => !f)
+                              : requiresAttachments() && !imageFiles[index]
                                 ? 'border-red-300 bg-red-50 hover:border-red-400'
                                 : 'border-gray-300 hover:border-gray-400',
                           )}

@@ -309,11 +309,11 @@ export default function PublicNewTicketPage() {
         }
         return
       }
-      const maxSize = 10 * 1024 * 1024 // 10MB
+      const maxSize = 200 * 1024 * 1024 // 200MB
       if (file.size > maxSize) {
         toast({
           title: 'File too large',
-          description: `${file.name} exceeds 10MB limit`,
+          description: `${file.name} exceeds 200MB limit`,
           variant: 'destructive',
         })
         if (singleFileInputRef.current) {
@@ -423,16 +423,11 @@ export default function PublicNewTicketPage() {
 
     // Check if attachments are required for selected category
     if (requiresAttachments()) {
-      // Collect all files: single file + image files + old attachments
-      const allFiles: File[] = []
-      if (singleFile) allFiles.push(singleFile)
-      imageFiles.forEach(file => {
-        if (file) allFiles.push(file)
-      })
-      attachments.forEach(file => allFiles.push(file))
-
-      if (allFiles.length === 0) {
-        newErrors.attachments = 'Images or videos are required for this category'
+      if (!singleFile) {
+        newErrors.attachments = 'Video is required for this category'
+        setTouched(prev => ({ ...prev, attachments: true }))
+      } else if (!imageFiles[0] || !imageFiles[1] || !imageFiles[2]) {
+        newErrors.attachments = 'All 3 images are required for this category'
         setTouched(prev => ({ ...prev, attachments: true }))
       }
     }
@@ -1093,7 +1088,7 @@ export default function PublicNewTicketPage() {
                 </label>
                 {requiresAttachments() && (
                   <p className="text-xs text-gray-600 mb-2">
-                    Images or videos are required for this category
+                    1 video and 3 images are required for this category
                   </p>
                 )}
                 {errors.attachments && touched.attachments && (
@@ -1182,7 +1177,7 @@ export default function PublicNewTicketPage() {
                             Tap to upload video
                           </p>
                           <p className="text-[10px] text-gray-500 px-2">
-                            Video files only, 10MB max
+                            Video files only, 200MB max
                           </p>
                         </>
                       )}
@@ -1207,8 +1202,8 @@ export default function PublicNewTicketPage() {
                           "border-2 border-dashed rounded-lg p-1.5 sm:p-2 text-center transition-all duration-200",
                           "h-20 sm:h-24",
                           imageFiles[index]
-                            ? "border-green-300 bg-green-50" 
-                            : requiresAttachments() && !imageFiles[index] && !singleFile && imageFiles.every(f => !f)
+                            ? "border-green-300 bg-green-50"
+                            : requiresAttachments() && !imageFiles[index]
                             ? "border-red-300 bg-red-50 hover:border-red-400"
                             : "border-gray-300"
                         )}
